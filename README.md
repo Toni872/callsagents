@@ -29,16 +29,16 @@ callsagents/
 | Fase | Descripción | Estado |
 |---|---|---|
 | 1 | Arquitectura | Cerrada (ver `docs/01-arquitectura.md`) |
-| 2 | Modelo de datos | Pendiente |
-| 3 | Autenticación | Pendiente |
+| 2 | Modelo de datos | Cerrada |
+| 3 | Autenticación | Cerrada |
 | 4 | API de negocio | Pendiente |
 | 5 | Frontend base | Pendiente |
 | 6 | Integración auth frontend | Pendiente |
-| 7 | Redis | Pendiente |
+| 7 | Redis | Parcial (entra en F3) |
 | 8 | Swagger / OpenAPI | Pendiente |
 | 9 | Docker local | Pendiente |
 | 10 | CI/CD | Pendiente |
-| 11 | Tests | Pendiente |
+| 11 | Tests | Parcial (unit de JwtService en F3) |
 
 ## Regla de oro
 

@@ -1,0 +1,45 @@
+import { Routes } from '@angular/router';
+
+export const routes: Routes = [
+  {
+    path: '',
+    loadComponent: () =>
+      import('./core/layout/main-layout/main-layout.component').then((m) => m.MainLayoutComponent),
+    children: [
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      {
+        path: 'dashboard',
+        loadComponent: () =>
+          import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent)
+      },
+      {
+        path: 'leads',
+        loadChildren: () =>
+          import('./features/leads/leads.routes').then((m) => m.LEADS_ROUTES)
+      },
+      {
+        path: 'campaigns',
+        loadChildren: () =>
+          import('./features/campaigns/campaigns.routes').then((m) => m.CAMPAIGNS_ROUTES)
+      },
+      {
+        path: 'calls',
+        loadChildren: () =>
+          import('./features/calls/calls.routes').then((m) => m.CALLS_ROUTES)
+      },
+      {
+        path: 'appointments',
+        loadChildren: () =>
+          import('./features/appointments/appointments.routes').then(
+            (m) => m.APPOINTMENTS_ROUTES
+          )
+      }
+    ]
+  },
+  {
+    path: 'login',
+    loadComponent: () =>
+      import('./features/auth/login/login.component').then((m) => m.LoginComponent)
+  },
+  { path: '**', redirectTo: '' }
+];

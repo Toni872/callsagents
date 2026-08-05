@@ -31,7 +31,7 @@ callsagents/
 | 1 | Arquitectura | Cerrada (ver `docs/01-arquitectura.md`) |
 | 2 | Modelo de datos | Cerrada |
 | 3 | Autenticación | Cerrada |
-| 4 | API de negocio | Pendiente |
+| 4 | API de negocio | Cerrada |
 | 5 | Frontend base | Pendiente |
 | 6 | Integración auth frontend | Pendiente |
 | 7 | Redis | Parcial (entra en F3) |

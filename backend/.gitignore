@@ -1,0 +1,6 @@
+target/
+.gradle/
+*.class
+*.jar
+*.log
+.env

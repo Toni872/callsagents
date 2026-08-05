@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/callsagents_test
+    username: callsagents
+    password: callsagents
+  jpa:
+    show-sql: false

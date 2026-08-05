@@ -1,0 +1,36 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# Node / Angular
+node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/.env
+frontend/.env.local
+
+# Java / Spring Boot
+backend/target/
+backend/.gradle/
+backend/build/
+*.class
+*.jar
+*.war
+backend/.env
+backend/*.log
+
+# Logs
+*.log
+
+# Env
+.env
+.env.local
+
+# Engram local data
+.engram/

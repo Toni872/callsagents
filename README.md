@@ -38,7 +38,7 @@ callsagents/
 | 8 | Swagger / OpenAPI | Cerrada |
 | 9 | Docker local | Cerrada — **smoke test E2E OK (login + /me + CRUD contra Postgres+Redis)** |
 | 10 | CI/CD | Cerrada |
-| 11 | Tests | 64 unit + 8 auth pasando |
+| 11 | Tests | 81 tests pasando (17 nuevos de auth + 64 existentes) |
 
 ## Regla de oro
 

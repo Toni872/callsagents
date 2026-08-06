@@ -11,4 +11,7 @@ import java.util.UUID;
 @Repository
 public interface LeadRepository extends JpaRepository<Lead, UUID>, JpaSpecificationExecutor<Lead> {
     Optional<Lead> findByEmail(String email);
+
+    // Dashboard metrics — derived methods, no JPQL needed
+    long countByAssignedToIsNotNull();
 }

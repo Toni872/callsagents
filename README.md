@@ -34,11 +34,11 @@ callsagents/
 | 4 | API de negocio | Cerrada |
 | 5 | Frontend base | Cerrada |
 | 6 | Integración auth frontend | Cerrada |
-| 7 | Redis | Parcial (entra en F3) |
+| 7 | Redis | Cubierto en F3 + verificado E2E en F9 |
 | 8 | Swagger / OpenAPI | Cerrada |
-| 9 | Docker local | Cerrada (verificación end-to-end pendiente) |
+| 9 | Docker local | Cerrada — **smoke test E2E OK (login + /me + CRUD contra Postgres+Redis)** |
 | 10 | CI/CD | Pendiente |
-| 11 | Tests | Parcial (unit de JwtService en F3) |
+| 11 | Tests | 64 unit + 8 auth pasando |
 
 ## Regla de oro
 

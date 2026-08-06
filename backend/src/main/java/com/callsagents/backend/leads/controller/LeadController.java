@@ -12,6 +12,8 @@ import com.callsagents.backend.leads.dto.UpdateLeadRequest;
 import com.callsagents.backend.leads.entity.LeadSource;
 import com.callsagents.backend.leads.entity.LeadStatus;
 import com.callsagents.backend.leads.service.LeadService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.net.URI;
 import java.util.UUID;
 
+@Tag(name = "Leads", description = "Gestión de leads: alta, importación CSV, filtros, asignación")
 @RestController
 @RequestMapping("/leads")
 public class LeadController {
@@ -50,6 +53,7 @@ public class LeadController {
         this.userRepository = userRepository;
     }
 
+    @Operation(summary = "Listar leads con filtros y paginación")
     @GetMapping
     public ResponseEntity<PageResponse<LeadResponse>> findAll(
         @RequestParam(required = false) LeadStatus status,
@@ -65,11 +69,13 @@ public class LeadController {
         return ResponseEntity.ok(leadService.findAll(filter, pageable));
     }
 
+    @Operation(summary = "Obtener lead por ID")
     @GetMapping("/{id}")
     public ResponseEntity<LeadResponse> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(leadService.findById(id));
     }
 
+    @Operation(summary = "Crear lead manualmente")
     @PostMapping
     public ResponseEntity<LeadResponse> create(
         @Valid @RequestBody CreateLeadRequest req,
@@ -80,6 +86,7 @@ public class LeadController {
         return ResponseEntity.created(URI.create("/api/leads/" + created.id())).body(created);
     }
 
+    @Operation(summary = "Actualizar lead existente")
     @PutMapping("/{id}")
     public ResponseEntity<LeadResponse> update(
         @PathVariable UUID id,
@@ -90,6 +97,7 @@ public class LeadController {
         return ResponseEntity.ok(leadService.update(id, req, userId));
     }
 
+    @Operation(summary = "Eliminar lead (solo ADMIN)")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(
@@ -101,6 +109,7 @@ public class LeadController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Importar leads desde CSV (ADMIN/SUPERVISOR)")
     @PostMapping(value = "/import", consumes = "multipart/form-data")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR')")
     public ResponseEntity<ImportResultDto> importCsv(

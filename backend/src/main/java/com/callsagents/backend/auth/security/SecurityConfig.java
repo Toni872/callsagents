@@ -48,6 +48,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/login", "/auth/refresh").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                // Swagger UI / OpenAPI docs (Fase 8): permitir acceso sin auth para que
+                // un dev externo pueda explorar el contrato y usar el botón "Authorize".
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(eh -> eh

@@ -10,6 +10,8 @@ import com.callsagents.backend.campaigns.entity.CampaignStatus;
 import com.callsagents.backend.campaigns.service.CampaignService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.UUID;
 
+@Tag(name = "Campaigns", description = "Gestión de campañas outbound: alta, edición, lanzamiento y pausa")
 @RestController
 @RequestMapping("/campaigns")
 public class CampaignController {
@@ -45,6 +48,7 @@ public class CampaignController {
         this.userRepository = userRepository;
     }
 
+    @Operation(summary = "Listar campañas con filtros y paginación")
     @GetMapping
     public ResponseEntity<PageResponse<CampaignResponse>> findAll(
         @RequestParam(required = false) CampaignStatus status,
@@ -58,11 +62,13 @@ public class CampaignController {
         return ResponseEntity.ok(campaignService.findAll(filter, pageable));
     }
 
+    @Operation(summary = "Obtener campaña por ID")
     @GetMapping("/{id}")
     public ResponseEntity<CampaignResponse> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(campaignService.findById(id));
     }
 
+    @Operation(summary = "Crear campaña (solo ADMIN)")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CampaignResponse> create(
@@ -74,6 +80,7 @@ public class CampaignController {
         return ResponseEntity.created(URI.create("/api/campaigns/" + created.id())).body(created);
     }
 
+    @Operation(summary = "Actualizar campaña (solo ADMIN)")
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CampaignResponse> update(
@@ -85,6 +92,7 @@ public class CampaignController {
         return ResponseEntity.ok(campaignService.update(id, req, userId));
     }
 
+    @Operation(summary = "Lanzar campaña (solo ADMIN)")
     @PostMapping("/{id}/launch")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CampaignResponse> launch(
@@ -95,6 +103,7 @@ public class CampaignController {
         return ResponseEntity.ok(campaignService.launch(id, userId));
     }
 
+    @Operation(summary = "Pausar campaña en curso (solo ADMIN)")
     @PostMapping("/{id}/pause")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CampaignResponse> pause(

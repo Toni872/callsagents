@@ -35,7 +35,7 @@ callsagents/
 | 5 | Frontend base | Cerrada |
 | 6 | Integración auth frontend | Cerrada |
 | 7 | Redis | Parcial (entra en F3) |
-| 8 | Swagger / OpenAPI | Pendiente |
+| 8 | Swagger / OpenAPI | Cerrada |
 | 9 | Docker local | Pendiente |
 | 10 | CI/CD | Pendiente |
 | 11 | Tests | Parcial (unit de JwtService en F3) |

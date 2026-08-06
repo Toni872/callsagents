@@ -10,6 +10,8 @@ import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.UUID;
 
+@Tag(name = "Appointments", description = "Agenda de citas / reuniones con leads")
 @RestController
 @RequestMapping("/appointments")
 public class AppointmentController {
@@ -46,6 +49,7 @@ public class AppointmentController {
         this.userRepository = userRepository;
     }
 
+    @Operation(summary = "Listar citas con filtros y paginación")
     @GetMapping
     public ResponseEntity<PageResponse<AppointmentResponse>> findAll(
         @RequestParam(required = false) UUID leadId,
@@ -60,11 +64,13 @@ public class AppointmentController {
         return ResponseEntity.ok(appointmentService.findAll(filter, pageable));
     }
 
+    @Operation(summary = "Obtener cita por ID")
     @GetMapping("/{id}")
     public ResponseEntity<AppointmentResponse> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(appointmentService.findById(id));
     }
 
+    @Operation(summary = "Crear cita")
     @PostMapping
     public ResponseEntity<AppointmentResponse> create(
         @Valid @RequestBody CreateAppointmentRequest req,
@@ -75,6 +81,7 @@ public class AppointmentController {
         return ResponseEntity.created(URI.create("/api/appointments/" + created.id())).body(created);
     }
 
+    @Operation(summary = "Actualizar cita existente")
     @PutMapping("/{id}")
     public ResponseEntity<AppointmentResponse> update(
         @PathVariable UUID id,
@@ -85,6 +92,7 @@ public class AppointmentController {
         return ResponseEntity.ok(appointmentService.update(id, req, userId));
     }
 
+    @Operation(summary = "Eliminar cita (solo ADMIN)")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(

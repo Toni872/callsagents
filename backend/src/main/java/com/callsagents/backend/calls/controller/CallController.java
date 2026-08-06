@@ -11,6 +11,8 @@ import com.callsagents.backend.calls.entity.CallStatus;
 import com.callsagents.backend.calls.service.CallService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.UUID;
 
+@Tag(name = "Calls", description = "Registro y consulta de llamadas (outbound)")
 @RestController
 @RequestMapping("/calls")
 public class CallController {
@@ -45,6 +48,7 @@ public class CallController {
         this.userRepository = userRepository;
     }
 
+    @Operation(summary = "Listar llamadas con filtros y paginación")
     @GetMapping
     public ResponseEntity<PageResponse<CallResponse>> findAll(
         @RequestParam(required = false) UUID campaignId,
@@ -61,11 +65,13 @@ public class CallController {
         return ResponseEntity.ok(callService.findAll(filter, pageable));
     }
 
+    @Operation(summary = "Obtener llamada por ID")
     @GetMapping("/{id}")
     public ResponseEntity<CallResponse> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(callService.findById(id));
     }
 
+    @Operation(summary = "Registrar nueva llamada")
     @PostMapping
     public ResponseEntity<CallResponse> create(
         @Valid @RequestBody CreateCallRequest req,
@@ -76,6 +82,7 @@ public class CallController {
         return ResponseEntity.created(URI.create("/api/calls/" + created.id())).body(created);
     }
 
+    @Operation(summary = "Actualizar resultado/notas de una llamada")
     @PutMapping("/{id}")
     public ResponseEntity<CallResponse> update(
         @PathVariable UUID id,

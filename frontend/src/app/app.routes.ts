@@ -46,6 +46,13 @@ export const routes: Routes = [
         path: 'users',
         loadChildren: () =>
           import('./features/users/users.routes').then((m) => m.USERS_ROUTES)
+      },
+      {
+        path: 'settings/calendar',
+        loadComponent: () =>
+          import(
+            './features/settings/calendar/calendar-settings.component'
+          ).then((m) => m.CalendarSettingsComponent)
       }
     ]
   },

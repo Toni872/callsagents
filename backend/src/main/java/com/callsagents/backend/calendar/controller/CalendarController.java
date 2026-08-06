@@ -14,8 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -72,7 +71,7 @@ public class CalendarController {
     @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
     public ResponseEntity<?> start(
         @PathVariable String provider,
-        @AuthenticationPrincipal UserDetails user
+        Authentication authentication
     ) {
         var type = parseProvider(provider);
         var calProvider = syncService.providerOf(type);
@@ -83,9 +82,9 @@ public class CalendarController {
                            "Set the appropriate env vars (see RUNBOOK)."
             ));
         }
-        // State contains userId so the callback can attribute the integration.
+        // State contains the user email so the callback can attribute the integration.
         // In a hardened impl we'd sign this (HMAC) to prevent tampering.
-        String state = user.getUsername(); // simple — user email is enough for attribution
+        String state = authentication.getName();
         String url = calProvider.buildAuthorizationUrl(state);
         return ResponseEntity.status(302).header("Location", url).build();
     }
@@ -156,8 +155,8 @@ public class CalendarController {
     @GetMapping("/integrations")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
     @Operation(summary = "Listar integraciones del usuario actual")
-    public List<CalendarIntegrationDto> list(@AuthenticationPrincipal UserDetails user) {
-        UUID userId = resolveUserIdByEmail(user.getUsername());
+    public List<CalendarIntegrationDto> list(Authentication authentication) {
+        UUID userId = resolveUserIdByEmail(authentication.getName());
         if (userId == null) return List.of();
         return syncService.listForUser(userId).stream()
             .map(CalendarIntegrationDto::from)
@@ -169,11 +168,11 @@ public class CalendarController {
     @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
     public ResponseEntity<Void> disconnect(
         @PathVariable UUID id,
-        @AuthenticationPrincipal UserDetails user
+        Authentication authentication
     ) {
         var integration = integrationRepo.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Integration not found"));
-        UUID userId = resolveUserIdByEmail(user.getUsername());
+        UUID userId = resolveUserIdByEmail(authentication.getName());
         if (userId == null || !integration.getUserId().equals(userId)) {
             return ResponseEntity.status(403).build();
         }
@@ -191,10 +190,10 @@ public class CalendarController {
     /** Toggle sync enabled without disconnecting. */
     @PostMapping("/integrations/{id}/sync-toggle")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
-    public CalendarIntegrationDto toggle(@PathVariable UUID id, @AuthenticationPrincipal UserDetails user) {
+    public CalendarIntegrationDto toggle(@PathVariable UUID id, Authentication authentication) {
         var integration = integrationRepo.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Integration not found"));
-        UUID userId = resolveUserIdByEmail(user.getUsername());
+        UUID userId = resolveUserIdByEmail(authentication.getName());
         if (userId == null || !integration.getUserId().equals(userId)) {
             throw new ResourceNotFoundException("Integration not found");
         }

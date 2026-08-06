@@ -37,13 +37,20 @@ class EncryptionServiceTest {
     }
 
     @Test
-    @DisplayName("encryption fails fast on startup if master key missing")
-    void missingKeyFails() {
-        assertThatThrownBy(() -> new EncryptionService(""))
+    @DisplayName("with empty/null master key, bean instantiates but encrypt/decrypt throw")
+    void missingKeyIsLazy() {
+        var service1 = new EncryptionService("");
+        var service2 = new EncryptionService(null);
+        // Constructor is tolerant — stack boots even without key
+        assertThat(service1).isNotNull();
+        assertThat(service2).isNotNull();
+        // But operations fail clearly
+        assertThatThrownBy(() -> service1.encrypt("hello"))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("ENCRYPTION_KEY");
-        assertThatThrownBy(() -> new EncryptionService(null))
-            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> service2.decrypt("anything"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("ENCRYPTION_KEY");
     }
 
     @Test

@@ -24,8 +24,10 @@ import java.util.Base64;
  * - Key: 32 bytes derived from the master secret (ENCRYPTION_KEY) via SHA-256.
  *
  * Master secret is supplied via the environment variable ENCRYPTION_KEY
- * (configured in .env via RUNBOOK). If missing, encryption fails fast on
- * startup so we never silently store plaintext tokens.
+ * (configured in .env via RUNBOOK). If missing, the bean still instantiates
+ * (key=null, ready=false) so the rest of the app boots — encrypt/decrypt
+ * throw IllegalStateException at call time. Calendar endpoints depend on
+ * this service; without a key they fail with a clear runtime error.
  */
 @Service
 public class EncryptionService {
@@ -35,23 +37,29 @@ public class EncryptionService {
     private static final SecureRandom RNG = new SecureRandom();
 
     private final SecretKey key;
+    private final boolean ready;
 
     public EncryptionService(@Value("${app.encryption.key:}") String masterSecret) {
         if (masterSecret == null || masterSecret.isBlank()) {
-            throw new IllegalStateException(
-                "app.encryption.key is not set. Set ENCRYPTION_KEY in .env (see RUNBOOK.md).");
+            this.key = null;
+            this.ready = false;
+            return;
         }
-        // Derive a 32-byte key from whatever the operator configured.
         try {
             byte[] raw = masterSecret.getBytes(StandardCharsets.UTF_8);
             byte[] hashed = MessageDigest.getInstance("SHA-256").digest(raw);
             this.key = new SecretKeySpec(hashed, "AES");
+            this.ready = true;
         } catch (Exception e) {
             throw new IllegalStateException("Failed to derive encryption key", e);
         }
     }
 
     public String encrypt(String plaintext) {
+        if (!ready) {
+            throw new IllegalStateException(
+                "EncryptionService is not configured. Set ENCRYPTION_KEY in .env (see RUNBOOK.md).");
+        }
         try {
             byte[] iv = new byte[IV_LEN];
             RNG.nextBytes(iv);
@@ -67,6 +75,10 @@ public class EncryptionService {
     }
 
     public String decrypt(String ciphertextB64) {
+        if (!ready) {
+            throw new IllegalStateException(
+                "EncryptionService is not configured. Set ENCRYPTION_KEY in .env (see RUNBOOK.md).");
+        }
         try {
             byte[] raw = Base64.getDecoder().decode(ciphertextB64);
             if (raw.length <= IV_LEN) throw new IllegalArgumentException("Ciphertext too short");

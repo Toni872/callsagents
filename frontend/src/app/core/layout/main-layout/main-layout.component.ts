@@ -241,7 +241,8 @@ export class MainLayoutComponent {
     { label: 'Leads', path: '/leads', icon: '◐' },
     { label: 'Campañas', path: '/campaigns', icon: '◑' },
     { label: 'Llamadas', path: '/calls', icon: '◓' },
-    { label: 'Citas', path: '/appointments', icon: '◒' }
+    { label: 'Citas', path: '/appointments', icon: '◒' },
+    { label: 'Usuarios', path: '/users', icon: '◈' }
   ];
 
   protected userName(): string {

@@ -9,6 +9,7 @@ import com.callsagents.backend.appointments.entity.AppointmentStatus;
 import com.callsagents.backend.appointments.repository.AppointmentRepository;
 import com.callsagents.backend.appointments.repository.AppointmentSpecifications;
 import com.callsagents.backend.audit.entity.AuditAction;
+import com.callsagents.backend.calendar.service.CalendarSyncService;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
@@ -25,10 +26,16 @@ public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
     private final AuditService auditService;
+    private final CalendarSyncService calendarSync;
 
-    public AppointmentService(AppointmentRepository appointmentRepository, AuditService auditService) {
+    public AppointmentService(
+        AppointmentRepository appointmentRepository,
+        AuditService auditService,
+        CalendarSyncService calendarSync
+    ) {
         this.appointmentRepository = appointmentRepository;
         this.auditService = auditService;
+        this.calendarSync = calendarSync;
     }
 
     @Transactional(readOnly = true)
@@ -57,6 +64,10 @@ public class AppointmentService {
 
         Appointment saved = appointmentRepository.save(appointment);
         auditService.log(currentUserId, "Appointment", saved.getId(), AuditAction.CREATE);
+        // Push to external calendar (Google/Outlook) if user has an integration.
+        // syncAppointment uses its own transaction (REQUIRES_NEW) so a sync failure
+        // doesn't roll back the appointment creation.
+        calendarSync.syncAppointment(saved);
         return AppointmentResponse.fromEntity(saved);
     }
 

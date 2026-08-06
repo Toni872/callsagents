@@ -54,6 +54,17 @@ public class Appointment {
     @Column(name = "notes", columnDefinition = "text")
     private String notes;
 
+    /** Calendar sync tracking (Fase 14 — calendar sync). All nullable: appointment
+     *  can exist without being synced. Provider values: GOOGLE, OUTLOOK. */
+    @Column(name = "external_provider", length = 32)
+    private String externalProvider;
+
+    @Column(name = "external_event_id", length = 255)
+    private String externalEventId;
+
+    @Column(name = "external_synced_at")
+    private Instant externalSyncedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

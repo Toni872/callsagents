@@ -8,6 +8,7 @@ import com.callsagents.backend.appointments.entity.Appointment;
 import com.callsagents.backend.appointments.entity.AppointmentStatus;
 import com.callsagents.backend.appointments.repository.AppointmentRepository;
 import com.callsagents.backend.audit.entity.AuditAction;
+import com.callsagents.backend.calendar.service.CalendarSyncService;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
@@ -44,6 +45,8 @@ class AppointmentServiceTest {
     private AppointmentRepository appointmentRepository;
     @Mock
     private AuditService auditService;
+    @Mock
+    private CalendarSyncService calendarSync;
 
     @InjectMocks
     private AppointmentService appointmentService;

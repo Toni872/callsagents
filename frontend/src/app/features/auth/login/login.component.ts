@@ -1,7 +1,12 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ErrorService } from '../../../core/errors/error.service';
+import {
+  FormBuilder,
+  ReactiveFormsModule,
+  Validators
+} from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { AuthService } from '../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -10,9 +15,16 @@ import { ErrorService } from '../../../core/errors/error.service';
   imports: [CommonModule, ReactiveFormsModule],
   template: `
     <div class="login-page">
-      <form class="card login-card" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+      <form
+        class="card login-card"
+        [formGroup]="form"
+        (ngSubmit)="onSubmit()"
+        novalidate
+      >
         <h1 class="login-card__title">Callsagents</h1>
-        <p class="login-card__subtitle muted">Iniciá sesión para acceder al panel.</p>
+        <p class="login-card__subtitle muted">
+          Iniciá sesión para acceder al panel.
+        </p>
 
         <div class="login-card__field">
           <label for="email">Email</label>
@@ -38,15 +50,15 @@ import { ErrorService } from '../../../core/errors/error.service';
             placeholder="Mínimo 8 caracteres"
           />
           @if (form.controls.password.touched && form.controls.password.errors) {
-            <p class="error-text">La contraseña debe tener al menos 8 caracteres.</p>
+            <p class="error-text">
+              La contraseña debe tener al menos 8 caracteres.
+            </p>
           }
         </div>
 
-        <button type="submit" [disabled]="form.invalid">Iniciar sesión</button>
-
-        <p class="login-card__note muted">
-          La autenticación real se implementa en Fase 6. Este formulario solo valida formato.
-        </p>
+        <button type="submit" [disabled]="form.invalid || loading()">
+          {{ loading() ? 'Ingresando…' : 'Iniciar sesión' }}
+        </button>
       </form>
     </div>
   `,
@@ -79,17 +91,15 @@ import { ErrorService } from '../../../core/errors/error.service';
         display: flex;
         flex-direction: column;
       }
-      .login-card__note {
-        font-size: 0.75rem;
-        text-align: center;
-        margin: 0;
-      }
     `
   ]
 })
 export class LoginComponent {
   private readonly fb = inject(FormBuilder);
-  private readonly errorService = inject(ErrorService);
+  private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+
+  protected readonly loading = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -101,7 +111,14 @@ export class LoginComponent {
       this.form.markAllAsTouched();
       return;
     }
-    const { email } = this.form.getRawValue();
-    this.errorService.info(`Login pendiente de Fase 6 — UI lista (${email})`);
+    this.loading.set(true);
+    const redirect =
+      this.route.snapshot.queryParamMap.get('redirect') ?? undefined;
+    // AuthService.login() does the navigation on success.
+    // errorInterceptor already shows a toast on failure — no need to duplicate.
+    this.auth.login(this.form.getRawValue(), redirect).subscribe({
+      next: () => this.loading.set(false),
+      error: () => this.loading.set(false)
+    });
   }
 }

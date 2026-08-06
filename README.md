@@ -32,8 +32,8 @@ callsagents/
 | 2 | Modelo de datos | Cerrada |
 | 3 | Autenticación | Cerrada |
 | 4 | API de negocio | Cerrada |
-| 5 | Frontend base | Pendiente |
-| 6 | Integración auth frontend | Pendiente |
+| 5 | Frontend base | Cerrada |
+| 6 | Integración auth frontend | Cerrada |
 | 7 | Redis | Parcial (entra en F3) |
 | 8 | Swagger / OpenAPI | Pendiente |
 | 9 | Docker local | Pendiente |

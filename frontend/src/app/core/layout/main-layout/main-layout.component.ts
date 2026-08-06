@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { LoadingService } from '../../loading/loading.service';
 import { ToastHostComponent } from '../../errors/toast-host/toast-host.component';
+import { AuthService } from '../../auth/auth.service';
 
 interface NavItem {
   label: string;
@@ -40,8 +41,21 @@ interface NavItem {
         <header class="header">
           <h1 class="header__title">Panel de control</h1>
           <div class="header__user">
-            <span class="header__user-name">Usuario</span>
-            <span class="header__user-avatar" aria-hidden="true">U</span>
+            <div class="header__user-info">
+              <span class="header__user-name">{{ userName() }}</span>
+              @if (userRole()) {
+                <span class="header__user-role">{{ userRole() }}</span>
+              }
+            </div>
+            <span class="header__user-avatar" aria-hidden="true">{{ userInitial() }}</span>
+            <button
+              type="button"
+              class="header__logout"
+              (click)="auth.logout()"
+              aria-label="Cerrar sesión"
+            >
+              Salir
+            </button>
           </div>
         </header>
 
@@ -148,11 +162,24 @@ interface NavItem {
       .header__user {
         display: flex;
         align-items: center;
-        gap: var(--spacing-2);
+        gap: var(--spacing-3);
+      }
+      .header__user-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        line-height: 1.2;
       }
       .header__user-name {
         font-size: 0.875rem;
+        color: var(--color-text);
+        font-weight: 500;
+      }
+      .header__user-role {
+        font-size: 0.7rem;
         color: var(--color-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
       .header__user-avatar {
         width: 32px;
@@ -164,6 +191,20 @@ interface NavItem {
         place-items: center;
         font-weight: 600;
         font-size: 0.875rem;
+      }
+      .header__logout {
+        padding: var(--spacing-1) var(--spacing-3);
+        background: transparent;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        color: var(--color-text);
+        font-size: 0.8125rem;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      .header__logout:hover {
+        background: var(--color-bg-alt);
+        border-color: var(--color-text-muted);
       }
       .content {
         flex: 1;
@@ -193,6 +234,7 @@ interface NavItem {
 })
 export class MainLayoutComponent {
   protected readonly loading = inject(LoadingService);
+  protected readonly auth = inject(AuthService);
 
   protected readonly navItems: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: '◉' },
@@ -201,4 +243,18 @@ export class MainLayoutComponent {
     { label: 'Llamadas', path: '/calls', icon: '◓' },
     { label: 'Citas', path: '/appointments', icon: '◒' }
   ];
+
+  protected userName(): string {
+    return this.auth.currentUser()?.fullName ?? 'Sin sesión';
+  }
+
+  protected userRole(): string | null {
+    return this.auth.currentRole();
+  }
+
+  protected userInitial(): string {
+    const name = this.auth.currentUser()?.fullName ?? '';
+    const first = name.trim().charAt(0).toUpperCase();
+    return first || '?';
+  }
 }

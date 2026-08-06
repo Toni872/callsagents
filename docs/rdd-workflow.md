@@ -48,22 +48,28 @@ Editá archivos normalmente. NO commitear todavía.
 
 ### 2. Generar el review (congelar candidate)
 
-Desde la raíz del repo:
+Desde la raíz del repo, modo interactivo (prompt en la terminal):
 
 ```bash
-gentle-ai review start \
-  --consent granted \
-  --projection workspace \
-  --cwd .
+gentle-ai review start --projection workspace --cwd .
+```
+
+Cuando pregunte el consent, responder:
+
+```
+[gentle-ai] Review initialization requires your consent.
+Do you consent to the review proceeding with the negotiated parameters?
+> granted
 ```
 
 Flags explicadas:
 
 | Flag | Valor | Por qué |
 |---|---|---|
-| `--consent granted` | `granted` | Aceptamos el consent prompt sin preguntar (estamos en CLI/no interactivo) |
 | `--projection workspace` | `workspace` o `staged` | `workspace` toma los cambios sin staging; `staged` toma solo lo que esté en `git add` |
 | `--cwd .` | path al repo | Necesario si no estás en la raíz |
+
+**Modo no-interactivo (CI/scripts)**: el flag `--consent granted` requiere además `--contract gentle-ai.review-integration/v1` y un `--target` SHA256 específico. Para uso humano, **usá el modo interactivo** (más simple y seguro).
 
 Si NO estás seguro si hay cambios sin stage, usá `git status` para verificar.
 
@@ -89,6 +95,8 @@ git commit -m "feat(scope): descripción conventional"
 ```bash
 git push origin main
 ```
+
+El delivery gate valida que el push corresponde al receipt. Si alguien modificó archivos después del review, **el push falla**.
 
 ---
 

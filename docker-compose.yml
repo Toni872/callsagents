@@ -1,0 +1,87 @@
+name: callsagents
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: callsagents-postgres
+    environment:
+      POSTGRES_DB: callsagents
+      POSTGRES_USER: callsagents
+      POSTGRES_PASSWORD: callsagents
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U callsagents"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - callsagents-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: callsagents-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - callsagents-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: callsagents-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/callsagents
+      SPRING_DATASOURCE_USERNAME: callsagents
+      SPRING_DATASOURCE_PASSWORD: callsagents
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-bytes-please}
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - callsagents-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: callsagents-frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "80:80"
+    networks:
+      - callsagents-net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  callsagents-net:
+    driver: bridge

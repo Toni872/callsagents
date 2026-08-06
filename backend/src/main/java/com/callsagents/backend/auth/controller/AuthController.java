@@ -13,8 +13,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -90,7 +89,10 @@ public class AuthController {
         @ApiResponse(responseCode = "401", description = "Token inválido o ausente")
     })
     @GetMapping("/me")
-    public ResponseEntity<UserDto> me(@AuthenticationPrincipal UserDetails user) {
-        return ResponseEntity.ok(authService.getCurrentUser(user.getUsername()));
+    public ResponseEntity<UserDto> me(Authentication authentication) {
+        // JwtAuthenticationFilter sets the email String as the principal, so we use
+        // Authentication#getName() (which returns principal.toString()) instead of
+        // @AuthenticationPrincipal UserDetails, which would resolve to null here.
+        return ResponseEntity.ok(authService.getCurrentUser(authentication.getName()));
     }
 }

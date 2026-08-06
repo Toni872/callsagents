@@ -37,7 +37,7 @@ callsagents/
 | 7 | Redis | Cubierto en F3 + verificado E2E en F9 |
 | 8 | Swagger / OpenAPI | Cerrada |
 | 9 | Docker local | Cerrada — **smoke test E2E OK (login + /me + CRUD contra Postgres+Redis)** |
-| 10 | CI/CD | Pendiente |
+| 10 | CI/CD | Cerrada |
 | 11 | Tests | 64 unit + 8 auth pasando |
 
 ## Regla de oro

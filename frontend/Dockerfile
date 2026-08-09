@@ -2,22 +2,36 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# Copiamos solo los manifests primero para cachear la instalación de deps
+# Copy manifests first for caching
 COPY package*.json ./
 
-# Workaround: node:22-alpine viene con npm 10.9.x que tiene un bug con `npm ci`
-# cuando el lockfile tiene muchas entries (genera ayuda en lugar de ejecutar).
-# Upgrade a npm 12 antes de instalar para resolver.
+# Workaround: node:22-alpine ships with npm 10.9.x which has a bug with `npm ci`
+# when the lockfile has many entries (shows help text instead of executing).
+# Upgrade to npm 12 before installing.
 RUN npm install -g npm@12.0.2 --silent && npm ci --no-audit --no-fund
 
-# Ahora copiamos el resto del código y construimos
+# Copy rest and build
 COPY . .
 RUN npm run build
 
 # Stage 2: serve
-# Angular 17+ genera los assets en dist/<project>/browser/ (no en la raíz),
-# así que copiamos el CONTENIDO de browser/ directamente al doc root de nginx.
 FROM nginx:1.27-alpine
-COPY --from=build /app/dist/callsagents-frontend/browser/ /usr/share/nginx/html/
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist/callsagents-frontend /usr/share/nginx/html
+# nginx.conf uses ${BACKEND_HOST} / ${BACKEND_PORT} envsubst placeholders.
+# envsubst (from gettext) replaces them at runtime with Railway's
+# internal service hostname + port.
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
+RUN apk add --no-cache gettext
+# Render the template into the final nginx config file at build time.
+# We don't know the runtime hostname here (it depends on the Railway service
+# name), so we substitute to a sensible default; the entrypoint re-substitutes
+# with the actual env vars before launching nginx.
+RUN envsubst '${BACKEND_HOST} ${BACKEND_PORT}' \
+    < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
+
+# Re-substitute at runtime to pick up the actual BACKEND_HOST / BACKEND_PORT
+# (Railway injects them per service). The entrypoint overwrites the config
+# with values from the live environment right before launching nginx.
+CMD ["/bin/sh", "-c", "envsubst '${BACKEND_HOST} ${BACKEND_PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
+
 EXPOSE 80

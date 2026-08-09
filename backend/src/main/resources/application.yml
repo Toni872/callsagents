@@ -18,11 +18,18 @@ spring:
     serialization:
       write-dates-as-timestamps: false
     time-zone: UTC
+  # Database: prefer Railway's DATABASE_URL when available, else build from
+  # individual PG* env vars (Railway Postgres plugin sets PGUSER/PGPASSWORD).
+  # The 'jdbc:' prefix is mandatory for spring.datasource.url; we prepend it.
+  datasource:
+    url: jdbc:${DATABASE_URL:jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:callsagents}}
+    username: ${PGUSER:callsagents}
+    password: ${PGPASSWORD:callsagents}
+  # Redis: prefer Railway's REDIS_URL when available (format: redis://default:password@host:port).
+  # Spring Boot 3+ accepts this URL via spring.data.redis.url directly.
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      url: ${REDIS_URL:redis://${REDIS_HOST:localhost}:${REDIS_PORT:6379}}
       timeout: 2000ms
   servlet:
     multipart:
@@ -36,11 +43,29 @@ app:
     access-token-ttl: 15m
     refresh-token-ttl: 7d
     issuer: callsagents-backend
+  calendar:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/calendar/oauth/callback/google}
+    outlook:
+      client-id: ${OUTLOOK_CLIENT_ID:}
+      client-secret: ${OUTLOOK_CLIENT_SECRET:}
+  voice:
+    vapi:
+      api-key: ${VAPI_API_KEY:}
+      assistant-id: ${VAPI_ASSISTANT_ID:}
+      phone-number-id: ${VAPI_PHONE_NUMBER_ID:}
+      webhook-url: ${VAPI_WEBHOOK_URL:http://localhost:8080/api/voice/webhook/vapi}
+    retell:
+      api-key: ${RETELL_API_KEY:}
 
 server:
-  port: 8080
+  port: ${PORT:8080}
   servlet:
     context-path: /api
+  # Railway injects PORT dynamically; forward the real port to Spring.
+  # (Spring Boot reads server.port directly; the placeholder above lets Railway override.)
 
 springdoc:
   api-docs:
@@ -54,5 +79,5 @@ springdoc:
 logging:
   level:
     root: INFO
-    com.callsagents: DEBUG
+    com.callsagents: INFO
     org.hibernate.SQL: INFO

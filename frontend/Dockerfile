@@ -16,7 +16,9 @@ RUN npm run build
 
 # Stage 2: serve
 FROM nginx:1.27-alpine
-COPY --from=build /app/dist/callsagents-frontend /usr/share/nginx/html
+# Angular 18 'application' builder outputs under browser/ (index.html is
+# not at the dist root), so copy browser/ into nginx's web root.
+COPY --from=build /app/dist/callsagents-frontend/browser /usr/share/nginx/html
 # nginx.conf uses ${BACKEND_HOST} / ${BACKEND_PORT} envsubst placeholders.
 # envsubst (from gettext) replaces them at runtime with Railway's
 # internal service hostname + port.

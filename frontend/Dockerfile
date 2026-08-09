@@ -23,15 +23,16 @@ COPY --from=build /app/dist/callsagents-frontend /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf.template
 RUN apk add --no-cache gettext
 # Render the template into the final nginx config file at build time.
-# We don't know the runtime hostname here (it depends on the Railway service
-# name), so we substitute to a sensible default; the entrypoint re-substitutes
-# with the actual env vars before launching nginx.
-RUN envsubst '${BACKEND_HOST} ${BACKEND_PORT}' \
+# Defaults are applied with POSIX sh because envsubst does not support
+# ${VAR:default} syntax.
+RUN export BACKEND_HOST="${BACKEND_HOST:-backend}" \
+    && export BACKEND_PORT="${BACKEND_PORT:-8080}" \
+    && envsubst '${BACKEND_HOST} ${BACKEND_PORT}' \
     < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
 
 # Re-substitute at runtime to pick up the actual BACKEND_HOST / BACKEND_PORT
 # (Railway injects them per service). The entrypoint overwrites the config
 # with values from the live environment right before launching nginx.
-CMD ["/bin/sh", "-c", "envsubst '${BACKEND_HOST} ${BACKEND_PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
+CMD ["/bin/sh", "-c", "export BACKEND_HOST=\"${BACKEND_HOST:-backend}\" && export BACKEND_PORT=\"${BACKEND_PORT:-8080}\" && envsubst '${BACKEND_HOST} ${BACKEND_PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
 
 EXPOSE 80

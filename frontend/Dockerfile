@@ -27,12 +27,13 @@ RUN apk add --no-cache gettext
 # ${VAR:default} syntax.
 RUN export BACKEND_HOST="${BACKEND_HOST:-backend}" \
     && export BACKEND_PORT="${BACKEND_PORT:-8080}" \
-    && envsubst '${BACKEND_HOST} ${BACKEND_PORT}' \
+    && export PORT="${PORT:-80}" \
+    && envsubst '${BACKEND_HOST} ${BACKEND_PORT} ${PORT}' \
     < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
 
 # Re-substitute at runtime to pick up the actual BACKEND_HOST / BACKEND_PORT
 # (Railway injects them per service). The entrypoint overwrites the config
 # with values from the live environment right before launching nginx.
-CMD ["/bin/sh", "-c", "export BACKEND_HOST=\"${BACKEND_HOST:-backend}\" && export BACKEND_PORT=\"${BACKEND_PORT:-8080}\" && envsubst '${BACKEND_HOST} ${BACKEND_PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
+CMD ["/bin/sh", "-c", "export BACKEND_HOST=\"${BACKEND_HOST:-backend}\" && export BACKEND_PORT=\"${BACKEND_PORT:-8080}\" && export PORT=\"${PORT:-80}\" && envsubst '${BACKEND_HOST} ${BACKEND_PORT} ${PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
 
 EXPOSE 80

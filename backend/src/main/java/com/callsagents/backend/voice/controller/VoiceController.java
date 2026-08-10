@@ -3,6 +3,7 @@ package com.callsagents.backend.voice.controller;
 import com.callsagents.backend.voice.domain.VoiceCall;
 import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import com.callsagents.backend.voice.domain.VoiceProviderType;
+import com.callsagents.backend.voice.service.RetellProvider;
 import com.callsagents.backend.voice.service.VapiProvider;
 import com.callsagents.backend.voice.service.VoiceCallService;
 import com.callsagents.backend.voice.service.VoiceProvider;
@@ -115,18 +116,47 @@ public class VoiceController {
     ) {
         try {
             JsonNode json = mapper.readTree(rawBody);
-            String callId = json.path("id").asText();
             String status = json.path("status").asText();
-            Integer duration = json.path("duration").isMissingNode() ? null : json.path("duration").asInt();
-            String transcript = json.path("transcript").asText(null);
-            String recordingUrl = json.path("recordingUrl").asText(null);
-            String errorMessage = json.path("endedReason").asText(null);
-            String costStr = json.path("cost").asText(null);
-            BigDecimal cost = costStr != null ? new BigDecimal(costStr) : null;
+            boolean isRetell = provider.equalsIgnoreCase("retell");
 
-            VoiceCallStatus mappedStatus = provider.equalsIgnoreCase("vapi")
-                ? VapiProvider.mapVapiStatus(status)
-                : VoiceCallStatus.ENDED; // fallback for unknown providers
+            // Provider-specific field names. Vapi uses 'id', Retell uses 'call_id'.
+            String callId = isRetell
+                ? json.path("call_id").asText()
+                : json.path("id").asText();
+            // Vapi uses 'duration' (seconds), Retell uses 'duration_ms' (milliseconds).
+            Integer duration = null;
+            if (isRetell) {
+                Integer ms = json.path("duration_ms").isMissingNode() ? null : json.path("duration_ms").asInt();
+                duration = ms != null ? ms / 1000 : null;
+            } else {
+                duration = json.path("duration").isMissingNode() ? null : json.path("duration").asInt();
+            }
+            // Retell uses 'recording_url' and 'end_reason'; Vapi uses 'recordingUrl' and 'endedReason'.
+            String transcript = json.path("transcript").asText(null);
+            String recordingUrl = isRetell
+                ? json.path("recording_url").asText(null)
+                : json.path("recordingUrl").asText(null);
+            String errorMessage = isRetell
+                ? json.path("end_reason").asText(null)
+                : json.path("endedReason").asText(null);
+            // Retell nests cost under call_cost.total_cost; Vapi uses 'cost'.
+            BigDecimal cost = null;
+            String costStr = isRetell
+                ? json.path("call_cost").path("total_cost").asText(null)
+                : json.path("cost").asText(null);
+            if (costStr != null) {
+                try { cost = new BigDecimal(costStr); } catch (NumberFormatException ignored) {}
+            }
+
+            VoiceCallStatus mappedStatus;
+            if (isRetell) {
+                mappedStatus = RetellProvider.mapRetellStatus(status);
+            } else if (provider.equalsIgnoreCase("vapi")) {
+                mappedStatus = VapiProvider.mapVapiStatus(status);
+            } else {
+                log.warn("Webhook from unknown provider '{}'; using ENDED fallback", provider);
+                mappedStatus = VoiceCallStatus.ENDED;
+            }
 
             service.applyWebhook(provider, callId, mappedStatus, duration, cost, transcript,
                 recordingUrl, errorMessage, null);

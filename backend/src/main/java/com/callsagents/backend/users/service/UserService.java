@@ -49,7 +49,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public Page<UserListItem> listUsers(UserRole role, Pageable pageable) {
         Page<User> page = (role != null)
-            ? userRepository.findAll(pageable) // simple impl; filter by role would be a spec
+            ? userRepository.findByRole(role, pageable)
             : userRepository.findAll(pageable);
 
         return page.map(this::toListItem);

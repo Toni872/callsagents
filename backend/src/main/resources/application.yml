@@ -12,7 +12,11 @@ spring:
         format_sql: false
   flyway:
     enabled: true
+    # Production excludes the dev-only admin seed (V2 moved to db/migration/dev).
+    # The seed was already applied to existing databases, so ignore the
+    # 'missing' migration there instead of failing validation.
     locations: classpath:db/migration
+    ignore-migration-patterns: "*:missing"
     baseline-on-migrate: true
   jackson:
     serialization:

@@ -7,9 +7,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -26,10 +29,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final UserDetailsService userDetailsService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, RefreshTokenService refreshTokenService) {
+    public JwtAuthenticationFilter(JwtService jwtService,
+                                   RefreshTokenService refreshTokenService,
+                                   UserDetailsService userDetailsService) {
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
+        this.userDetailsService = userDetailsService;
     }
 
     @Override
@@ -73,24 +80,35 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String email;
-        String role;
         try {
             email = claims.getStringClaim(JwtService.CLAIM_EMAIL);
-            role = claims.getStringClaim(JwtService.CLAIM_ROLE);
         } catch (ParseException e) {
-            log.debug("JWT missing email/role claims: {}", e.getMessage());
+            log.debug("JWT missing email claim: {}", e.getMessage());
             filterChain.doFilter(request, response);
             return;
         }
-        if (email == null || role == null) {
+        if (email == null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Hydrate a real UserDetails so @AuthenticationPrincipal works in controllers.
+        // The previous implementation set the raw email string as principal, which made
+        // @AuthenticationPrincipal UserDetails resolve to null in any endpoint that
+        // needed the current user (e.g. LeadController.create).
+        UserDetails userDetails;
+        try {
+            userDetails = userDetailsService.loadUserByUsername(email);
+        } catch (UsernameNotFoundException | DisabledException ex) {
+            log.debug("User {} not available for auth context: {}", email, ex.getMessage());
             filterChain.doFilter(request, response);
             return;
         }
 
         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-            email,
+            userDetails,
             null,
-            java.util.List.of(new SimpleGrantedAuthority("ROLE_" + role))
+            userDetails.getAuthorities()
         );
         auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(auth);

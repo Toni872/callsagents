@@ -67,6 +67,29 @@ import { CampaignResponse } from '../../../shared/models/campaign.model';
             }
           </tbody>
         </table>
+
+        <footer class="pager">
+          <button
+            class="secondary"
+            type="button"
+            [disabled]="page() === 0 || loading()"
+            (click)="goTo(page() - 1)"
+          >
+            ← Anterior
+          </button>
+          <span>
+            Página {{ page() + 1 }} de {{ totalPages() || 1 }}
+            ({{ totalElements() }} campañas)
+          </span>
+          <button
+            class="secondary"
+            type="button"
+            [disabled]="page() + 1 >= totalPages() || loading()"
+            (click)="goTo(page() + 1)"
+          >
+            Siguiente →
+          </button>
+        </footer>
       </div>
     </section>
   `,
@@ -89,6 +112,13 @@ import { CampaignResponse } from '../../../shared/models/campaign.model';
         gap: var(--spacing-2);
         align-items: center;
       }
+      .pager {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--spacing-3);
+        margin-top: var(--spacing-4);
+      }
       .actions-col {
         text-align: right;
         width: 1%;
@@ -110,17 +140,31 @@ export class CampaignListComponent implements OnInit {
   protected readonly campaigns = signal<CampaignResponse[]>([]);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly loading = signal(false);
+  protected readonly page = signal(0);
+  protected readonly totalPages = signal(0);
+  protected readonly totalElements = signal(0);
+  protected readonly pageSize = 20;
 
   ngOnInit(): void {
+    this.fetch();
+  }
+
+  protected goTo(p: number): void {
+    if (p < 0) {
+      return;
+    }
+    this.page.set(p);
     this.fetch();
   }
 
   protected fetch(): void {
     this.loading.set(true);
     this.errorMessage.set(null);
-    this.api.list({ page: 0, size: 20 }).subscribe({
+    this.api.list({ page: this.page(), size: this.pageSize }).subscribe({
       next: (res) => {
         this.campaigns.set(res.content);
+        this.totalPages.set(res.totalPages);
+        this.totalElements.set(res.totalElements);
         this.loading.set(false);
       },
       error: (err) => {

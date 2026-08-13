@@ -42,10 +42,7 @@ import { CallResponse } from '../../../shared/models/call.model';
         </div>
       </header>
 
-      @if (errorMessage()) {
-        <div class="card error-text">Error: {{ errorMessage() }}</div>
-      } @else {
-        @if (call(); as c) {
+      @if (call(); as c) {
           <div class="card detail">
             <dl class="detail__grid">
               <dt>Campaña</dt>
@@ -98,7 +95,6 @@ import { CallResponse } from '../../../shared/models/call.model';
             </dl>
           </div>
         }
-      }
     </section>
   `,
   styles: [
@@ -169,7 +165,6 @@ export class CallDetailComponent implements OnInit {
   private readonly auth = inject(AuthService);
 
   protected readonly call = signal<CallResponse | null>(null);
-  protected readonly errorMessage = signal<string | null>(null);
 
   protected readonly canEdit = computed(() => {
     const r = this.auth.currentRole();
@@ -181,7 +176,7 @@ export class CallDetailComponent implements OnInit {
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
-      this.errorMessage.set('ID de llamada no proporcionado');
+      this.errors.error('ID de llamada no proporcionado');
       return;
     }
     this.load(id);
@@ -211,10 +206,9 @@ export class CallDetailComponent implements OnInit {
     firstValueFrom(this.api.getById(id))
       .then((c) => {
         this.call.set(c);
-        this.errorMessage.set(null);
       })
-      .catch((err: { error?: { message?: string }; message?: string }) => {
-        this.errorMessage.set(err?.error?.message || err?.message || 'No se pudo cargar la llamada');
+      .catch(() => {
+        // Toast shown by errorInterceptor
       });
   }
 }

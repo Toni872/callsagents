@@ -64,10 +64,7 @@ type CampaignLeadStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
         </div>
       </header>
 
-      @if (errorMessage()) {
-        <div class="card error-text">Error: {{ errorMessage() }}</div>
-      } @else {
-        @if (campaign(); as c) {
+      @if (campaign(); as c) {
           <div class="card detail">
             <dl class="detail__grid">
               <dt>Estado</dt>
@@ -177,7 +174,6 @@ type CampaignLeadStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
             </table>
           </div>
         }
-      }
     </section>
 
     <dialog #addLeadDialog class="dialog" (close)="onAddLeadDialogClose()">
@@ -475,7 +471,6 @@ export class CampaignDetailComponent implements OnInit {
   ];
 
   protected readonly campaign = signal<CampaignResponse | null>(null);
-  protected readonly errorMessage = signal<string | null>(null);
   protected readonly busy = signal(false);
 
   protected readonly leads = signal<CampaignLeadResponse[]>([]);
@@ -512,7 +507,7 @@ export class CampaignDetailComponent implements OnInit {
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
-      this.errorMessage.set('ID de campaña no proporcionado');
+      this.errors.error('ID de campaña no proporcionado');
       return;
     }
     this.load(id);
@@ -541,10 +536,9 @@ export class CampaignDetailComponent implements OnInit {
         this.busy.set(false);
         this.errors.success('Campaña lanzada');
       },
-      error: (err: { error?: { message?: string }; message?: string }) => {
+      error: () => {
         this.busy.set(false);
-        const msg = err?.error?.message || err?.message || 'No se pudo lanzar la campaña';
-        this.errors.error(msg);
+        // Toast shown by errorInterceptor
       }
     });
   }
@@ -561,10 +555,9 @@ export class CampaignDetailComponent implements OnInit {
         this.busy.set(false);
         this.errors.success('Campaña pausada');
       },
-      error: (err: { error?: { message?: string }; message?: string }) => {
+      error: () => {
         this.busy.set(false);
-        const msg = err?.error?.message || err?.message || 'No se pudo pausar la campaña';
-        this.errors.error(msg);
+        // Toast shown by errorInterceptor
       }
     });
   }
@@ -626,7 +619,6 @@ export class CampaignDetailComponent implements OnInit {
         this.submittingLead.set(false);
         const msg = err?.error?.message || err?.message || 'No se pudo añadir el lead';
         this.addLeadError.set(msg);
-        this.errors.error(msg);
       }
     });
   }
@@ -649,10 +641,9 @@ export class CampaignDetailComponent implements OnInit {
         this.errors.success('Lead quitado de la campaña');
         this.loadLeads(c.id);
       },
-      error: (err: { error?: { message?: string }; message?: string }) => {
+      error: () => {
         this.removingLeadId.set(null);
-        const msg = err?.error?.message || err?.message || 'No se pudo quitar el lead';
-        this.errors.error(msg);
+        // Toast shown by errorInterceptor
       }
     });
   }
@@ -676,11 +667,10 @@ export class CampaignDetailComponent implements OnInit {
     firstValueFrom(this.campaignApi.getById(id))
       .then((c) => {
         this.campaign.set(c);
-        this.errorMessage.set(null);
         this.loadLeads(id);
       })
-      .catch((err: { error?: { message?: string }; message?: string }) => {
-        this.errorMessage.set(err?.error?.message || err?.message || 'No se pudo cargar la campaña');
+      .catch(() => {
+        // Toast shown by errorInterceptor
       });
   }
 

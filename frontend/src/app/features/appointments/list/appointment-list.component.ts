@@ -22,10 +22,6 @@ import { AppointmentResponse } from '../../../shared/models/appointment.model';
         </div>
       </header>
 
-      @if (errorMessage()) {
-        <div class="card error-text">Error: {{ errorMessage() }}</div>
-      }
-
       <div class="card">
         <table>
           <thead>
@@ -140,7 +136,6 @@ export class AppointmentListComponent implements OnInit {
   private readonly api = inject(AppointmentApi);
 
   protected readonly appointments = signal<AppointmentResponse[]>([]);
-  protected readonly errorMessage = signal<string | null>(null);
   protected readonly loading = signal(false);
   protected readonly page = signal(0);
   protected readonly totalPages = signal(0);
@@ -161,7 +156,6 @@ export class AppointmentListComponent implements OnInit {
 
   protected fetch(): void {
     this.loading.set(true);
-    this.errorMessage.set(null);
     this.api.list({ page: this.page(), size: this.pageSize }).subscribe({
       next: (res) => {
         this.appointments.set(res.content);
@@ -169,9 +163,9 @@ export class AppointmentListComponent implements OnInit {
         this.totalElements.set(res.totalElements);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: () => {
         this.loading.set(false);
-        this.errorMessage.set(err?.error?.message || err?.message || 'Error al cargar');
+        // Toast shown by errorInterceptor
       }
     });
   }

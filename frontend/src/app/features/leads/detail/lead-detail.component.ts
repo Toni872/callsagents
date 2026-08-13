@@ -51,10 +51,7 @@ import { LeadResponse } from '../../../shared/models/lead.model';
         </div>
       </header>
 
-      @if (errorMessage()) {
-        <div class="card error-text">Error: {{ errorMessage() }}</div>
-      } @else {
-        @if (lead(); as l) {
+      @if (lead(); as l) {
         <div class="card detail">
           <dl class="detail__grid">
             <dt>Estado</dt>
@@ -114,7 +111,6 @@ import { LeadResponse } from '../../../shared/models/lead.model';
           </section>
         </div>
         }
-      }
     </section>
   `,
   styles: [
@@ -210,7 +206,6 @@ export class LeadDetailComponent implements OnInit {
   private readonly errors = inject(ErrorService);
 
   protected readonly lead = signal<LeadResponse | null>(null);
-  protected readonly errorMessage = signal<string | null>(null);
   protected readonly deleting = signal(false);
 
   protected readonly canDelete = (): boolean => this.auth.currentRole() === 'ADMIN';
@@ -218,7 +213,7 @@ export class LeadDetailComponent implements OnInit {
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
-      this.errorMessage.set('ID de lead no proporcionado');
+      this.errors.error('ID de lead no proporcionado');
       return;
     }
     this.load(id);
@@ -263,10 +258,9 @@ export class LeadDetailComponent implements OnInit {
         this.errors.success('Lead eliminado');
         void this.router.navigate(['/leads']);
       },
-      error: (err: { error?: { message?: string }; message?: string }) => {
+      error: () => {
         this.deleting.set(false);
-        const msg = err?.error?.message || err?.message || 'No se pudo eliminar el lead';
-        this.errors.error(msg);
+        // Toast shown by errorInterceptor
       }
     });
   }
@@ -275,10 +269,9 @@ export class LeadDetailComponent implements OnInit {
     firstValueFrom(this.api.getById(id))
       .then((lead) => {
         this.lead.set(lead);
-        this.errorMessage.set(null);
       })
-      .catch((err: { error?: { message?: string }; message?: string }) => {
-        this.errorMessage.set(err?.error?.message || err?.message || 'No se pudo cargar el lead');
+      .catch(() => {
+        // Toast shown by errorInterceptor
       });
   }
 }

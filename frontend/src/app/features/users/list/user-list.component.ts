@@ -425,13 +425,9 @@ export class UserListComponent implements OnInit {
         this.errors.success('Usuario actualizado correctamente');
         this.fetch();
       },
-      error: (err) => {
+      error: () => {
         this.updatingId.set(null);
-        const msg =
-          err?.error?.message ||
-          err?.message ||
-          'No se pudo actualizar el usuario';
-        this.errors.error(msg);
+        // Toast shown by errorInterceptor
       }
     });
   }
@@ -479,13 +475,9 @@ export class UserListComponent implements OnInit {
         this.page.set(0);
         this.fetch();
       },
-      error: (err) => {
+      error: () => {
         this.submitting.set(false);
-        const msg =
-          err?.error?.message ||
-          err?.message ||
-          'No se pudo crear el usuario';
-        this.errors.error(msg);
+        // Toast shown by errorInterceptor
       }
     });
   }
@@ -501,13 +493,9 @@ export class UserListComponent implements OnInit {
           this.totalElements.set(res.totalElements);
           this.loading.set(false);
         },
-        error: (err) => {
+        error: () => {
           this.loading.set(false);
-          const msg =
-            err?.error?.message ||
-            err?.message ||
-            'Error al cargar usuarios';
-          this.errors.error(msg);
+          // Toast shown by errorInterceptor
         }
       });
   }

@@ -371,7 +371,6 @@ export class CallFormComponent implements OnInit {
     this.submitting.set(false);
     const msg = err?.error?.message || err?.message || 'No se pudo guardar la llamada';
     this.submitError.set(msg);
-    this.errors.error(msg);
   }
 
   private toIsoOrNull(local: string): string | null {

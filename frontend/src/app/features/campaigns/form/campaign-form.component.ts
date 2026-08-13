@@ -293,7 +293,6 @@ export class CampaignFormComponent implements OnInit {
     this.submitting.set(false);
     const msg = err?.error?.message || err?.message || 'No se pudo guardar la campaña';
     this.submitError.set(msg);
-    this.errors.error(msg);
   }
 
   /**

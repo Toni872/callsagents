@@ -30,10 +30,6 @@ import { LeadResponse } from '../../../shared/models/lead.model';
         </div>
       </header>
 
-      @if (errorMessage()) {
-        <div class="card error-text">Error: {{ errorMessage() }}</div>
-      }
-
       <div class="card">
         <table>
           <thead>
@@ -149,7 +145,6 @@ export class LeadListComponent implements OnInit {
 
   protected readonly leads = signal<LeadResponse[]>([]);
   protected readonly loading = signal(false);
-  protected readonly errorMessage = signal<string | null>(null);
   protected readonly page = signal(0);
   protected readonly totalPages = signal(0);
   protected readonly totalElements = signal(0);
@@ -182,7 +177,6 @@ export class LeadListComponent implements OnInit {
 
   private fetch(): void {
     this.loading.set(true);
-    this.errorMessage.set(null);
 
     this.api
       .list({
@@ -198,9 +192,9 @@ export class LeadListComponent implements OnInit {
           this.totalElements.set(res.totalElements);
           this.loading.set(false);
         },
-        error: (err) => {
+        error: () => {
           this.loading.set(false);
-          this.errorMessage.set(err?.error?.message || err?.message || 'Error al cargar leads');
+          // Toast shown by errorInterceptor
         }
       });
   }

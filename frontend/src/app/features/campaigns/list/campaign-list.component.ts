@@ -22,10 +22,6 @@ import { CampaignResponse } from '../../../shared/models/campaign.model';
         </div>
       </header>
 
-      @if (errorMessage()) {
-        <div class="card error-text">Error: {{ errorMessage() }}</div>
-      }
-
       <div class="card">
         <table>
           <thead>
@@ -138,7 +134,6 @@ export class CampaignListComponent implements OnInit {
   private readonly api = inject(CampaignApi);
 
   protected readonly campaigns = signal<CampaignResponse[]>([]);
-  protected readonly errorMessage = signal<string | null>(null);
   protected readonly loading = signal(false);
   protected readonly page = signal(0);
   protected readonly totalPages = signal(0);
@@ -159,7 +154,6 @@ export class CampaignListComponent implements OnInit {
 
   protected fetch(): void {
     this.loading.set(true);
-    this.errorMessage.set(null);
     this.api.list({ page: this.page(), size: this.pageSize }).subscribe({
       next: (res) => {
         this.campaigns.set(res.content);
@@ -167,9 +161,9 @@ export class CampaignListComponent implements OnInit {
         this.totalElements.set(res.totalElements);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: () => {
         this.loading.set(false);
-        this.errorMessage.set(err?.error?.message || err?.message || 'Error al cargar');
+        // Toast shown by errorInterceptor
       }
     });
   }

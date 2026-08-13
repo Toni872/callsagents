@@ -54,10 +54,7 @@ import { AppointmentResponse } from '../../../shared/models/appointment.model';
         </div>
       </header>
 
-      @if (errorMessage()) {
-        <div class="card error-text">Error: {{ errorMessage() }}</div>
-      } @else {
-        @if (appointment(); as a) {
+      @if (appointment(); as a) {
           <div class="card detail">
             <dl class="detail__grid">
               <dt>Estado</dt>
@@ -110,7 +107,6 @@ import { AppointmentResponse } from '../../../shared/models/appointment.model';
             </dl>
           </div>
         }
-      }
     </section>
   `,
   styles: [
@@ -191,7 +187,6 @@ export class AppointmentDetailComponent implements OnInit {
   private readonly errors = inject(ErrorService);
 
   protected readonly appointment = signal<AppointmentResponse | null>(null);
-  protected readonly errorMessage = signal<string | null>(null);
   protected readonly deleting = signal(false);
   protected readonly leadLabel = signal<string | null>(null);
   protected readonly userLabel = signal<string | null>(null);
@@ -201,7 +196,7 @@ export class AppointmentDetailComponent implements OnInit {
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
-      this.errorMessage.set('ID de cita no proporcionado');
+      this.errors.error('ID de cita no proporcionado');
       return;
     }
     this.load(id);
@@ -234,10 +229,9 @@ export class AppointmentDetailComponent implements OnInit {
         this.errors.success('Cita eliminada');
         void this.router.navigate(['/appointments']);
       },
-      error: (err: { error?: { message?: string }; message?: string }) => {
+      error: () => {
         this.deleting.set(false);
-        const msg = err?.error?.message || err?.message || 'No se pudo eliminar la cita';
-        this.errors.error(msg);
+        // Toast shown by errorInterceptor
       }
     });
   }
@@ -246,11 +240,10 @@ export class AppointmentDetailComponent implements OnInit {
     firstValueFrom(this.api.getById(id))
       .then((a) => {
         this.appointment.set(a);
-        this.errorMessage.set(null);
         this.loadLabels(a.leadId, a.userId);
       })
-      .catch((err: { error?: { message?: string }; message?: string }) => {
-        this.errorMessage.set(err?.error?.message || err?.message || 'No se pudo cargar la cita');
+      .catch(() => {
+        // Toast shown by errorInterceptor
       });
   }
 

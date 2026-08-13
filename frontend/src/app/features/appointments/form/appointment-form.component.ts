@@ -343,7 +343,6 @@ export class AppointmentFormComponent implements OnInit {
     this.submitting.set(false);
     const msg = err?.error?.message || err?.message || 'No se pudo guardar la cita';
     this.submitError.set(msg);
-    this.errors.error(msg);
   }
 
   private toIsoOrNull(local: string): string | null {

@@ -473,7 +473,6 @@ export class LeadFormComponent implements OnInit {
     this.submitting.set(false);
     const msg = err?.error?.message || err?.message || 'No se pudo guardar el lead';
     this.submitError.set(msg);
-    this.errors.error(msg);
   }
 
   private buildCustomFields(): Record<string, unknown> | null {

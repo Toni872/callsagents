@@ -8,6 +8,12 @@ Thumbs.db
 *.iml
 *.swp
 
+# Eclipse
+backend/.project
+backend/.classpath
+backend/.factorypath
+backend/.settings/
+
 # Node / Angular
 node_modules/
 frontend/dist/

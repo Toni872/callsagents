@@ -1,6 +1,7 @@
 package com.callsagents.backend.calendar.service;
 
 import com.callsagents.backend.calendar.domain.CalendarProviderType;
+import com.callsagents.backend.common.exception.ServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +20,9 @@ import org.springframework.stereotype.Component;
  *
  * Env vars (configure via .env when implementing):
  *   OUTLOOK_CLIENT_ID, OUTLOOK_CLIENT_SECRET, OUTLOOK_REDIRECT_URI
+ *
+ * Until implemented, every operation throws {@link ServiceUnavailableException},
+ * which the GlobalExceptionHandler maps to HTTP 503 (service_unavailable).
  */
 @Component
 public class OutlookCalendarProvider implements CalendarProvider {
@@ -44,19 +48,17 @@ public class OutlookCalendarProvider implements CalendarProvider {
 
     @Override
     public String buildAuthorizationUrl(String state) {
-        throw new UnsupportedOperationException(
-            "Outlook provider scaffolded but not yet implemented. " +
-            "Configure OUTLOOK_CLIENT_ID/SECRET and complete this method.");
+        throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 
     @Override
     public TokenResponse exchangeCode(String code) {
-        throw new UnsupportedOperationException("Outlook exchangeCode not implemented");
+        throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 
     @Override
     public TokenResponse refreshAccessToken(String refreshToken) {
-        throw new UnsupportedOperationException("Outlook refreshAccessToken not implemented");
+        throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 
     @Override
@@ -66,16 +68,16 @@ public class OutlookCalendarProvider implements CalendarProvider {
 
     @Override
     public String createEvent(String accessToken, String externalCalendarId, EventPayload event) {
-        throw new UnsupportedOperationException("Outlook createEvent not implemented");
+        throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 
     @Override
     public String updateEvent(String accessToken, String externalCalendarId, String eventId, EventPayload event) {
-        throw new UnsupportedOperationException("Outlook updateEvent not implemented");
+        throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 
     @Override
     public void deleteEvent(String accessToken, String externalCalendarId, String eventId) {
-        throw new UnsupportedOperationException("Outlook deleteEvent not implemented");
+        throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 }

@@ -1,0 +1,7 @@
+# Exclude heavy/local-only paths from Railway uploads
+.git/
+frontend/node_modules/
+frontend/dist/
+backend/target/
+*.log
+.DS_Store

@@ -57,6 +57,10 @@ services:
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/calendar/integrations/google/callback}
       # Voice webhooks
       VAPI_WEBHOOK_SECRET: ${VAPI_WEBHOOK_SECRET}
+      # Vapi integration (outbound calls)
+      VAPI_API_KEY: ${VAPI_API_KEY}
+      VAPI_ASSISTANT_ID: ${VAPI_ASSISTANT_ID:-}
+      VAPI_PHONE_NUMBER_ID: ${VAPI_PHONE_NUMBER_ID:-}
       # Swagger/OpenAPI (off in production)
       SPRINGDOC_ENABLED: ${SPRINGDOC_ENABLED:-true}
       JAVA_OPTS: "-Xms256m -Xmx512m"

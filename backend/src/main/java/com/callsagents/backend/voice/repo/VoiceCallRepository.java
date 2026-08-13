@@ -1,5 +1,6 @@
 package com.callsagents.backend.voice.repo;
 
+import com.callsagents.backend.voice.domain.VoiceProviderType;
 import com.callsagents.backend.voice.domain.VoiceCall;
 import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,6 @@ import java.util.UUID;
 public interface VoiceCallRepository extends JpaRepository<VoiceCall, UUID> {
     List<VoiceCall> findAllByUserIdOrderByCreatedAtDesc(UUID userId);
     List<VoiceCall> findAllByLeadIdOrderByCreatedAtDesc(UUID leadId);
-    Optional<VoiceCall> findByProviderAndProviderCallId(String provider, String providerCallId);
+    Optional<VoiceCall> findByProviderAndProviderCallId(VoiceProviderType provider, String providerCallId);
     long countByStatus(VoiceCallStatus status);
 }

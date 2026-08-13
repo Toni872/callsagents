@@ -85,7 +85,7 @@ public class VoiceCallService {
             log.warn("Webhook for unknown provider: {}", providerName);
             return Optional.empty();
         }
-        var callOpt = repo.findByProviderAndProviderCallId(type.name(), providerCallId);
+        var callOpt = repo.findByProviderAndProviderCallId(type, providerCallId);
         if (callOpt.isEmpty()) {
             log.warn("Webhook for unknown call: provider={}, id={}", type, providerCallId);
             return Optional.empty();

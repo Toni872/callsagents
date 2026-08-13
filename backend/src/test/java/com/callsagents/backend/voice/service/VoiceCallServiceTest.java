@@ -94,7 +94,7 @@ class VoiceCallServiceTest {
             .status(VoiceCallStatus.RINGING)
             .direction("OUTBOUND")
             .build();
-        when(repo.findByProviderAndProviderCallId("VAPI", "vapi-call-999"))
+        when(repo.findByProviderAndProviderCallId(VoiceProviderType.VAPI, "vapi-call-999"))
             .thenReturn(Optional.of(existing));
         when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -113,7 +113,7 @@ class VoiceCallServiceTest {
     @Test
     @DisplayName("applyWebhook: when call NOT found, returns empty and does not save")
     void applyWebhook_unknownCall() {
-        when(repo.findByProviderAndProviderCallId("VAPI", "ghost"))
+        when(repo.findByProviderAndProviderCallId(VoiceProviderType.VAPI, "ghost"))
             .thenReturn(Optional.empty());
 
         var result = service.applyWebhook(

@@ -174,7 +174,7 @@ public class VoiceController {
                 recordingUrl, errorMessage, null);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
-            log.warn("Webhook parse error: {}", e.getMessage());
+            log.warn("Webhook parse error: {}", e.getMessage(), e);
             return ResponseEntity.ok().build(); // 200 to prevent provider retry storms
         }
     }

@@ -22,7 +22,7 @@ export function roleGuard(allowedRoles: string[]): CanActivateFn {
     if (role && allowedRoles.includes(role)) {
       return true;
     }
-    errorService.error('No tenés permisos para acceder a esta sección');
+    errorService.error('No tienes permisos para acceder a esta sección');
     return router.createUrlTree(['/dashboard']);
   };
 }

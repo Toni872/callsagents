@@ -23,7 +23,7 @@ import { AuthService } from '../../../core/auth/auth.service';
       >
         <h1 class="login-card__title">Callsagents</h1>
         <p class="login-card__subtitle muted">
-          Iniciá sesión para acceder al panel.
+          Inicia sesión para acceder al panel.
         </p>
 
         <div class="login-card__field">
@@ -57,7 +57,7 @@ import { AuthService } from '../../../core/auth/auth.service';
         </div>
 
         <button type="submit" [disabled]="form.invalid || loading()">
-          {{ loading() ? 'Ingresando…' : 'Iniciar sesión' }}
+          {{ loading() ? 'Iniciando sesión…' : 'Iniciar sesión' }}
         </button>
       </form>
     </div>

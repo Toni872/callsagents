@@ -190,7 +190,7 @@ import {
               }
             </select>
             @if (isInvalid('role')) {
-              <small class="field__error">Seleccioná un rol.</small>
+              <small class="field__error">Selecciona un rol.</small>
             }
           </label>
         </div>

@@ -67,7 +67,7 @@ import {
       @if (providerHint()) {
         <div class="config-hint" role="alert">
           <strong>Proveedor no configurado.</strong>
-          Configurá la variable de entorno correspondiente en el servidor
+          Configura la variable de entorno correspondiente en el servidor
           (<code>VAPI_API_KEY</code> o <code>RETELL_API_KEY</code>, ver RUNBOOK).
           El log manual sigue funcionando.
         </div>
@@ -78,8 +78,8 @@ import {
           <p class="muted">Cargando llamadas…</p>
         } @else if (calls().length === 0) {
           <p class="empty-state">
-            No hay llamadas registradas todavía. Iniciá una con
-            <strong>+ Iniciar llamada</strong> o registrá una existente con
+            No hay llamadas registradas todavía. Inicia una con
+            <strong>+ Iniciar llamada</strong> o registra una existente con
             <strong>Log manual</strong>.
           </p>
         } @else {
@@ -163,7 +163,7 @@ import {
               <option value="RETELL">RETELL</option>
             </select>
             @if (isStartInvalid('provider')) {
-              <small class="field__error">Seleccioná un proveedor.</small>
+              <small class="field__error">Selecciona un proveedor.</small>
             }
           </label>
 
@@ -177,7 +177,7 @@ import {
               [class.field__input--invalid]="isStartInvalid('phoneNumber')"
             />
             @if (isStartInvalid('phoneNumber')) {
-              <small class="field__error">Ingresá un número en formato E.164.</small>
+              <small class="field__error">Introduce un número en formato E.164.</small>
             }
           </label>
 
@@ -238,7 +238,7 @@ import {
               [class.field__input--invalid]="isManualInvalid('phoneNumber')"
             />
             @if (isManualInvalid('phoneNumber')) {
-              <small class="field__error">Ingresá un número en formato E.164.</small>
+              <small class="field__error">Introduce un número en formato E.164.</small>
             }
           </label>
 

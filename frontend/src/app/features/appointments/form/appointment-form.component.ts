@@ -43,7 +43,7 @@ import { UserListItem } from '../../../shared/models/user.model';
             {{
               isEdit()
                 ? 'Modifica la fecha, duración, estado o notas de la cita.'
-                : 'Agenda una cita con un lead. Se enviará automáticamente al calendario del agente si tiene integración activa.'
+                : 'Programa una cita con un lead. Se enviará automáticamente al calendario del agente si tiene integración activa.'
             }}
           </p>
         </div>

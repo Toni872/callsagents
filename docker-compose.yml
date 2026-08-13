@@ -55,6 +55,10 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/calendar/integrations/google/callback}
+      # Voice webhooks
+      VAPI_WEBHOOK_SECRET: ${VAPI_WEBHOOK_SECRET}
+      # Swagger/OpenAPI (off in production)
+      SPRINGDOC_ENABLED: ${SPRINGDOC_ENABLED:-true}
       JAVA_OPTS: "-Xms256m -Xmx512m"
     ports:
       - "8080:8080"

@@ -2,6 +2,7 @@ package com.callsagents.backend.auth.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -30,13 +31,16 @@ public class SecurityConfig {
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
+    private final boolean springdocEnabled;
 
     public SecurityConfig(CustomUserDetailsService customUserDetailsService,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          @Value("${springdoc.api-docs.enabled:true}") boolean springdocEnabled) {
         this.customUserDetailsService = customUserDetailsService;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.objectMapper = objectMapper;
+        this.springdocEnabled = springdocEnabled;
     }
 
     @Bean
@@ -45,23 +49,29 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/login", "/auth/refresh").permitAll()
-                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                // Webhooks de providers de voz (Vapi, Retell). En producción validar
-                // firma HMAC del provider para evitar spoofing.
-                .requestMatchers("/voice/webhook/**").permitAll()
+            .authorizeHttpRequests(auth -> {
+                auth.requestMatchers("/auth/login", "/auth/refresh").permitAll();
+                auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
+                // Webhooks de providers de voz (Vapi, Retell). Sin auth en la capa
+                // de seguridad a propósito: el handler verifica la firma del provider
+                // (Retell HMAC-SHA256, Vapi X-Vapi-Secret) y devuelve 401 si no cuadra.
+                auth.requestMatchers("/voice/webhook/**").permitAll();
                 // Callback OAuth de calendario: Google redirige el navegador aquí
                 // SIN Authorization header (es una navegación de browser). Es seguro
                 // exponerlo: solo intercambia un code de un solo uso que solo quien
                 // completó el consentimiento en Google puede obtener, y el state
                 // (email del usuario Callsagents) atribuye la integración.
-                .requestMatchers("/calendar/integrations/*/callback").permitAll()
-                // Swagger UI / OpenAPI docs (Fase 8): permitir acceso sin auth para que
-                // un dev externo pueda explorar el contrato y usar el botón "Authorize".
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                .anyRequest().authenticated()
-            )
+                auth.requestMatchers("/calendar/integrations/*/callback").permitAll();
+                // Swagger UI / OpenAPI docs (Fase 8): solo cuando SpringDoc está
+                // habilitado. En producción (SPRINGDOC_ENABLED=false) se deniega de
+                // forma explícita para que nada del contrato quede expuesto.
+                if (springdocEnabled) {
+                    auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
+                } else {
+                    auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").denyAll();
+                }
+                auth.anyRequest().authenticated();
+            })
             .exceptionHandling(eh -> eh
                 .authenticationEntryPoint((req, res, ex) -> writeError(res, HttpServletResponse.SC_UNAUTHORIZED,
                     "unauthorized", ex.getMessage(), req.getRequestURI()))

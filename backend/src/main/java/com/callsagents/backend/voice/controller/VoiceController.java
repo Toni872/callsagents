@@ -7,6 +7,7 @@ import com.callsagents.backend.voice.service.RetellProvider;
 import com.callsagents.backend.voice.service.VapiProvider;
 import com.callsagents.backend.voice.service.VoiceCallService;
 import com.callsagents.backend.voice.service.VoiceProvider;
+import com.callsagents.backend.voice.service.WebhookSignatureValidator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,7 +40,8 @@ import java.util.UUID;
  *   POST /api/voice/calls/start           — initiate a call (requires provider configured)
  *   POST /api/voice/calls/log             — manually log a call
  *
- * Webhook endpoints (no auth, provider-signed — verify signature in prod):
+ * Webhook endpoints (no auth at the security layer; signatures are verified
+ * in the handler — Retell HMAC-SHA256, Vapi shared secret):
  *   POST /api/voice/webhook/{provider}    — receive status updates
  */
 @RestController
@@ -49,14 +52,17 @@ public class VoiceController {
     private static final Logger log = LoggerFactory.getLogger(VoiceController.class);
 
     private final VoiceCallService service;
+    private final WebhookSignatureValidator signatureValidator;
     private final com.callsagents.backend.auth.repository.UserRepository userRepository;
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
     public VoiceController(
         VoiceCallService service,
+        WebhookSignatureValidator signatureValidator,
         com.callsagents.backend.auth.repository.UserRepository userRepository
     ) {
         this.service = service;
+        this.signatureValidator = signatureValidator;
         this.userRepository = userRepository;
     }
 
@@ -105,15 +111,21 @@ public class VoiceController {
     }
 
     /**
-     * Webhook from the voice provider. Verifies the call exists, updates its
-     * status from the provider's payload. In production, verify HMAC signature
-     * from the provider to prevent spoofing.
+     * Webhook from the voice provider. Signature is verified before any state
+     * is touched: Retell via X-Retell-Signature (HMAC-SHA256), Vapi via
+     * X-Vapi-Secret. Verification is fail-closed — 401 unless proven authentic.
      */
     @PostMapping("/webhook/{provider}")
     public ResponseEntity<Void> webhook(
         @PathVariable String provider,
-        @RequestBody String rawBody
+        @RequestBody String rawBody,
+        @RequestHeader(value = "X-Vapi-Secret", required = false) String xVapiSecret,
+        @RequestHeader(value = "X-Retell-Signature", required = false) String xRetellSignature
     ) {
+        if (!signatureValidator.verify(provider, rawBody, xVapiSecret, xRetellSignature)) {
+            log.warn("Webhook rejected: invalid signature for provider '{}'", provider);
+            return ResponseEntity.status(401).build();
+        }
         try {
             JsonNode json = mapper.readTree(rawBody);
             String status = json.path("status").asText();

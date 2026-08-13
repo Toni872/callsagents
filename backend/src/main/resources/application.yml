@@ -67,6 +67,9 @@ app:
       assistant-id: ${VAPI_ASSISTANT_ID:}
       phone-number-id: ${VAPI_PHONE_NUMBER_ID:}
       webhook-url: ${VAPI_WEBHOOK_URL:http://localhost:8080/api/voice/webhook/vapi}
+      # Shared secret Vapi sends in the X-Vapi-Secret header. REQUIRED: without
+      # it Vapi webhooks are rejected (fail closed).
+      webhook-secret: ${VAPI_WEBHOOK_SECRET:}
     retell:
       api-key: ${RETELL_API_KEY:}
       agent-id: ${RETELL_AGENT_ID:}
@@ -82,10 +85,13 @@ server:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    # Off in production (SPRINGDOC_ENABLED=false) so the API contract is not public.
+    enabled: ${SPRINGDOC_ENABLED:true}
   swagger-ui:
     path: /swagger-ui.html
     operations-sorter: method
     tags-sorter: alpha
+    enabled: ${SPRINGDOC_ENABLED:true}
   show-actuator: false
 
 logging:

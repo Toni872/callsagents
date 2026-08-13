@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   OnInit,
+  computed,
   inject,
   signal
 } from '@angular/core';
@@ -10,6 +11,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { CallApi } from '../../../core/api/call.api';
 import { ErrorService } from '../../../core/errors/error.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { CallResponse } from '../../../shared/models/call.model';
 
 @Component({
@@ -34,7 +36,7 @@ import { CallResponse } from '../../../shared/models/call.model';
         </div>
         <div class="page__actions">
           <a class="secondary" [routerLink]="['/calls']">← Volver</a>
-          @if (call()) {
+          @if (canEdit()) {
             <a class="secondary" [routerLink]="['/calls', call()!.id, 'edit']">Editar</a>
           }
         </div>
@@ -164,9 +166,17 @@ export class CallDetailComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly errors = inject(ErrorService);
+  private readonly auth = inject(AuthService);
 
   protected readonly call = signal<CallResponse | null>(null);
   protected readonly errorMessage = signal<string | null>(null);
+
+  protected readonly canEdit = computed(() => {
+    const r = this.auth.currentRole();
+    const can = r === 'ADMIN' || r === 'SUPERVISOR';
+    const own = this.call()?.userId === this.auth.currentUser()?.id;
+    return can || own;
+  });
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');

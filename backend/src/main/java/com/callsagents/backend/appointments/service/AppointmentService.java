@@ -9,10 +9,12 @@ import com.callsagents.backend.appointments.entity.AppointmentStatus;
 import com.callsagents.backend.appointments.repository.AppointmentRepository;
 import com.callsagents.backend.appointments.repository.AppointmentSpecifications;
 import com.callsagents.backend.audit.entity.AuditAction;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.calendar.service.CalendarSyncService;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -72,9 +74,14 @@ public class AppointmentService {
     }
 
     @Transactional
-    public AppointmentResponse update(UUID id, UpdateAppointmentRequest req, UUID currentUserId) {
+    public AppointmentResponse update(UUID id, UpdateAppointmentRequest req, UUID currentUserId, UserRole role) {
         Appointment appointment = appointmentRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Appointment not found: " + id));
+
+        if (appointment.getUserId() != null && !appointment.getUserId().equals(currentUserId)
+            && role != UserRole.ADMIN && role != UserRole.SUPERVISOR) {
+            throw new ForbiddenException("You can only update your own appointments");
+        }
 
         if (req.scheduledAt() != null) appointment.setScheduledAt(req.scheduledAt());
         if (req.durationMinutes() != null) appointment.setDurationMinutes(req.durationMinutes());

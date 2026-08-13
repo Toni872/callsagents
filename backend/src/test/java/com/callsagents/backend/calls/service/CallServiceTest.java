@@ -1,6 +1,7 @@
 package com.callsagents.backend.calls.service;
 
 import com.callsagents.backend.audit.entity.AuditAction;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.calls.dto.CallFilter;
 import com.callsagents.backend.calls.dto.CallResponse;
 import com.callsagents.backend.calls.dto.CreateCallRequest;
@@ -12,6 +13,7 @@ import com.callsagents.backend.calls.repository.CallRepository;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -131,7 +133,7 @@ class CallServiceTest {
         UUID id = UUID.randomUUID();
         when(callRepository.findById(id)).thenThrow(new ResourceNotFoundException("Call not found: " + id));
         UpdateCallRequest req = new UpdateCallRequest(null, null, null, "CONNECTED", null, null, null, null);
-        assertThrows(ResourceNotFoundException.class, () -> callService.update(id, req, currentUserId));
+        assertThrows(ResourceNotFoundException.class, () -> callService.update(id, req, currentUserId, UserRole.ADMIN));
     }
 
     @Test
@@ -144,7 +146,7 @@ class CallServiceTest {
 
         UpdateCallRequest req = new UpdateCallRequest(null, null, null, "VOICEMAIL", null, null, null, "new notes");
 
-        CallResponse response = callService.update(id, req, currentUserId);
+        CallResponse response = callService.update(id, req, currentUserId, UserRole.ADMIN);
 
         assertEquals(CallStatus.VOICEMAIL, response.status());
         assertEquals("new notes", response.notes());
@@ -159,7 +161,7 @@ class CallServiceTest {
 
         UpdateCallRequest req = new UpdateCallRequest(null, null, -1, null, null, null, null, null);
 
-        assertThrows(BadRequestException.class, () -> callService.update(id, req, currentUserId));
+        assertThrows(BadRequestException.class, () -> callService.update(id, req, currentUserId, UserRole.ADMIN));
     }
 
     @Test
@@ -192,9 +194,21 @@ class CallServiceTest {
 
         UpdateCallRequest req = new UpdateCallRequest(null, null, null, null, null, "", null, null);
 
-        CallResponse response = callService.update(id, req, currentUserId);
+        CallResponse response = callService.update(id, req, currentUserId, UserRole.ADMIN);
 
         assertNull(response.recordingUrl());
+    }
+
+    @Test
+    void updateThrowsForbiddenWhenAgentEditsOtherUserCall() {
+        UUID id = UUID.randomUUID();
+        Call existing = sampleCall(id);
+        existing.setUserId(UUID.randomUUID());
+        when(callRepository.findById(id)).thenReturn(java.util.Optional.of(existing));
+
+        UpdateCallRequest req = new UpdateCallRequest(null, null, null, "CONNECTED", null, null, null, null);
+
+        assertThrows(ForbiddenException.class, () -> callService.update(id, req, currentUserId, UserRole.AGENT));
     }
 
     @Test

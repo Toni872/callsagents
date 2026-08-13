@@ -10,6 +10,10 @@ export const CALLS_ROUTES: Routes = [
     loadComponent: () => import('./form/call-form.component').then((m) => m.CallFormComponent)
   },
   {
+    path: ':id/edit',
+    loadComponent: () => import('./form/call-form.component').then((m) => m.CallFormComponent)
+  },
+  {
     path: ':id',
     loadComponent: () =>
       import('./detail/call-detail.component').then((m) => m.CallDetailComponent)

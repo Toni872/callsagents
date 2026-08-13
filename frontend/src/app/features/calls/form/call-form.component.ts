@@ -20,6 +20,7 @@ import { CampaignApi } from '../../../core/api/campaign.api';
 import { LeadApi } from '../../../core/api/lead.api';
 import { UserApi } from '../../../core/api/user.api';
 import { ErrorService } from '../../../core/errors/error.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import {
   CallOutcome,
   CallResponse,
@@ -101,6 +102,7 @@ import { UserListItem } from '../../../shared/models/user.model';
               <span class="field__label">Agente (usuario) *</span>
               <select
                 formControlName="userId"
+                [disabled]="!canAssign()"
                 [class.field__input--invalid]="isInvalid('userId')"
               >
                 <option value="" disabled>Seleccionar...</option>
@@ -110,6 +112,9 @@ import { UserListItem } from '../../../shared/models/user.model';
                   </option>
                 }
               </select>
+              @if (!canAssign()) {
+                <small class="muted">Solo administradores y supervisores pueden asignar a otro agente.</small>
+              }
               @if (isInvalid('userId')) {
                 <small class="field__error">Selecciona el agente que hizo la llamada.</small>
               }
@@ -249,6 +254,12 @@ export class CallFormComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly errors = inject(ErrorService);
+  private readonly auth = inject(AuthService);
+
+  protected readonly canAssign = computed(() => {
+    const r = this.auth.currentRole();
+    return r === 'ADMIN' || r === 'SUPERVISOR';
+  });
 
   protected readonly statuses: CallStatus[] = [
     'CONNECTED',
@@ -294,6 +305,8 @@ export class CallFormComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.loadCall(id);
+    } else if (!this.canAssign()) {
+      this.form.patchValue({ userId: this.auth.currentUser()?.id ?? '' });
     }
   }
 

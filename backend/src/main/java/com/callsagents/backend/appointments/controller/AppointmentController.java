@@ -7,8 +7,10 @@ import com.callsagents.backend.appointments.dto.UpdateAppointmentRequest;
 import com.callsagents.backend.appointments.entity.AppointmentStatus;
 import com.callsagents.backend.appointments.service.AppointmentService;
 import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.common.dto.PageResponse;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -76,8 +78,13 @@ public class AppointmentController {
         @Valid @RequestBody CreateAppointmentRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        AppointmentResponse created = appointmentService.create(req, userId);
+        User current = resolveUser(user);
+        UUID requested = req.userId();
+        if (requested != null && !requested.equals(current.getId())
+            && current.getRole() != UserRole.ADMIN && current.getRole() != UserRole.SUPERVISOR) {
+            throw new ForbiddenException("You can only assign appointments to yourself");
+        }
+        AppointmentResponse created = appointmentService.create(req, current.getId());
         return ResponseEntity.created(URI.create("/api/appointments/" + created.id())).body(created);
     }
 
@@ -88,8 +95,8 @@ public class AppointmentController {
         @Valid @RequestBody UpdateAppointmentRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        return ResponseEntity.ok(appointmentService.update(id, req, userId));
+        User current = resolveUser(user);
+        return ResponseEntity.ok(appointmentService.update(id, req, current.getId(), current.getRole()));
     }
 
     @Operation(summary = "Eliminar cita (solo ADMIN)")
@@ -123,12 +130,15 @@ public class AppointmentController {
         return Sort.by(direction, field);
     }
 
-    private UUID resolveUserId(UserDetails user) {
+    private User resolveUser(UserDetails user) {
         if (user == null) {
             throw new UnauthorizedException("Authentication required");
         }
-        User u = userRepository.findByEmail(user.getUsername())
+        return userRepository.findByEmail(user.getUsername())
             .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-        return u.getId();
+    }
+
+    private UUID resolveUserId(UserDetails user) {
+        return resolveUser(user).getId();
     }
 }

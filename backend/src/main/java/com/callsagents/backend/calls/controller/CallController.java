@@ -1,6 +1,7 @@
 package com.callsagents.backend.calls.controller;
 
 import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.calls.dto.CallFilter;
 import com.callsagents.backend.calls.dto.CallResponse;
@@ -10,6 +11,7 @@ import com.callsagents.backend.calls.entity.CallOutcome;
 import com.callsagents.backend.calls.entity.CallStatus;
 import com.callsagents.backend.calls.service.CallService;
 import com.callsagents.backend.common.dto.PageResponse;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.UnauthorizedException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -77,8 +79,13 @@ public class CallController {
         @Valid @RequestBody CreateCallRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        CallResponse created = callService.create(req, userId);
+        User current = resolveUser(user);
+        UUID requested = req.userId();
+        if (requested != null && !requested.equals(current.getId())
+            && current.getRole() != UserRole.ADMIN && current.getRole() != UserRole.SUPERVISOR) {
+            throw new ForbiddenException("You can only assign calls to yourself");
+        }
+        CallResponse created = callService.create(req, current.getId());
         return ResponseEntity.created(URI.create("/api/calls/" + created.id())).body(created);
     }
 
@@ -89,8 +96,8 @@ public class CallController {
         @Valid @RequestBody UpdateCallRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        return ResponseEntity.ok(callService.update(id, req, userId));
+        User current = resolveUser(user);
+        return ResponseEntity.ok(callService.update(id, req, current.getId(), current.getRole()));
     }
 
     private Pageable buildPageable(int page, int size, String sort) {
@@ -112,12 +119,11 @@ public class CallController {
         return Sort.by(direction, field);
     }
 
-    private UUID resolveUserId(UserDetails user) {
+    private User resolveUser(UserDetails user) {
         if (user == null) {
             throw new UnauthorizedException("Authentication required");
         }
-        User u = userRepository.findByEmail(user.getUsername())
+        return userRepository.findByEmail(user.getUsername())
             .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-        return u.getId();
     }
 }

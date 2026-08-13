@@ -8,10 +8,12 @@ import com.callsagents.backend.appointments.entity.Appointment;
 import com.callsagents.backend.appointments.entity.AppointmentStatus;
 import com.callsagents.backend.appointments.repository.AppointmentRepository;
 import com.callsagents.backend.audit.entity.AuditAction;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.calendar.service.CalendarSyncService;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -127,7 +129,7 @@ class AppointmentServiceTest {
         UUID id = UUID.randomUUID();
         when(appointmentRepository.findById(id)).thenReturn(Optional.empty());
         UpdateAppointmentRequest req = new UpdateAppointmentRequest(null, null, "CONFIRMED", null);
-        assertThrows(ResourceNotFoundException.class, () -> appointmentService.update(id, req, currentUserId));
+        assertThrows(ResourceNotFoundException.class, () -> appointmentService.update(id, req, currentUserId, UserRole.ADMIN));
     }
 
     @Test
@@ -140,7 +142,7 @@ class AppointmentServiceTest {
 
         UpdateAppointmentRequest req = new UpdateAppointmentRequest(null, 45, "CONFIRMED", "new notes");
 
-        AppointmentResponse response = appointmentService.update(id, req, currentUserId);
+        AppointmentResponse response = appointmentService.update(id, req, currentUserId, UserRole.ADMIN);
 
         assertEquals(45, response.durationMinutes());
         assertEquals(AppointmentStatus.CONFIRMED, response.status());
@@ -197,7 +199,19 @@ class AppointmentServiceTest {
 
         UpdateAppointmentRequest req = new UpdateAppointmentRequest(null, null, "INVALID", null);
 
-        assertThrows(BadRequestException.class, () -> appointmentService.update(id, req, currentUserId));
+        assertThrows(BadRequestException.class, () -> appointmentService.update(id, req, currentUserId, UserRole.ADMIN));
+    }
+
+    @Test
+    void updateThrowsForbiddenWhenAgentEditsOtherUserAppointment() {
+        UUID id = UUID.randomUUID();
+        Appointment existing = sampleAppointment(id);
+        existing.setUserId(UUID.randomUUID());
+        when(appointmentRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        UpdateAppointmentRequest req = new UpdateAppointmentRequest(null, null, "CONFIRMED", null);
+
+        assertThrows(ForbiddenException.class, () -> appointmentService.update(id, req, currentUserId, UserRole.AGENT));
     }
 
     private static Appointment sampleAppointment(UUID id) {

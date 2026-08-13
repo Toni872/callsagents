@@ -36,6 +36,12 @@ public class GlobalExceptionHandler {
             .body(new ApiError(Instant.now(), 400, "bad_request", ex.getMessage(), req.getRequestURI()));
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiError> handleForbidden(ForbiddenException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(new ApiError(Instant.now(), 403, "forbidden", ex.getMessage(), req.getRequestURI()));
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, HttpServletRequest req) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

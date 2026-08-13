@@ -1,6 +1,7 @@
 package com.callsagents.backend.calls.service;
 
 import com.callsagents.backend.audit.entity.AuditAction;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.calls.dto.CallFilter;
 import com.callsagents.backend.calls.dto.CallResponse;
 import com.callsagents.backend.calls.dto.CreateCallRequest;
@@ -13,6 +14,7 @@ import com.callsagents.backend.calls.repository.CallSpecifications;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -70,9 +72,14 @@ public class CallService {
     }
 
     @Transactional
-    public CallResponse update(UUID id, UpdateCallRequest req, UUID currentUserId) {
+    public CallResponse update(UUID id, UpdateCallRequest req, UUID currentUserId, UserRole role) {
         Call call = callRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Call not found: " + id));
+
+        if (call.getUserId() != null && !call.getUserId().equals(currentUserId)
+            && role != UserRole.ADMIN && role != UserRole.SUPERVISOR) {
+            throw new ForbiddenException("You can only update your own calls");
+        }
 
         if (req.startedAt() != null) call.setStartedAt(req.startedAt());
         if (req.endedAt() != null) call.setEndedAt(req.endedAt());

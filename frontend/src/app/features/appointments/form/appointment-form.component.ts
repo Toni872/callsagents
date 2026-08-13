@@ -83,6 +83,7 @@ import { UserListItem } from '../../../shared/models/user.model';
               <span class="field__label">Agente (usuario) *</span>
               <select
                 formControlName="userId"
+                [disabled]="!canAssign()"
                 [class.field__input--invalid]="isInvalid('userId')"
               >
                 <option value="" disabled>Seleccionar...</option>
@@ -92,6 +93,9 @@ import { UserListItem } from '../../../shared/models/user.model';
                   </option>
                 }
               </select>
+              @if (!canAssign()) {
+                <small class="muted">Solo administradores y supervisores pueden asignar a otro agente.</small>
+              }
               @if (isInvalid('userId')) {
                 <small class="field__error">Selecciona el agente responsable.</small>
               }
@@ -240,6 +244,11 @@ export class AppointmentFormComponent implements OnInit {
     'CANCELLED',
     'NO_SHOW'
   ];
+
+  protected readonly canAssign = computed(() => {
+    const r = this.auth.currentRole();
+    return r === 'ADMIN' || r === 'SUPERVISOR';
+  });
 
   protected readonly loadingAppointment = signal(false);
   protected readonly loadingRefs = signal(true);

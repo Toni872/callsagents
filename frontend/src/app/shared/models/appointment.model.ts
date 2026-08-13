@@ -15,6 +15,8 @@ export interface AppointmentResponse {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  externalEventId: string | null;
+  externalEventUrl: string | null;
 }
 
 export interface CreateAppointmentRequest {

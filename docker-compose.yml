@@ -45,9 +45,16 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/callsagents
       SPRING_DATASOURCE_USERNAME: callsagents
       SPRING_DATASOURCE_PASSWORD: callsagents
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
+      # Use URL form so it wins over the `spring.data.redis.url` placeholder
+      # in application.yml (which would otherwise default to localhost).
+      SPRING_DATA_REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-bytes-please}
+      # AES master key for encrypting OAuth tokens at rest (calendar integrations)
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      # Google Calendar OAuth
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/calendar/integrations/google/callback}
       JAVA_OPTS: "-Xms256m -Xmx512m"
     ports:
       - "8080:8080"

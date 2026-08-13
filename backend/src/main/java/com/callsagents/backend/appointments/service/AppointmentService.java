@@ -83,14 +83,28 @@ public class AppointmentService {
 
         Appointment saved = appointmentRepository.save(appointment);
         auditService.log(currentUserId, "Appointment", saved.getId(), AuditAction.UPDATE);
+
+        if (saved.getStatus() == AppointmentStatus.CANCELLED) {
+            // Cancel semantics: remove the Google event and forget the linkage.
+            // (An uncancel later re-creates the event via updateAppointment fallback.)
+            calendarSync.deleteAppointmentEvent(saved);
+            saved.setExternalEventId(null);
+            saved.setExternalProvider(null);
+            saved.setExternalSyncedAt(null);
+            appointmentRepository.save(saved);
+        } else {
+            // Push edits to Google (creates the event if it was never synced).
+            calendarSync.updateAppointment(saved);
+        }
         return AppointmentResponse.fromEntity(saved);
     }
 
     @Transactional
     public void delete(UUID id, UUID currentUserId) {
-        if (!appointmentRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Appointment not found: " + id);
-        }
+        Appointment appointment = appointmentRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Appointment not found: " + id));
+        // Best-effort: remove the Google event before the row is gone.
+        calendarSync.deleteAppointmentEvent(appointment);
         appointmentRepository.deleteById(id);
         auditService.log(currentUserId, "Appointment", id, AuditAction.DELETE);
     }

@@ -17,12 +17,14 @@ export class CalendarApi {
   }
 
   /**
-   * Returns the OAuth authorize URL. The browser must follow this URL
-   * (it's a server-issued 302 redirect to Google).
-   * In Angular we use `window.location.href` to navigate.
+   * Asks the backend (with the JWT) for the Google OAuth authorize URL.
+   * Returns { authorizeUrl } — the browser must follow it with
+   * window.location.href after this authenticated call succeeds.
    */
-  startConnectUrl(provider: CalendarProviderType): string {
-    return apiUrl(`/calendar/integrations/${provider.toLowerCase()}/start`);
+  startConnect(provider: CalendarProviderType): Observable<{ authorizeUrl: string }> {
+    return this.http.get<{ authorizeUrl: string }>(
+      apiUrl(`/calendar/integrations/${provider.toLowerCase()}/start`)
+    );
   }
 
   disconnect(id: string): Observable<void> {

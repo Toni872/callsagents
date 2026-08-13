@@ -55,6 +55,11 @@ public class OutlookCalendarProvider implements CalendarProvider {
     }
 
     @Override
+    public TokenResponse refreshAccessToken(String refreshToken) {
+        throw new UnsupportedOperationException("Outlook refreshAccessToken not implemented");
+    }
+
+    @Override
     public void revokeTokens(String refreshToken) {
         log.warn("Outlook revokeTokens not implemented — local tokens will be dropped anyway");
     }
@@ -62,5 +67,15 @@ public class OutlookCalendarProvider implements CalendarProvider {
     @Override
     public String createEvent(String accessToken, String externalCalendarId, EventPayload event) {
         throw new UnsupportedOperationException("Outlook createEvent not implemented");
+    }
+
+    @Override
+    public String updateEvent(String accessToken, String externalCalendarId, String eventId, EventPayload event) {
+        throw new UnsupportedOperationException("Outlook updateEvent not implemented");
+    }
+
+    @Override
+    public void deleteEvent(String accessToken, String externalCalendarId, String eventId) {
+        throw new UnsupportedOperationException("Outlook deleteEvent not implemented");
     }
 }

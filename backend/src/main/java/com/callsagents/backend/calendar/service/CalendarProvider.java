@@ -29,6 +29,13 @@ public interface CalendarProvider {
     TokenResponse exchangeCode(String code);
 
     /**
+     * OAuth: exchange a stored refresh token for a fresh access token.
+     * Access tokens are short-lived (Google: ~1h); called when expired or on 401.
+     * A returned refresh_token (rotation) replaces the stored one when present.
+     */
+    TokenResponse refreshAccessToken(String refreshToken);
+
+    /**
      * OAuth: best-effort revocation when the user disconnects. Null tokens are OK
      * if the provider doesn't support revocation (we just drop them locally).
      */
@@ -44,8 +51,40 @@ public interface CalendarProvider {
         EventPayload event
     );
 
+    /**
+     * Update an existing external calendar event (idempotent PUT).
+     * Only meaningful when eventId is known; callers fall back to create
+     * when the event was never persisted.
+     */
+    String updateEvent(
+        String decryptedAccessToken,
+        String externalCalendarId,
+        String eventId,
+        EventPayload event
+    );
+
+    /**
+     * Delete an external calendar event. Callers skip this when eventId is null;
+     * a 404 from the provider is treated as success (nothing to delete).
+     */
+    void deleteEvent(
+        String decryptedAccessToken,
+        String externalCalendarId,
+        String eventId
+    );
+
     /** Provider enum value. Used for routing + storage. */
     CalendarProviderType provider();
+
+    /**
+     * Best-effort: the email of the external account that just authorized
+     * (e.g. Google userinfo). Used for display only ("Conectado como X").
+     * Returns null when the provider doesn't support it or the call fails —
+     * the integration still saves without it.
+     */
+    default String fetchAccountEmail(String accessToken) {
+        return null;
+    }
 
     /** True if OAuth credentials for this provider are configured in env. */
     boolean isConfigured();

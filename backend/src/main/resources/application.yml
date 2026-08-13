@@ -42,6 +42,12 @@ spring:
       max-request-size: 5MB
 
 app:
+  # Base URL of the SPA so OAuth callbacks can redirect the browser back to it.
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost}
+  # AES-256-GCM master key for OAuth tokens at rest (calendar integrations).
+  # Any length works — SHA-256 derives the AES key. REQUIRED for calendar sync.
+  encryption:
+    key: ${ENCRYPTION_KEY:}
   jwt:
     secret: ${JWT_SECRET:}
     access-token-ttl: 15m
@@ -51,7 +57,7 @@ app:
     google:
       client-id: ${GOOGLE_CLIENT_ID:}
       client-secret: ${GOOGLE_CLIENT_SECRET:}
-      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/calendar/oauth/callback/google}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/calendar/integrations/google/callback}
     outlook:
       client-id: ${OUTLOOK_CLIENT_ID:}
       client-secret: ${OUTLOOK_CLIENT_SECRET:}

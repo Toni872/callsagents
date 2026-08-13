@@ -51,6 +51,12 @@ public class SecurityConfig {
                 // Webhooks de providers de voz (Vapi, Retell). En producción validar
                 // firma HMAC del provider para evitar spoofing.
                 .requestMatchers("/voice/webhook/**").permitAll()
+                // Callback OAuth de calendario: Google redirige el navegador aquí
+                // SIN Authorization header (es una navegación de browser). Es seguro
+                // exponerlo: solo intercambia un code de un solo uso que solo quien
+                // completó el consentimiento en Google puede obtener, y el state
+                // (email del usuario Callsagents) atribuye la integración.
+                .requestMatchers("/calendar/integrations/*/callback").permitAll()
                 // Swagger UI / OpenAPI docs (Fase 8): permitir acceso sin auth para que
                 // un dev externo pueda explorar el contrato y usar el botón "Authorize".
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

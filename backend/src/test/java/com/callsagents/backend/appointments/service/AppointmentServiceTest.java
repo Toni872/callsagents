@@ -151,7 +151,8 @@ class AppointmentServiceTest {
     @Test
     void deleteThrowsNotFoundWhenMissing() {
         UUID id = UUID.randomUUID();
-        when(appointmentRepository.existsById(id)).thenReturn(false);
+        // delete() resolves via findById (and syncs the calendar event before deleting)
+        when(appointmentRepository.findById(id)).thenReturn(Optional.empty());
         assertThrows(ResourceNotFoundException.class, () -> appointmentService.delete(id, currentUserId));
         verify(appointmentRepository, never()).deleteById(any());
     }
@@ -159,7 +160,8 @@ class AppointmentServiceTest {
     @Test
     void deleteSucceedsAndAudits() {
         UUID id = UUID.randomUUID();
-        when(appointmentRepository.existsById(id)).thenReturn(true);
+        // delete() resolves via findById (then best-effort calendar sync + row delete)
+        when(appointmentRepository.findById(id)).thenReturn(Optional.of(sampleAppointment(id)));
 
         appointmentService.delete(id, currentUserId);
 

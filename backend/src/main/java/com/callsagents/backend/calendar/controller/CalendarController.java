@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -24,7 +25,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.view.RedirectView;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,7 +39,7 @@ import java.util.UUID;
  * Calendar OAuth + integration management.
  *
  * Endpoints (MVP):
- *   POST /api/calendar/integrations/google/start       -> 302 to Google consent screen
+ *   GET  /api/calendar/integrations/google/start       -> 200 { authorizeUrl } (SPA navigates to Google consent screen)
  *   GET  /api/calendar/integrations/google/callback    -> exchange code, persist integration, redirect to /settings
  *   GET  /api/calendar/integrations                    -> current user's integrations
  *   DELETE /api/calendar/integrations/{id}             -> disconnect (revoke + delete)
@@ -51,6 +57,14 @@ public class CalendarController {
     private final EncryptionService encryption;
     private final List<CalendarProvider> providers;
     private final com.callsagents.backend.auth.repository.UserRepository userRepository;
+
+    /** Base URL of the SPA, e.g. http://localhost:80. OAuth callback redirects the browser back here. */
+    @Value("${app.frontend-base-url:http://localhost}")
+    private String frontendBaseUrl;
+
+    /** Secret used to HMAC-sign the OAuth state so the callback can't be tampered with. */
+    @Value("${app.jwt.secret}")
+    private String stateSecret;
 
     public CalendarController(
         CalendarIntegrationRepository integrationRepo,
@@ -82,11 +96,18 @@ public class CalendarController {
                            "Set the appropriate env vars (see RUNBOOK)."
             ));
         }
-        // State contains the user email so the callback can attribute the integration.
-        // In a hardened impl we'd sign this (HMAC) to prevent tampering.
-        String state = authentication.getName();
+        // State = signed email so the callback can attribute the integration to the
+        // authenticated user AND detect tampering. Plain email alone would let an
+        // attacker connect THEIR calendar to someone else's account.
+        String state = signState(authentication.getName());
         String url = calProvider.buildAuthorizationUrl(state);
-        return ResponseEntity.status(302).header("Location", url).build();
+        // Return the Google URL as JSON instead of a raw 302: browser navigation
+        // cannot send the Authorization header, but HttpClient can. The SPA then
+        // navigates with window.location after receiving the authenticated response.
+        return ResponseEntity.ok(Map.of(
+            "authorizeUrl", url,
+            "provider", type.name()
+        ));
     }
 
     /** OAuth callback — exchanges the code and persists the integration. */
@@ -101,33 +122,37 @@ public class CalendarController {
         // For MVP we redirect to a simple frontend route.
         if (error != null) {
             log.warn("Calendar OAuth callback error: {}", error);
-            return new RedirectView("/settings/calendar?status=error&reason=" + error);
+            return frontendRedirect("?status=error&reason=" + error);
         }
         if (code == null || code.isBlank()) {
-            return new RedirectView("/settings/calendar?status=missing_code");
+            return frontendRedirect("?status=missing_code");
         }
 
-        // For MVP we attribute by email (state) only; we look up the user. Real impl
-        // should sign state and look up by user_id to avoid spoofing.
+        // State is signed (HMAC) by /start: reject tampered/expired/foreign states.
+        // This prevents an attacker from connecting their own Google account to
+        // another user's Callsagents account (which would leak that user's
+        // appointments into the attacker's calendar).
+        String stateEmail = verifyState(state);
+        if (stateEmail == null) {
+            return frontendRedirect("?status=error&reason=invalid_state");
+        }
+
         try {
             var type = parseProvider(provider);
             var calProvider = syncService.providerOf(type);
             var tokens = calProvider.exchangeCode(code);
 
-            // Find user by email (state). For a real impl, validate signature.
-            // We use userRepository lookup inline via auth module's UserRepository.
-            // To keep this controller light, we accept the email and store the
-            // integration with userId=null temporarily — no, we need a userId.
-            // Simpler: rely on the Email from `me()`-equivalent by querying the
-            // auth userRepository. Implement inline.
-            UUID userId = resolveUserIdByEmail(state);
+            UUID userId = resolveUserIdByEmail(stateEmail);
             if (userId == null) {
-                return new RedirectView("/settings/calendar?status=error&reason=user_not_found");
+                return frontendRedirect("?status=error&reason=user_not_found");
             }
 
             var existing = integrationRepo.findByUserIdAndProvider(userId, type);
+            // CRITICAL: do NOT set the id manually. @UuidGenerator treats a non-null
+            // id as "already persistent" (unsaved-value = null), so save() issues an
+            // UPDATE on a non-existent row -> StaleObjectStateException. @PrePersist
+            // assigns the UUID when id is null.
             CalendarIntegration integration = existing.orElseGet(() -> CalendarIntegration.builder()
-                .id(UUID.randomUUID())
                 .userId(userId)
                 .provider(type)
                 .syncEnabled(true)
@@ -140,14 +165,15 @@ public class CalendarController {
             integration.setAccessTokenExpiresAt(tokens.accessTokenExpiresAt());
             integration.setScopes(tokens.scope());
             integration.setExternalCalendarId("primary");
-            // We don't have the user's Google account email without calling userinfo;
-            // skipping for MVP. Future: hit OIDC /userinfo to fetch email.
+            // Best-effort: resolve the connected Google account email (userinfo).
+            // Display-only — failure to fetch never fails the connection.
+            integration.setExternalAccountEmail(calProvider.fetchAccountEmail(tokens.accessToken()));
             integrationRepo.save(integration);
 
-            return new RedirectView("/settings/calendar?status=connected&provider=" + type);
+            return frontendRedirect("?status=connected&provider=" + type);
         } catch (Exception e) {
             log.warn("Calendar callback error", e);
-            return new RedirectView("/settings/calendar?status=error&reason=" + e.getMessage());
+            return frontendRedirect("?status=error&reason=" + e.getMessage());
         }
     }
 
@@ -201,7 +227,29 @@ public class CalendarController {
         return CalendarIntegrationDto.from(integrationRepo.save(integration));
     }
 
+    /**
+     * One-time backfill: create Google events for existing future appointments
+     * (PENDING/CONFIRMED) that were never synced. Safe to re-run — already-synced
+     * appointments are skipped.
+     */
+    @PostMapping("/integrations/backfill")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Backfill: crear eventos Google para citas futuras nunca sincronizadas")
+    public Map<String, Object> backfill() {
+        var result = syncService.backfillUnsynced();
+        return Map.of(
+            "scanned", result.scanned(),
+            "created", result.created(),
+            "failed", result.failed()
+        );
+    }
+
     // -------- helpers --------
+
+    /** Redirect the browser back to the SPA (/settings/calendar) after OAuth. */
+    private RedirectView frontendRedirect(String query) {
+        return new RedirectView(frontendBaseUrl + "/settings/calendar" + query);
+    }
 
     private static CalendarProviderType parseProvider(String s) {
         try {
@@ -213,5 +261,54 @@ public class CalendarController {
 
     private UUID resolveUserIdByEmail(String email) {
         return userRepository.findByEmail(email).map(u -> u.getId()).orElse(null);
+    }
+
+    // -------- OAuth state signing (HMAC-SHA256) --------
+
+    /** How long a signed state stays valid — enough for the Google consent round-trip. */
+    private static final long STATE_TTL_SECONDS = 600;
+
+    /** Format: <email>|<epoch-seconds>|<hex-hmac>. The '|' separator is safe: emails can't contain it. */
+    private String signState(String email) {
+        long ts = Instant.now().getEpochSecond();
+        return email + "|" + ts + "|" + hmacHex(email + "|" + ts);
+    }
+
+    /** Verifies signature + expiry and returns the embedded email, or null if invalid. */
+    private String verifyState(String state) {
+        if (state == null) return null;
+        String[] parts = state.split("\\|", -1);
+        if (parts.length != 3 || parts[0].isBlank() || parts[2].isBlank()) return null;
+        String email = parts[0];
+        String ts = parts[1];
+        String providedSig = parts[2];
+        String expectedSig = hmacHex(email + "|" + ts);
+        // Constant-time compare — plain equals() leaks timing on the signature.
+        if (!MessageDigest.isEqual(
+                expectedSig.getBytes(StandardCharsets.UTF_8),
+                providedSig.getBytes(StandardCharsets.UTF_8))) {
+            return null;
+        }
+        long issuedAt;
+        try {
+            issuedAt = Long.parseLong(ts);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        long age = Instant.now().getEpochSecond() - issuedAt;
+        if (age < 0 || age > STATE_TTL_SECONDS) return null;
+        return email;
+    }
+
+    private String hmacHex(String payload) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(
+                stateSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return HexFormat.of().formatHex(
+                mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("OAuth state signing failed", e);
+        }
     }
 }

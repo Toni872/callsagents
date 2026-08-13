@@ -44,7 +44,7 @@ import {
         <div class="card warning-panel" role="alert">
           <h3>Google Calendar no está configurado</h3>
           <p class="muted">
-            Google Calendar no está configurado en este servidor. Configurá las
+            Google Calendar no está configurado en este servidor. Configura las
             variables de entorno <code>GOOGLE_CLIENT_ID</code> y
             <code>GOOGLE_CLIENT_SECRET</code> (ver RUNBOOK).
           </p>
@@ -103,7 +103,7 @@ import {
         <div class="empty-state">Cargando integraciones...</div>
       } @else if (integrations().length === 0) {
         <div class="empty-state">
-          No hay cuentas de calendario conectadas. Conectá Google Calendar para empezar.
+          No hay cuentas de calendario conectadas. Conecta Google Calendar para empezar.
         </div>
       } @else {
         <div class="integrations-list">
@@ -381,7 +381,14 @@ export class CalendarSettingsComponent implements OnInit {
   }
 
   protected connectGoogle(): void {
-    window.location.href = this.api.startConnectUrl('GOOGLE');
+    // Autenticado vía HttpClient (el interceptor añade el JWT).
+    // Navegamos solo después de recibir la URL de Google.
+    this.api.startConnect('GOOGLE').subscribe({
+      next: (res) => {
+        window.location.href = res.authorizeUrl;
+      }
+      // errorInterceptor maneja el toast (401/503/etc.)
+    });
   }
 
   protected toggle(integration: CalendarIntegration): void {

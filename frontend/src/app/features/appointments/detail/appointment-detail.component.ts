@@ -87,6 +87,18 @@ import { AppointmentResponse } from '../../../shared/models/appointment.model';
                 }
               </dd>
 
+              @if (a.externalEventUrl) {
+                <dt>Calendario</dt>
+                <dd>
+                  <a
+                    class="calendar-link"
+                    [href]="a.externalEventUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >Ver en Google Calendar</a>
+                </dd>
+              }
+
               <dt>Notas</dt>
               <dd class="detail__multiline">{{ a.notes || '—' }}</dd>
 
@@ -141,6 +153,14 @@ import { AppointmentResponse } from '../../../shared/models/appointment.model';
       }
       .detail__multiline {
         white-space: pre-wrap;
+      }
+      .calendar-link {
+        color: var(--color-primary);
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .calendar-link:hover {
+        text-decoration: underline;
       }
       @media (max-width: 720px) {
         .detail__grid {

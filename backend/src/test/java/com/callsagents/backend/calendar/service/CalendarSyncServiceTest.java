@@ -2,6 +2,7 @@ package com.callsagents.backend.calendar.service;
 
 import com.callsagents.backend.appointments.entity.Appointment;
 import com.callsagents.backend.appointments.entity.AppointmentStatus;
+import com.callsagents.backend.appointments.repository.AppointmentRepository;
 import com.callsagents.backend.calendar.domain.CalendarIntegration;
 import com.callsagents.backend.calendar.domain.CalendarProviderType;
 import com.callsagents.backend.calendar.domain.CalendarSyncStatus;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.when;
 class CalendarSyncServiceTest {
 
     @Mock private CalendarIntegrationRepository integrationRepo;
+    @Mock private AppointmentRepository appointmentRepo;
     @Mock private EncryptionService encryption;
     @Mock private GoogleCalendarProvider googleProvider;
     @Mock private OutlookCalendarProvider outlookProvider;
@@ -48,7 +50,7 @@ class CalendarSyncServiceTest {
     void setUp() {
         // Match implementation: service is built with the @Mock providers as the
         // provider list. The service dispatches by enum via providerOf().
-        service = new CalendarSyncService(integrationRepo, encryption, List.of(googleProvider, outlookProvider));
+        service = new CalendarSyncService(integrationRepo, appointmentRepo, encryption, List.of(googleProvider, outlookProvider));
         // Stub the discriminator — by default @Mock returns null for methods that
         // return a reference type, but providerOf() filters by enum so it must resolve.
         when(googleProvider.provider()).thenReturn(CalendarProviderType.GOOGLE);
@@ -144,7 +146,7 @@ class CalendarSyncServiceTest {
     }
 
     @Test
-    @DisplayName("syncAppointment: when Google API throws, appointment stays and integration marked FAILED")
+    @DisplayName("syncAppointment: when Google API throws (non-401), appointment stays and integration marked FAILED")
     void syncAppointment_providerFails() {
         Appointment a = sampleAppointment();
         CalendarIntegration integration = activeIntegration(true);
@@ -155,8 +157,10 @@ class CalendarSyncServiceTest {
         // IMPORTANT: stub decrypt explicitly — Mockito's anyString() does NOT match null,
         // so without this the stub on createEvent (which throws) would never match.
         when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
+        // NOT a 401: a 401 would trigger the token-refresh retry (covered by
+        // syncAppointment_retriesOnceAfter401). Any other failure must be captured.
         when(googleProvider.createEvent(eq("decrypted-access"), any(), any()))
-            .thenThrow(new RuntimeException("Google 401 — token rejected"));
+            .thenThrow(new RuntimeException("Google createEvent failed: HTTP 500"));
 
         // Should NOT throw — sync failures are captured, not propagated
         service.syncAppointment(a);
@@ -165,7 +169,133 @@ class CalendarSyncServiceTest {
         assertThat(a.getExternalEventId()).isNull();
         // Integration marked FAILED with the error message
         assertThat(integration.getLastSyncStatus()).isEqualTo(CalendarSyncStatus.FAILED);
-        assertThat(integration.getLastSyncError()).contains("401");
+        assertThat(integration.getLastSyncError()).contains("500");
         verify(integrationRepo, times(1)).save(integration);
+    }
+
+    @Test
+    @DisplayName("updateAppointment: pushes changes to the existing Google event")
+    void updateAppointment_existingEvent_updates() {
+        Appointment a = sampleAppointment();
+        a.setExternalEventId("evt-existing");
+        CalendarIntegration integration = activeIntegration(true);
+        when(integrationRepo.findByUserIdAndProvider(USER_ID, CalendarProviderType.GOOGLE))
+            .thenReturn(Optional.of(integration));
+        when(googleProvider.isConfigured()).thenReturn(true);
+        when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
+
+        service.updateAppointment(a);
+
+        verify(googleProvider, times(1))
+            .updateEvent(eq("decrypted-access"), eq("primary"), eq("evt-existing"), any());
+        verify(googleProvider, never()).createEvent(anyString(), any(), any());
+        assertThat(a.getExternalSyncedAt()).isNotNull();
+        assertThat(integration.getLastSyncStatus()).isEqualTo(CalendarSyncStatus.SYNCED);
+    }
+
+    @Test
+    @DisplayName("updateAppointment: appointment without an event falls back to create")
+    void updateAppointment_noEvent_fallsBackToCreate() {
+        Appointment a = sampleAppointment(); // no externalEventId yet
+        CalendarIntegration integration = activeIntegration(true);
+        when(integrationRepo.findByUserIdAndProvider(USER_ID, CalendarProviderType.GOOGLE))
+            .thenReturn(Optional.of(integration));
+        when(googleProvider.isConfigured()).thenReturn(true);
+        when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
+        when(googleProvider.createEvent(eq("decrypted-access"), any(), any())).thenReturn("evt-new");
+
+        service.updateAppointment(a);
+
+        verify(googleProvider, times(1)).createEvent(anyString(), any(), any());
+        verify(googleProvider, never()).updateEvent(anyString(), any(), anyString(), any());
+        assertThat(a.getExternalEventId()).isEqualTo("evt-new");
+    }
+
+    @Test
+    @DisplayName("deleteAppointmentEvent: deletes the Google event")
+    void deleteAppointmentEvent_deletes() {
+        Appointment a = sampleAppointment();
+        a.setExternalEventId("evt-to-delete");
+        CalendarIntegration integration = activeIntegration(true);
+        when(integrationRepo.findByUserIdAndProvider(USER_ID, CalendarProviderType.GOOGLE))
+            .thenReturn(Optional.of(integration));
+        when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
+
+        service.deleteAppointmentEvent(a);
+
+        verify(googleProvider, times(1)).deleteEvent("decrypted-access", "primary", "evt-to-delete");
+        assertThat(integration.getLastSyncStatus()).isEqualTo(CalendarSyncStatus.SYNCED);
+    }
+
+    @Test
+    @DisplayName("backfillUnsynced: creates events for candidates and persists the linkage")
+    void backfillUnsynced_creates() {
+        Appointment a = sampleAppointment();
+        CalendarIntegration integration = activeIntegration(true);
+        when(appointmentRepo
+            .findAllByExternalEventIdIsNullAndScheduledAtGreaterThanEqualAndStatusIn(any(), any()))
+            .thenReturn(List.of(a));
+        when(integrationRepo.findByUserIdAndProvider(USER_ID, CalendarProviderType.GOOGLE))
+            .thenReturn(Optional.of(integration));
+        when(googleProvider.isConfigured()).thenReturn(true);
+        when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
+        when(googleProvider.createEvent(eq("decrypted-access"), any(), any())).thenReturn("evt-backfill");
+
+        CalendarSyncService.BackfillResult result = service.backfillUnsynced();
+
+        assertThat(result.scanned()).isEqualTo(1);
+        assertThat(result.created()).isEqualTo(1);
+        assertThat(result.failed()).isZero();
+        assertThat(a.getExternalEventId()).isEqualTo("evt-backfill");
+        verify(appointmentRepo, times(1)).save(a);
+    }
+
+    @Test
+    @DisplayName("syncAppointment: refreshes an expired access token before creating the event")
+    void syncAppointment_refreshesExpiredToken() {
+        Appointment a = sampleAppointment();
+        CalendarIntegration integration = activeIntegration(true);
+        integration.setAccessTokenExpiresAt(Instant.now().minusSeconds(60)); // expired
+        integration.setRefreshTokenEncrypted("encrypted-refresh");
+        when(integrationRepo.findByUserIdAndProvider(USER_ID, CalendarProviderType.GOOGLE))
+            .thenReturn(Optional.of(integration));
+        when(googleProvider.isConfigured()).thenReturn(true);
+        when(encryption.decrypt("encrypted-token")).thenReturn("old-token");
+        when(encryption.decrypt("encrypted-refresh")).thenReturn("refresh-token");
+        when(googleProvider.refreshAccessToken("refresh-token"))
+            .thenReturn(new CalendarProvider.TokenResponse("new-token", null, 3600L, "calendar", "Bearer"));
+        when(googleProvider.createEvent(eq("new-token"), any(), any())).thenReturn("evt-after-refresh");
+
+        service.syncAppointment(a);
+
+        verify(googleProvider, times(1)).refreshAccessToken("refresh-token");
+        verify(googleProvider, times(1)).createEvent(eq("new-token"), any(), any());
+        // refresh() persists + markSuccess persists
+        verify(integrationRepo, times(2)).save(integration);
+        assertThat(a.getExternalEventId()).isEqualTo("evt-after-refresh");
+    }
+
+    @Test
+    @DisplayName("syncAppointment: on 401, refreshes the token and retries once")
+    void syncAppointment_retriesOnceAfter401() {
+        Appointment a = sampleAppointment();
+        CalendarIntegration integration = activeIntegration(true);
+        integration.setRefreshTokenEncrypted("encrypted-refresh");
+        when(integrationRepo.findByUserIdAndProvider(USER_ID, CalendarProviderType.GOOGLE))
+            .thenReturn(Optional.of(integration));
+        when(googleProvider.isConfigured()).thenReturn(true);
+        when(encryption.decrypt("encrypted-token")).thenReturn("stale-token");
+        when(encryption.decrypt("encrypted-refresh")).thenReturn("refresh-token");
+        when(googleProvider.refreshAccessToken("refresh-token"))
+            .thenReturn(new CalendarProvider.TokenResponse("fresh-token", null, 3600L, "calendar", "Bearer"));
+        when(googleProvider.createEvent(eq("stale-token"), any(), any()))
+            .thenThrow(new RuntimeException("Google access token rejected (401) — user must re-authenticate"));
+        when(googleProvider.createEvent(eq("fresh-token"), any(), any())).thenReturn("evt-after-401");
+
+        service.syncAppointment(a);
+
+        verify(googleProvider, times(1)).refreshAccessToken("refresh-token");
+        verify(googleProvider, times(1)).createEvent(eq("fresh-token"), any(), any());
+        assertThat(a.getExternalEventId()).isEqualTo("evt-after-401");
     }
 }

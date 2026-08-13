@@ -16,6 +16,7 @@ import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
+import com.callsagents.backend.leads.repository.LeadRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -29,15 +30,18 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final AuditService auditService;
     private final CalendarSyncService calendarSync;
+    private final LeadRepository leadRepository;
 
     public AppointmentService(
         AppointmentRepository appointmentRepository,
         AuditService auditService,
-        CalendarSyncService calendarSync
+        CalendarSyncService calendarSync,
+        LeadRepository leadRepository
     ) {
         this.appointmentRepository = appointmentRepository;
         this.auditService = auditService;
         this.calendarSync = calendarSync;
+        this.leadRepository = leadRepository;
     }
 
     @Transactional(readOnly = true)
@@ -55,6 +59,10 @@ public class AppointmentService {
 
     @Transactional
     public AppointmentResponse create(CreateAppointmentRequest req, UUID currentUserId) {
+        if (req.leadId() != null && !leadRepository.existsById(req.leadId())) {
+            throw new BadRequestException("Lead not found: " + req.leadId());
+        }
+
         Appointment appointment = Appointment.builder()
             .leadId(req.leadId())
             .userId(req.userId())

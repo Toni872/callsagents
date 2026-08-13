@@ -10,11 +10,13 @@ import com.callsagents.backend.calls.entity.Call;
 import com.callsagents.backend.calls.entity.CallOutcome;
 import com.callsagents.backend.calls.entity.CallStatus;
 import com.callsagents.backend.calls.repository.CallRepository;
+import com.callsagents.backend.campaigns.repository.CampaignRepository;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
+import com.callsagents.backend.leads.repository.LeadRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -47,6 +49,10 @@ class CallServiceTest {
     @Mock
     private CallRepository callRepository;
     @Mock
+    private CampaignRepository campaignRepository;
+    @Mock
+    private LeadRepository leadRepository;
+    @Mock
     private AuditService auditService;
 
     @InjectMocks
@@ -57,6 +63,8 @@ class CallServiceTest {
     @Test
     void createBuildsAndSavesCall() {
         UUID id = UUID.randomUUID();
+        when(campaignRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.existsById(any())).thenReturn(true);
         when(callRepository.save(any(Call.class))).thenAnswer(inv -> {
             Call arg = inv.getArgument(0);
             arg.setId(id);
@@ -88,6 +96,8 @@ class CallServiceTest {
     @Test
     void createAllowsAllOptionalFieldsNull() {
         UUID id = UUID.randomUUID();
+        when(campaignRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.existsById(any())).thenReturn(true);
         when(callRepository.save(any(Call.class))).thenAnswer(inv -> {
             Call arg = inv.getArgument(0);
             arg.setId(id);
@@ -112,6 +122,8 @@ class CallServiceTest {
 
     @Test
     void createRejectsInvalidStatus() {
+        when(campaignRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.existsById(any())).thenReturn(true);
         CreateCallRequest req = new CreateCallRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
             null, null, null, "NOT_A_STATUS", null, null, null, null);
@@ -120,6 +132,8 @@ class CallServiceTest {
 
     @Test
     void createRejectsEndedBeforeStarted() {
+        when(campaignRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.existsById(any())).thenReturn(true);
         Instant start = Instant.now();
         Instant end = start.minusSeconds(60);
         CreateCallRequest req = new CreateCallRequest(
@@ -213,10 +227,37 @@ class CallServiceTest {
 
     @Test
     void createRejectsInvalidOutcome() {
+        when(campaignRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.existsById(any())).thenReturn(true);
         CreateCallRequest req = new CreateCallRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
             null, null, null, null, "NOT_AN_OUTCOME", null, null, null);
         assertThrows(BadRequestException.class, () -> callService.create(req, currentUserId));
+    }
+
+    @Test
+    void createRejectsUnknownCampaign() {
+        UUID campaignId = UUID.randomUUID();
+        when(campaignRepository.existsById(campaignId)).thenReturn(false);
+        CreateCallRequest req = new CreateCallRequest(
+            campaignId, UUID.randomUUID(), UUID.randomUUID(),
+            null, null, null, null, null, null, null, null);
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> callService.create(req, currentUserId));
+        assertEquals("Campaign not found: " + campaignId, ex.getMessage());
+        verify(callRepository, never()).save(any(Call.class));
+    }
+
+    @Test
+    void createRejectsUnknownLead() {
+        when(campaignRepository.existsById(any())).thenReturn(true);
+        UUID leadId = UUID.randomUUID();
+        when(leadRepository.existsById(leadId)).thenReturn(false);
+        CreateCallRequest req = new CreateCallRequest(
+            UUID.randomUUID(), leadId, UUID.randomUUID(),
+            null, null, null, null, null, null, null, null);
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> callService.create(req, currentUserId));
+        assertEquals("Lead not found: " + leadId, ex.getMessage());
+        verify(callRepository, never()).save(any(Call.class));
     }
 
     private static Call sampleCall(UUID id) {

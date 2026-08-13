@@ -11,7 +11,9 @@ import com.callsagents.backend.calls.entity.CallOutcome;
 import com.callsagents.backend.calls.entity.CallStatus;
 import com.callsagents.backend.calls.repository.CallRepository;
 import com.callsagents.backend.calls.repository.CallSpecifications;
+import com.callsagents.backend.campaigns.repository.CampaignRepository;
 import com.callsagents.backend.common.audit.AuditService;
+import com.callsagents.backend.leads.repository.LeadRepository;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ForbiddenException;
@@ -28,10 +30,19 @@ import java.util.UUID;
 public class CallService {
 
     private final CallRepository callRepository;
+    private final CampaignRepository campaignRepository;
+    private final LeadRepository leadRepository;
     private final AuditService auditService;
 
-    public CallService(CallRepository callRepository, AuditService auditService) {
+    public CallService(
+        CallRepository callRepository,
+        CampaignRepository campaignRepository,
+        LeadRepository leadRepository,
+        AuditService auditService
+    ) {
         this.callRepository = callRepository;
+        this.campaignRepository = campaignRepository;
+        this.leadRepository = leadRepository;
         this.auditService = auditService;
     }
 
@@ -50,6 +61,12 @@ public class CallService {
 
     @Transactional
     public CallResponse create(CreateCallRequest req, UUID currentUserId) {
+        if (req.campaignId() != null && !campaignRepository.existsById(req.campaignId())) {
+            throw new BadRequestException("Campaign not found: " + req.campaignId());
+        }
+        if (req.leadId() != null && !leadRepository.existsById(req.leadId())) {
+            throw new BadRequestException("Lead not found: " + req.leadId());
+        }
         validateCallWindow(req.startedAt(), req.endedAt());
 
         Call call = Call.builder()

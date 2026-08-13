@@ -15,6 +15,7 @@ import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
+import com.callsagents.backend.leads.repository.LeadRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -49,6 +50,8 @@ class AppointmentServiceTest {
     private AuditService auditService;
     @Mock
     private CalendarSyncService calendarSync;
+    @Mock
+    private LeadRepository leadRepository;
 
     @InjectMocks
     private AppointmentService appointmentService;
@@ -58,6 +61,7 @@ class AppointmentServiceTest {
     @Test
     void createBuildsAndSavesAppointmentWithPendingDefault() {
         UUID id = UUID.randomUUID();
+        when(leadRepository.existsById(any())).thenReturn(true);
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment arg = inv.getArgument(0);
             arg.setId(id);
@@ -80,6 +84,7 @@ class AppointmentServiceTest {
     @Test
     void createAcceptsAnyPositiveDuration() {
         UUID id = UUID.randomUUID();
+        when(leadRepository.existsById(any())).thenReturn(true);
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment arg = inv.getArgument(0);
             arg.setId(id);
@@ -99,6 +104,7 @@ class AppointmentServiceTest {
     @Test
     void createWithExplicitStatus() {
         UUID id = UUID.randomUUID();
+        when(leadRepository.existsById(any())).thenReturn(true);
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment arg = inv.getArgument(0);
             arg.setId(id);
@@ -118,10 +124,22 @@ class AppointmentServiceTest {
 
     @Test
     void createRejectsInvalidStatus() {
+        when(leadRepository.existsById(any())).thenReturn(true);
         CreateAppointmentRequest req = new CreateAppointmentRequest(
             UUID.randomUUID(), UUID.randomUUID(), Instant.now().plusSeconds(3600),
             30, "INVALID_STATUS", null);
         assertThrows(BadRequestException.class, () -> appointmentService.create(req, currentUserId));
+    }
+
+    @Test
+    void createRejectsUnknownLead() {
+        UUID leadId = UUID.randomUUID();
+        when(leadRepository.existsById(leadId)).thenReturn(false);
+        CreateAppointmentRequest req = new CreateAppointmentRequest(
+            leadId, UUID.randomUUID(), Instant.now().plusSeconds(3600), 30, null, null);
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> appointmentService.create(req, currentUserId));
+        assertEquals("Lead not found: " + leadId, ex.getMessage());
+        verify(appointmentRepository, never()).save(any(Appointment.class));
     }
 
     @Test

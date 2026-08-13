@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { LeadApi } from '../../../core/api/lead.api';
 import { LeadResponse } from '../../../shared/models/lead.model';
 
@@ -8,7 +9,7 @@ import { LeadResponse } from '../../../shared/models/lead.model';
   selector: 'app-lead-list',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink],
   template: `
     <section class="page">
       <header class="page__header">
@@ -25,6 +26,7 @@ import { LeadResponse } from '../../../shared/models/lead.model';
           />
           <button class="secondary" type="button" (click)="onSearch()">Buscar</button>
           <button type="button" (click)="reload()">Recargar</button>
+          <a [routerLink]="['/leads', 'new']">+ Nuevo lead</a>
         </div>
       </header>
 
@@ -43,22 +45,30 @@ import { LeadResponse } from '../../../shared/models/lead.model';
               <th>Estado</th>
               <th>Origen</th>
               <th>Asignado a</th>
+              <th class="actions-col">Acciones</th>
             </tr>
           </thead>
           <tbody>
             @for (lead of leads(); track lead.id) {
               <tr>
-                <td>{{ lead.firstName }} {{ lead.lastName }}</td>
+                <td>
+                  <a [routerLink]="['/leads', lead.id]">
+                    {{ lead.firstName }} {{ lead.lastName }}
+                  </a>
+                </td>
                 <td>{{ lead.email || '—' }}</td>
                 <td>{{ lead.phone || '—' }}</td>
                 <td>{{ lead.company || '—' }}</td>
                 <td><span class="badge">{{ lead.status }}</span></td>
                 <td>{{ lead.source }}</td>
                 <td>{{ lead.assignedTo?.fullName || '—' }}</td>
+                <td class="actions-col">
+                  <a [routerLink]="['/leads', lead.id]">Ver</a>
+                </td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="7" class="muted" style="text-align: center; padding: 2rem;">
+                <td colspan="8" class="muted" style="text-align: center; padding: 2rem;">
                   Sin resultados.
                 </td>
               </tr>
@@ -116,6 +126,18 @@ import { LeadResponse } from '../../../shared/models/lead.model';
         justify-content: space-between;
         gap: var(--spacing-3);
         margin-top: var(--spacing-4);
+      }
+      .actions-col {
+        text-align: right;
+        width: 1%;
+        white-space: nowrap;
+      }
+      a {
+        color: var(--color-primary);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
       }
     `
   ]

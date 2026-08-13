@@ -77,7 +77,25 @@ import {
                 </td>
                 <td>{{ formatDate(user.lastLoginAt) }}</td>
                 <td class="actions-col">
-                  <span class="muted">—</span>
+                  @if (user.status === 'ACTIVE') {
+                    <button
+                      type="button"
+                      class="action-link"
+                      [disabled]="updatingId() === user.id || loading()"
+                      (click)="toggleStatus(user)"
+                    >
+                      Deshabilitar
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-link"
+                      [disabled]="updatingId() === user.id || loading()"
+                      (click)="toggleStatus(user)"
+                    >
+                      Habilitar
+                    </button>
+                  }
                 </td>
               </tr>
             } @empty {
@@ -246,6 +264,19 @@ import {
         width: 1%;
         white-space: nowrap;
       }
+      .action-link {
+        color: var(--color-primary);
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        font: inherit;
+        text-decoration: underline;
+      }
+      .action-link:disabled {
+        color: var(--color-text-muted);
+        cursor: default;
+      }
       .badge--disabled {
         background: var(--color-bg-alt);
         color: var(--color-text-muted);
@@ -342,6 +373,7 @@ export class UserListComponent implements OnInit {
   protected readonly users = signal<UserListItem[]>([]);
   protected readonly loading = signal(false);
   protected readonly submitting = signal(false);
+  protected readonly updatingId = signal<string | null>(null);
   protected readonly page = signal(0);
   protected readonly totalPages = signal(0);
   protected readonly totalElements = signal(0);
@@ -376,6 +408,32 @@ export class UserListComponent implements OnInit {
       return '—';
     }
     return d.toLocaleString();
+  }
+
+  protected toggleStatus(user: UserListItem): void {
+    if (user.status === 'ACTIVE') {
+      const confirmed = confirm(`¿Deshabilitar al usuario "${user.email}"?`);
+      if (!confirmed) {
+        return;
+      }
+    }
+    const next = user.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+    this.updatingId.set(user.id);
+    this.api.updateStatus(user.id, next).subscribe({
+      next: () => {
+        this.updatingId.set(null);
+        this.errors.success('Usuario actualizado correctamente');
+        this.fetch();
+      },
+      error: (err) => {
+        this.updatingId.set(null);
+        const msg =
+          err?.error?.message ||
+          err?.message ||
+          'No se pudo actualizar el usuario';
+        this.errors.error(msg);
+      }
+    });
   }
 
   protected openCreateDialog(): void {

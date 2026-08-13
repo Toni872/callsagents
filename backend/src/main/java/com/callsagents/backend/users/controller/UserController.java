@@ -2,6 +2,7 @@ package com.callsagents.backend.users.controller;
 
 import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.users.dto.CreateUserRequest;
+import com.callsagents.backend.users.dto.UpdateUserStatusRequest;
 import com.callsagents.backend.users.dto.UserListItem;
 import com.callsagents.backend.users.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,7 +13,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,12 +24,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.UUID;
 
 /**
  * Admin-only user management endpoints.
  *
- * Designed to grow: future endpoints (PATCH /{id}, DELETE /{id}, etc.) will
- * be added here as the feature expands.
+ * Designed to grow: DELETE /{id} and other endpoints will be added here as the
+ * feature expands.
  */
 @RestController
 @RequestMapping("/users")
@@ -72,5 +77,26 @@ public class UserController {
             created.getCreatedAt()
         );
         return ResponseEntity.created(URI.create("/users/" + created.getId())).body(body);
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Cambiar estado de usuario (ADMIN)",
+        description = "Habilita o deshabilita una cuenta. No permite deshabilitar la propia cuenta ni al último admin activo.")
+    public UserListItem updateStatus(
+        @PathVariable UUID id,
+        @Valid @RequestBody UpdateUserStatusRequest req,
+        Authentication authentication
+    ) {
+        var updated = userService.updateStatus(id, req.status(), authentication.getName());
+        return new UserListItem(
+            updated.getId(),
+            updated.getEmail(),
+            updated.getFullName(),
+            updated.getRole(),
+            updated.getStatus(),
+            updated.getLastLoginAt(),
+            updated.getCreatedAt()
+        );
     }
 }

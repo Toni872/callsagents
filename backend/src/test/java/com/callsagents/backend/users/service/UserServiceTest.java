@@ -192,4 +192,76 @@ class UserServiceTest {
             .isInstanceOf(ResourceNotFoundException.class)
             .hasMessageContaining("not found");
     }
+
+    // -------------------- updateStatus --------------------
+
+    @Test
+    @DisplayName("updateStatus: sets DISABLED and persists")
+    void updateStatus_disable_success() {
+        UUID id = UUID.randomUUID();
+        User u = buildUser(id, "agent@x.com", UserRole.AGENT);
+        when(userRepository.findById(id)).thenReturn(Optional.of(u));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User result = userService.updateStatus(id, UserStatus.DISABLED, "admin@x.com");
+
+        assertThat(result.getStatus()).isEqualTo(UserStatus.DISABLED);
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(UserStatus.DISABLED);
+    }
+
+    @Test
+    @DisplayName("updateStatus: disabling own account throws BadRequestException")
+    void updateStatus_selfDisable_throws() {
+        UUID id = UUID.randomUUID();
+        User u = buildUser(id, "admin@x.com", UserRole.ADMIN);
+        when(userRepository.findById(id)).thenReturn(Optional.of(u));
+
+        assertThatThrownBy(() -> userService.updateStatus(id, UserStatus.DISABLED, "admin@x.com"))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessageContaining("cannot disable your own");
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("updateStatus: disabling the last active admin throws BadRequestException")
+    void updateStatus_lastActiveAdmin_throws() {
+        UUID id = UUID.randomUUID();
+        User u = buildUser(id, "admin@x.com", UserRole.ADMIN);
+        when(userRepository.findById(id)).thenReturn(Optional.of(u));
+        when(userRepository.countByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE)).thenReturn(1L);
+
+        assertThatThrownBy(() -> userService.updateStatus(id, UserStatus.DISABLED, "someoneelse@x.com"))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessageContaining("last active admin");
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("updateStatus: unknown id throws ResourceNotFoundException")
+    void updateStatus_missing_throws() {
+        UUID id = UUID.randomUUID();
+        when(userRepository.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateStatus(id, UserStatus.DISABLED, "admin@x.com"))
+            .isInstanceOf(ResourceNotFoundException.class)
+            .hasMessageContaining("not found");
+    }
+
+    @Test
+    @DisplayName("updateStatus: enabling a disabled user works")
+    void updateStatus_enable_success() {
+        UUID id = UUID.randomUUID();
+        User u = buildUser(id, "agent@x.com", UserRole.AGENT);
+        u.setStatus(UserStatus.DISABLED);
+        when(userRepository.findById(id)).thenReturn(Optional.of(u));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User result = userService.updateStatus(id, UserStatus.ACTIVE, "admin@x.com");
+
+        assertThat(result.getStatus()).isEqualTo(UserStatus.ACTIVE);
+    }
 }

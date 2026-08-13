@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * User management service — admin operations on user accounts.
@@ -90,9 +91,42 @@ public class UserService {
      * future GET /api/users/{id} endpoint.
      */
     @Transactional(readOnly = true)
-    public User findById(java.util.UUID id) {
+    public User findById(UUID id) {
         return userRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+    }
+
+    /**
+     * Enable or disable a user account (ADMIN only).
+     *
+     * Guard rails:
+     *  - An admin cannot disable their own account.
+     *  - The last active admin cannot be disabled (would lock everyone out).
+     *
+     * @throws BadRequestException for self-disable or disabling the last active admin
+     * @throws ResourceNotFoundException if the user does not exist
+     */
+    @Transactional
+    public User updateStatus(UUID id, UserStatus newStatus, String currentEmail) {
+        User user = userRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+
+        if (newStatus == UserStatus.DISABLED) {
+            if (user.getEmail().equals(currentEmail)) {
+                throw new BadRequestException("You cannot disable your own account");
+            }
+            if (user.getRole() == UserRole.ADMIN && user.getStatus() == UserStatus.ACTIVE) {
+                long activeAdmins = userRepository.countByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE);
+                if (activeAdmins <= 1) {
+                    throw new BadRequestException("Cannot disable the last active admin");
+                }
+            }
+        }
+
+        user.setStatus(newStatus);
+        User saved = userRepository.save(user);
+        log.info("Set status {} for user {}", saved.getStatus(), saved.getEmail());
+        return saved;
     }
 
     private UserListItem toListItem(User u) {

@@ -6,7 +6,8 @@ import { PageResponse } from './http.types';
 import {
   CreateUserRequest,
   UserListFilter,
-  UserListItem
+  UserListItem,
+  UserStatus
 } from '../../shared/models/user.model';
 
 @Injectable({ providedIn: 'root' })
@@ -27,5 +28,9 @@ export class UserApi {
 
   create(req: CreateUserRequest): Observable<UserListItem> {
     return this.http.post<UserListItem>(apiUrl('/users'), req);
+  }
+
+  updateStatus(id: string, status: UserStatus): Observable<UserListItem> {
+    return this.http.patch<UserListItem>(apiUrl('/users/' + id + '/status'), { status });
   }
 }

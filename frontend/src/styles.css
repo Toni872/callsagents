@@ -1,39 +1,123 @@
+/* ============================================================
+   Callsagents Design System — Fase 0: Foundation Tokens
+   ------------------------------------------------------------
+   Principle: quiet chrome. Separation comes from typography,
+   whitespace, and subtle 1px borders; color only means (state,
+   accent, data). Dark mode is a first-class citizen via
+   [data-theme="dark"] on <html>.
+   ============================================================ */
+
+/* ---------- Light theme (default) ---------- */
 :root {
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
+  /* Brand accent — green (Script9 institutional palette). Not generic teal. */
+  --color-primary: #007a4d;
+  --color-primary-hover: #005a38;
+  --color-primary-active: #003d26;
+  --color-on-primary: #ffffff;
+  --color-primary-soft: #e8f5ef;
+
+  /* Canvas & surfaces — cool slate neutrals */
   --color-bg: #ffffff;
-  --color-bg-alt: #f9fafb;
+  --color-bg-alt: #f1f5f9;
   --color-surface: #ffffff;
-  --color-text: #111827;
-  --color-text-muted: #6b7280;
-  --color-muted: #6b7280;
-  --color-border: #e5e7eb;
-  --color-border-strong: #d1d5db;
-  --color-error: #dc2626;
-  --color-error-bg: #fef2f2;
+  --color-surface-hover: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  /* Text hierarchy */
+  --color-text: #0f172a;
+  --color-text-strong: #0f172a;
+  --color-text-muted: #64748b;
+  --color-text-subtle: #94a3b8;
+  --color-muted: #64748b; /* legacy alias — keep in sync with text-muted */
+
+  /* Semantic state colors */
+  --color-info: #0284c7;
+  --color-info-bg: #f0f9ff;
   --color-success: #16a34a;
   --color-success-bg: #f0fdf4;
-  --color-info: #2563eb;
-  --color-info-bg: #eff6ff;
   --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+
+  /* Focus */
+  --color-focus-ring: rgba(0, 122, 77, 0.25);
+
+  /* Spacing scale */
   --spacing-1: 0.25rem;
   --spacing-2: 0.5rem;
   --spacing-3: 0.75rem;
   --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
   --spacing-6: 1.5rem;
   --spacing-8: 2rem;
-  --radius: 6px;
-  --radius-lg: 8px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  /* Radius — softer, modern cards */
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  /* Elevation — quiet chrome: borders carry separation, shadows stay light */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.12);
+
+  /* Typography — system stack (no external font dependency), display = tighter tracking */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
+/* ---------- Dark theme ---------- */
+[data-theme="dark"] {
+  /* Brand accent — brightened for contrast on dark */
+  --color-primary: #00a86b;
+  --color-primary-hover: #4ade80;
+  --color-primary-active: #007a4d;
+  --color-on-primary: #032418;
+  --color-primary-soft: rgba(0, 168, 107, 0.14);
+
+  /* Canvas & surfaces — deep blue-black (ROI calculator palette) */
+  --color-bg: #070b12;
+  --color-bg-alt: #0d131f;
+  --color-surface: #0d131f;
+  --color-surface-hover: #141d2b;
+  --color-border: #1d2637;
+  --color-border-strong: #2a3648;
+
+  /* Text hierarchy */
+  --color-text: #e2e8f0;
+  --color-text-strong: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-text-subtle: #64748b;
+  --color-muted: #94a3b8;
+
+  /* Semantic state colors */
+  --color-info: #38bdf8;
+  --color-info-bg: rgba(56, 189, 248, 0.12);
+  --color-success: #4ade80;
+  --color-success-bg: rgba(74, 222, 128, 0.12);
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.12);
+  --color-error: #f87171;
+  --color-error-bg: rgba(248, 113, 113, 0.12);
+
+  /* Focus */
+  --color-focus-ring: rgba(0, 168, 107, 0.25);
+
+  /* Elevation — deeper, darker shadows on dark */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------- Reset & base ---------- */
 * {
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
 }
@@ -44,11 +128,15 @@ body {
   background: var(--color-bg);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 h1, h2, h3, h4, h5, h6 {
   margin: 0 0 var(--spacing-2);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--color-text-strong);
 }
 
 a {
@@ -67,17 +155,30 @@ button {
   border-radius: var(--radius);
   padding: var(--spacing-2) var(--spacing-4);
   background: var(--color-primary);
-  color: #fff;
-  transition: background 0.15s ease;
+  color: var(--color-on-primary);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 button:hover:not(:disabled) {
   background: var(--color-primary-hover);
 }
 
+button:active:not(:disabled) {
+  background: var(--color-primary-active);
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+button:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
 button.secondary {
@@ -98,12 +199,13 @@ input, select, textarea {
   background: var(--color-surface);
   color: var(--color-text);
   width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
 label {
@@ -114,6 +216,7 @@ label {
   color: var(--color-text);
 }
 
+/* ---------- Shared components ---------- */
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -147,7 +250,7 @@ table tbody tr:hover {
 .badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: 0.75rem;
   font-weight: 500;
   background: var(--color-bg-alt);
@@ -162,4 +265,9 @@ table tbody tr:hover {
   color: var(--color-error);
   font-size: 0.875rem;
   margin-top: var(--spacing-1);
+}
+
+/* ---------- Utilities ---------- */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

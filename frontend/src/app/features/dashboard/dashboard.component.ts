@@ -10,162 +10,329 @@ import { DashboardApi } from '../../core/api/dashboard.api';
 import { AuthService } from '../../core/auth/auth.service';
 import { ErrorService } from '../../core/errors/error.service';
 import { DashboardSummary } from '../../shared/models/dashboard.model';
+import { CardComponent } from '../../shared/components/card.component';
+import { BadgeComponent } from '../../shared/components/badge.component';
+import { SkeletonComponent } from '../../shared/components/skeleton.component';
+import { EmptyStateComponent } from '../../shared/components/empty-state.component';
+import { PageHeaderComponent } from '../../shared/components/page-header.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    CardComponent,
+    BadgeComponent,
+    SkeletonComponent,
+    EmptyStateComponent,
+    PageHeaderComponent
+  ],
   template: `
     <div class="dashboard-page">
-      <header class="dashboard-page__header">
-        <div>
-          <h1>Dashboard ejecutivo</h1>
-          @if (lastUpdated()) {
-            <p class="muted">Actualizado {{ lastUpdated() }}</p>
-          }
-        </div>
-        <div class="dashboard-page__actions">
-          <button class="btn btn--secondary" type="button" (click)="refresh()" [disabled]="loading()">
-            {{ loading() ? 'Actualizando…' : 'Actualizar' }}
+      <app-page-header
+        title="Dashboard ejecutivo"
+        [subtitle]="lastUpdated() ? 'Actualizado ' + lastUpdated() : undefined"
+      >
+        <button class="btn btn--secondary" type="button" (click)="refresh()" [disabled]="loading()">
+          {{ loading() ? 'Actualizando…' : 'Actualizar' }}
+        </button>
+        @if (isAdmin() && !hasData()) {
+          <button class="btn btn--primary" type="button" (click)="loadDemo()" [disabled]="seeding()">
+            {{ seeding() ? 'Cargando…' : 'Cargar datos de demo' }}
           </button>
-          @if (isAdmin() && !hasData()) {
-            <button class="btn btn--primary" type="button" (click)="loadDemo()" [disabled]="seeding()">
-              {{ seeding() ? 'Cargando…' : 'Cargar datos de demo' }}
-            </button>
-          }
-        </div>
-      </header>
+        }
+      </app-page-header>
 
       @if (loading() && summary() === null) {
-        <div class="dashboard-page__loading">
-          <p>Cargando métricas…</p>
+        <div class="dashboard-page__grid" role="status" aria-label="Cargando métricas">
+          <app-skeleton class="sk-hero" [height]="'220px'" [radius]="'var(--radius-lg)'"></app-skeleton>
+          <div class="sk-rail">
+            <app-skeleton [height]="'120px'" [radius]="'var(--radius-lg)'"></app-skeleton>
+            <app-skeleton [height]="'120px'" [radius]="'var(--radius-lg)'"></app-skeleton>
+          </div>
+          <app-skeleton class="sk-wide" [height]="'140px'" [radius]="'var(--radius-lg)'"></app-skeleton>
+          <app-skeleton class="sk-wide" [height]="'140px'" [radius]="'var(--radius-lg)'"></app-skeleton>
         </div>
       } @else if (summary() === null) {
-        <div class="dashboard-page__empty card">
-          <h2>Sin datos todavía</h2>
-          <p>El dashboard mostrará las métricas cuando haya leads, campañas y llamadas en el sistema.</p>
-          @if (isAdmin()) {
-            <button class="btn btn--primary" type="button" (click)="loadDemo()" [disabled]="seeding()">
-              {{ seeding() ? 'Cargando…' : 'Cargar datos de demo' }}
-            </button>
-          }
-        </div>
+        <app-card>
+          <app-empty-state
+            title="Sin datos todavía"
+            message="El dashboard mostrará las métricas cuando haya leads, campañas y llamadas en el sistema."
+          >
+            <span slot="icon" class="empty-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="36"
+                height="36"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"
+                />
+              </svg>
+            </span>
+            @if (isAdmin()) {
+              <button
+                slot="actions"
+                class="btn btn--primary"
+                type="button"
+                (click)="loadDemo()"
+                [disabled]="seeding()"
+              >
+                {{ seeding() ? 'Cargando…' : 'Cargar datos de demo' }}
+              </button>
+            }
+          </app-empty-state>
+        </app-card>
       } @else {
         <div class="dashboard-page__grid">
-          <article class="kpi-card">
-            <h3 class="kpi-card__title">Total Leads</h3>
-            <p class="kpi-card__value">{{ summary()!.totalLeads }}</p>
-            <p class="kpi-card__hint">en el sistema</p>
-          </article>
-
-          <article class="kpi-card">
-            <h3 class="kpi-card__title">Leads Asignados</h3>
-            <p class="kpi-card__value">{{ summary()!.assignedLeads }}</p>
-            <p class="kpi-card__hint">
-              de {{ summary()!.totalLeads }} totales ({{ percentOfAssigned() }})
+          <app-card class="hero-card" padding="lg">
+            <div class="hero-card__header">
+              <h2 class="kpi-title">Llamadas Hoy</h2>
+              <app-badge class="hero-card__live" tone="success">
+                <span class="live-dot" aria-hidden="true"></span>
+                En vivo
+              </app-badge>
+            </div>
+            <p class="hero-card__value tabular-nums">{{ summary()!.callsToday }}</p>
+            <p class="hero-card__sub">hoy</p>
+            <p class="hero-card__connected tabular-nums">
+              {{ summary()!.callsTodayConnected }} de {{ summary()!.callsToday }} conectadas
             </p>
-          </article>
+            <div class="hero-card__rate">
+              <div class="hero-card__rate-label">
+                <span>Tasa de conexión</span>
+                <span class="tabular-nums">{{ connectionRatePercent() }}%</span>
+              </div>
+              <div
+                class="hero-card__track"
+                role="progressbar"
+                [attr.aria-label]="'Tasa de conexión: ' + connectionRatePercent() + '%'"
+                [attr.aria-valuenow]="connectionRatePercent()"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                <div class="hero-card__fill" [style.width.%]="connectionRatePercent()"></div>
+              </div>
+            </div>
+          </app-card>
 
-          <article class="kpi-card">
-            <h3 class="kpi-card__title">Campañas Activas</h3>
-            <p class="kpi-card__value">{{ summary()!.activeCampaigns }}</p>
-            <p class="kpi-card__hint">en curso</p>
-          </article>
+          <div class="dashboard-page__rail">
+            <app-card class="kpi-card">
+              <h3 class="kpi-title">Campañas Activas</h3>
+              <p class="kpi-value tabular-nums">{{ summary()!.activeCampaigns }}</p>
+              <p class="kpi-hint">en curso</p>
+            </app-card>
 
-          <article class="kpi-card">
-            <h3 class="kpi-card__title">Llamadas Hoy</h3>
-            <p class="kpi-card__value">{{ summary()!.callsToday }}</p>
-            <p class="kpi-card__hint">{{ summary()!.callsTodayConnected }} conectadas</p>
-          </article>
+            <app-card class="kpi-card">
+              <h3 class="kpi-title">Citas Pendientes</h3>
+              <p class="kpi-value tabular-nums">{{ summary()!.upcomingAppointments }}</p>
+              <p class="kpi-hint">próximas</p>
+            </app-card>
+          </div>
 
-          <article class="kpi-card kpi-card--highlight">
-            <h3 class="kpi-card__title">Tasa de Conexión Hoy</h3>
-            <p class="kpi-card__value">{{ connectionRatePercent() }}%</p>
-            <p class="kpi-card__hint">de las llamadas de hoy</p>
-          </article>
+          <app-card class="kpi-card kpi-card--wide">
+            <h3 class="kpi-title">Total Leads</h3>
+            <p class="kpi-value tabular-nums">{{ summary()!.totalLeads }}</p>
+            <p class="kpi-hint">en el sistema</p>
+          </app-card>
 
-          <article class="kpi-card">
-            <h3 class="kpi-card__title">Citas Pendientes</h3>
-            <p class="kpi-card__value">{{ summary()!.upcomingAppointments }}</p>
-            <p class="kpi-card__hint">próximas</p>
-          </article>
+          <app-card class="kpi-card kpi-card--wide">
+            <h3 class="kpi-title">Leads Asignados</h3>
+            <div class="kpi-card__value-row">
+              <p class="kpi-value tabular-nums">{{ summary()!.assignedLeads }}</p>
+              @if (percentOfAssigned() !== '0%') {
+                <app-badge tone="accent">{{ percentOfAssigned() }}</app-badge>
+              }
+            </div>
+            <p class="kpi-hint">de {{ summary()!.totalLeads }} totales</p>
+          </app-card>
         </div>
       }
     </div>
   `,
   styles: [
     `
+      :host {
+        display: block;
+      }
       .dashboard-page {
-        padding: var(--spacing-6);
         max-width: 1400px;
         margin: 0 auto;
       }
-      .dashboard-page__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        margin-bottom: var(--spacing-6);
-        gap: var(--spacing-4);
-        flex-wrap: wrap;
-      }
-      .dashboard-page__header h1 {
-        margin: 0;
-        font-size: 1.5rem;
-      }
-      .dashboard-page__actions {
-        display: flex;
-        gap: var(--spacing-2);
-      }
       .dashboard-page__grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(12, 1fr);
         gap: var(--spacing-4);
+        align-items: start;
       }
-      .kpi-card {
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-lg);
-        padding: var(--spacing-4);
-        box-shadow: var(--shadow-sm);
+
+      /* ---------- Hero ---------- */
+      .hero-card {
+        grid-column: span 8;
       }
-      .kpi-card--highlight {
+      :host ::ng-deep .hero-card .app-card {
+        background: color-mix(in srgb, var(--color-primary), var(--color-bg) 94%);
+        border-color: color-mix(in srgb, var(--color-primary), var(--color-border) 30%);
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      :host ::ng-deep .hero-card:hover .app-card {
         border-color: var(--color-primary);
-        background: linear-gradient(
-          135deg,
-          var(--color-surface),
-          color-mix(in srgb, var(--color-primary), white 90%)
-        );
+        box-shadow:
+          0 0 0 1px color-mix(in srgb, var(--color-primary), transparent 55%),
+          var(--shadow-sm);
       }
-      .kpi-card__title {
-        margin: 0 0 var(--spacing-2);
+      .hero-card__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--spacing-3);
+        margin-bottom: var(--spacing-3);
+      }
+      .hero-card__live {
+        display: inline-flex;
+        align-items: center;
+      }
+      .live-dot {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        margin-right: 0.375rem;
+        border-radius: var(--radius-full);
+        background: var(--color-success);
+        vertical-align: middle;
+        animation: live-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes live-pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.35;
+          transform: scale(0.7);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .live-dot {
+          animation: none;
+        }
+      }
+      .hero-card__value {
+        margin: 0;
+        font-size: clamp(2.5rem, 4vw, 3rem);
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--color-text-strong);
+      }
+      .hero-card__sub {
+        margin: var(--spacing-1) 0 0;
         font-size: 0.875rem;
         color: var(--color-text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
       }
-      .kpi-card__value {
+      .hero-card__connected {
+        margin: var(--spacing-4) 0 0;
+        font-size: 0.875rem;
+        color: var(--color-text);
+      }
+      .hero-card__rate {
+        margin-top: var(--spacing-3);
+        max-width: 420px;
+      }
+      .hero-card__rate-label {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: var(--spacing-1);
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+      }
+      .hero-card__track {
+        height: 0.375rem;
+        border-radius: var(--radius-full);
+        background: var(--color-bg-alt);
+        overflow: hidden;
+      }
+      .hero-card__fill {
+        height: 100%;
+        border-radius: var(--radius-full);
+        background: linear-gradient(
+          90deg,
+          var(--color-primary),
+          var(--color-primary-soft)
+        );
+        transition: width 0.3s ease;
+      }
+
+      /* ---------- Secondary KPI cards ---------- */
+      .dashboard-page__rail {
+        grid-column: span 4;
+        display: grid;
+        gap: var(--spacing-4);
+        align-content: start;
+      }
+      .kpi-card {
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+      }
+      .kpi-card:hover {
+        box-shadow: var(--shadow-sm);
+        transform: translateY(-1px);
+      }
+      .kpi-card--wide {
+        grid-column: span 6;
+      }
+      .kpi-title {
+        margin: 0 0 var(--spacing-2);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+      }
+      .kpi-value {
         margin: 0 0 var(--spacing-1);
         font-size: 2rem;
         font-weight: 700;
-        color: var(--color-text);
+        line-height: 1.15;
+        color: var(--color-text-strong);
       }
-      .kpi-card__hint {
+      .kpi-hint {
         margin: 0;
         font-size: 0.75rem;
         color: var(--color-text-muted);
       }
-      .dashboard-page__loading,
-      .dashboard-page__empty {
-        padding: var(--spacing-6);
-        text-align: center;
-        color: var(--color-text-muted);
+      .kpi-card__value-row {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-2);
+        margin-bottom: var(--spacing-1);
       }
-      .dashboard-page__empty h2 {
-        margin: 0 0 var(--spacing-2);
+      .kpi-card__value-row .kpi-value {
+        margin-bottom: 0;
       }
-      .dashboard-page__empty .btn {
-        margin-top: var(--spacing-3);
+
+      /* ---------- Loading skeletons ---------- */
+      .sk-hero {
+        grid-column: span 8;
       }
+      .sk-rail {
+        grid-column: span 4;
+        display: grid;
+        gap: var(--spacing-4);
+        align-content: start;
+      }
+      .sk-wide {
+        grid-column: span 6;
+      }
+
+      /* ---------- Buttons ---------- */
       .btn {
         padding: var(--spacing-2) var(--spacing-4);
         border-radius: var(--radius);
@@ -174,6 +341,7 @@ import { DashboardSummary } from '../../shared/models/dashboard.model';
         color: var(--color-text);
         cursor: pointer;
         font-size: 0.875rem;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
       }
       .btn:disabled {
         opacity: 0.5;
@@ -181,15 +349,46 @@ import { DashboardSummary } from '../../shared/models/dashboard.model';
       }
       .btn--primary {
         background: var(--color-primary);
-        color: white;
+        color: var(--color-on-primary);
         border-color: var(--color-primary);
       }
       .btn--secondary {
         background: var(--color-surface);
         border-color: var(--color-border);
       }
-      .muted {
-        color: var(--color-text-muted);
+      .btn--secondary:hover:not(:disabled) {
+        background: var(--color-bg-alt);
+        border-color: var(--color-border-strong);
+      }
+      .empty-icon {
+        display: inline-block;
+      }
+
+      /* ---------- Responsive ---------- */
+      @media (max-width: 1023px) {
+        .hero-card,
+        .sk-hero {
+          grid-column: span 12;
+        }
+        .dashboard-page__rail,
+        .sk-rail {
+          grid-column: span 12;
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .kpi-card--wide,
+        .sk-wide {
+          grid-column: span 6;
+        }
+      }
+      @media (max-width: 639px) {
+        .dashboard-page__rail,
+        .sk-rail {
+          grid-template-columns: 1fr;
+        }
+        .kpi-card--wide,
+        .sk-wide {
+          grid-column: span 12;
+        }
       }
     `
   ]

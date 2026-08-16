@@ -1,6 +1,7 @@
 package com.callsagents.backend.voice.service;
 
 import com.callsagents.backend.voice.domain.CampaignVoiceConfig;
+import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.Map;
  * concatenation (never re-parsed, so literal braces in user input are
  * preserved), and the static skeleton never carries unresolved placeholders.
  */
+@Component
 public class PromptComposer {
 
     public String compose(CampaignVoiceConfig cfg) {

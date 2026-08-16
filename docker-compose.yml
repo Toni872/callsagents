@@ -61,6 +61,10 @@ services:
       VAPI_API_KEY: ${VAPI_API_KEY}
       VAPI_ASSISTANT_ID: ${VAPI_ASSISTANT_ID:-}
       VAPI_PHONE_NUMBER_ID: ${VAPI_PHONE_NUMBER_ID:-}
+      # Retell integration (outbound calls)
+      RETELL_API_KEY: ${RETELL_API_KEY}
+      RETELL_AGENT_ID: ${RETELL_AGENT_ID:-}
+      RETELL_FROM_NUMBER: ${RETELL_FROM_NUMBER:-}
       # Swagger/OpenAPI (off in production)
       SPRINGDOC_ENABLED: ${SPRINGDOC_ENABLED:-true}
       JAVA_OPTS: "-Xms256m -Xmx512m"

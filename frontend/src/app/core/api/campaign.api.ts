@@ -7,7 +7,9 @@ import {
   CampaignFilter,
   CampaignResponse,
   CreateCampaignRequest,
-  UpdateCampaignRequest
+  UpdateCampaignRequest,
+  VoicePromptPreviewRequest,
+  VoicePromptPreviewResponse
 } from '../../shared/models/campaign.model';
 
 @Injectable({ providedIn: 'root' })
@@ -26,8 +28,20 @@ export class CampaignApi {
     if (filter.createdById) {
       params = params.set('createdById', filter.createdById);
     }
+    if (filter.hasVoiceConfig) {
+      params = params.set('hasVoiceConfig', 'true');
+    }
 
     return this.http.get<PageResponse<CampaignResponse>>(apiUrl('/campaigns'), { params });
+  }
+
+  previewVoicePrompt(
+    req: VoicePromptPreviewRequest
+  ): Observable<VoicePromptPreviewResponse> {
+    return this.http.post<VoicePromptPreviewResponse>(
+      apiUrl('/campaigns/voice-prompt/preview'),
+      req
+    );
   }
 
   getById(id: string): Observable<CampaignResponse> {

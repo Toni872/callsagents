@@ -18,11 +18,15 @@ export class VoiceApi {
 
   startCall(
     provider: VoiceProviderType,
-    phoneNumber: string
+    phoneNumber: string,
+    campaignId?: string
   ): Observable<VoiceCall> {
-    const params = new HttpParams()
+    let params = new HttpParams()
       .set('provider', provider)
       .set('phoneNumber', phoneNumber);
+    if (campaignId) {
+      params = params.set('campaignId', campaignId);
+    }
     return this.http.post<VoiceCall>(apiUrl('/voice/calls/start'), null, {
       params
     });

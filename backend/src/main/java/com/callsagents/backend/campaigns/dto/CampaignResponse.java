@@ -15,6 +15,11 @@ public record CampaignResponse(
     Instant startAt,
     Instant endAt,
     String script,
+    String company,
+    String website,
+    String industry,
+    String services,
+    String tone,
     UserDto createdBy,
     Instant createdAt,
     Instant updatedAt
@@ -28,6 +33,11 @@ public record CampaignResponse(
             campaign.getStartAt(),
             campaign.getEndAt(),
             campaign.getScript(),
+            campaign.getCompany(),
+            campaign.getWebsite(),
+            campaign.getIndustry(),
+            campaign.getServices(),
+            campaign.getTone(),
             creator,
             campaign.getCreatedAt(),
             campaign.getUpdatedAt()

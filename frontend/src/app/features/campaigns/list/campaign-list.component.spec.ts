@@ -25,7 +25,12 @@ describe('CampaignListComponent', () => {
     script: null,
     createdBy: null,
     createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z'
+    updatedAt: '2026-01-01T00:00:00Z',
+    company: null,
+    website: null,
+    industry: null,
+    services: null,
+    tone: null
   });
 
   const page = (

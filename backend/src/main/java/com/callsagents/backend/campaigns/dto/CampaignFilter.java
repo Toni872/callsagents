@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record CampaignFilter(
     CampaignStatus status,
-    UUID createdById
+    UUID createdById,
+    Boolean hasVoiceConfig
 ) {
 }

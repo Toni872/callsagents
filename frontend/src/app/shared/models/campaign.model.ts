@@ -23,6 +23,11 @@ export interface CampaignResponse {
   createdBy: CampaignCreatedBy | null;
   createdAt: string;
   updatedAt: string;
+  company: string | null;
+  website: string | null;
+  industry: string | null;
+  services: string | null;
+  tone: string | null;
 }
 
 export interface CreateCampaignRequest {
@@ -31,6 +36,11 @@ export interface CreateCampaignRequest {
   startAt?: string | null;
   endAt?: string | null;
   script?: string | null;
+  company?: string | null;
+  website?: string | null;
+  industry?: string | null;
+  services?: string | null;
+  tone?: string | null;
 }
 
 export interface UpdateCampaignRequest {
@@ -40,6 +50,11 @@ export interface UpdateCampaignRequest {
   endAt?: string | null;
   script?: string | null;
   status?: CampaignStatus;
+  company?: string | null;
+  website?: string | null;
+  industry?: string | null;
+  services?: string | null;
+  tone?: string | null;
 }
 
 export interface CampaignFilter {
@@ -48,4 +63,18 @@ export interface CampaignFilter {
   status?: CampaignStatus;
   createdById?: string;
   sort?: string;
+  /** Filtra solo campañas con configuración de voz (backend, no cliente). */
+  hasVoiceConfig?: boolean;
+}
+
+export interface VoicePromptPreviewRequest {
+  company?: string | null;
+  website?: string | null;
+  industry?: string | null;
+  services?: string | null;
+  tone?: string | null;
+}
+
+export interface VoicePromptPreviewResponse {
+  prompt: string;
 }

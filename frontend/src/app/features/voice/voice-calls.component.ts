@@ -3,7 +3,9 @@ import {
   Component,
   ElementRef,
   OnInit,
+  OnDestroy,
   ViewChild,
+  computed,
   inject,
   signal
 } from '@angular/core';
@@ -15,19 +17,29 @@ import {
 } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { VoiceApi } from '../../core/api/voice.api';
+import { CampaignApi } from '../../core/api/campaign.api';
 import { ErrorService } from '../../core/errors/error.service';
+import { BadgeComponent } from '../../shared/components/badge.component';
 import {
   VoiceCall,
   VoiceCallDirection,
   VoiceCallStatus,
   VoiceProviderType
 } from '../../shared/models/voice.model';
+import { CampaignResponse } from '../../shared/models/campaign.model';
+import {
+  isLiveStatus,
+  voiceCallStatusPresentation,
+  type VoiceCallStatusPresentation
+} from './voice-call-status.util';
+
+const POLL_INTERVAL_MS = 10_000;
 
 @Component({
   selector: 'app-voice-calls',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, BadgeComponent],
   template: `
     <section class="page">
       <header class="page__header">
@@ -38,6 +50,12 @@ import {
           </p>
         </div>
         <div class="page__actions">
+          @if (pollingActive()) {
+            <app-badge tone="success">
+              <span class="live-dot" aria-hidden="true"></span>
+              Actualización en vivo
+            </app-badge>
+          }
           <button
             type="button"
             class="secondary"
@@ -111,9 +129,14 @@ import {
                     }
                   </td>
                   <td>
-                    <span class="badge" [class]="statusBadgeClass(call.status)">
-                      {{ call.status }}
-                    </span>
+                    <app-badge
+                      [tone]="voiceCallPresentation(call.status).tone"
+                    >
+                      @if (voiceCallPresentation(call.status).live) {
+                        <span class="live-dot" aria-hidden="true"></span>
+                      }
+                      {{ voiceCallPresentation(call.status).label }}
+                    </app-badge>
                   </td>
                   <td>
                     <span class="direction" [class.direction--in]="call.direction === 'INBOUND'">
@@ -180,6 +203,21 @@ import {
               <small class="field__error">Introduce un número en formato E.164.</small>
             }
           </label>
+
+          @if (startForm.controls.provider.value === 'RETELL') {
+            <label class="field">
+              <span class="field__label">Campaña (config de voz)</span>
+              <select formControlName="campaignId">
+                <option value="">Sin campaña (config por defecto)</option>
+                @for (c of voiceCampaigns(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+              <small class="muted hint">
+                Usa el prompt configurado en la campaña seleccionada.
+              </small>
+            </label>
+          }
 
           <p class="muted hint">
             La llamada se inicia contra el proveedor seleccionado. Si no está
@@ -348,9 +386,12 @@ import {
 
               <dt>Estado</dt>
               <dd>
-                <span class="badge" [class]="statusBadgeClass(call.status)">
-                  {{ call.status }}
-                </span>
+                <app-badge [tone]="voiceCallPresentation(call.status).tone">
+                  @if (voiceCallPresentation(call.status).live) {
+                    <span class="live-dot" aria-hidden="true"></span>
+                  }
+                  {{ voiceCallPresentation(call.status).label }}
+                </app-badge>
               </dd>
 
               <dt>Dirección</dt>
@@ -390,9 +431,33 @@ import {
             @if (call.recordingUrl) {
               <div class="detail-section">
                 <h4>Grabación</h4>
-                <a [href]="call.recordingUrl" target="_blank" rel="noopener">
-                  {{ call.recordingUrl }}
-                </a>
+                <div class="player">
+                  <div
+                    class="player__equalizer"
+                    [class.player__equalizer--playing]="playing()"
+                    aria-hidden="true"
+                  >
+                    @for (bar of equalizerBars; track $index) {
+                      <span
+                        class="player__bar"
+                        [style.--bar-delay]="bar"
+                      ></span>
+                    }
+                  </div>
+                  <audio
+                    controls
+                    preload="metadata"
+                    [src]="call.recordingUrl"
+                    (play)="playing.set(true)"
+                    (pause)="playing.set(false)"
+                    (ended)="playing.set(false)"
+                  ></audio>
+                </div>
+              </div>
+            } @else {
+              <div class="detail-section">
+                <h4>Grabación</h4>
+                <span class="muted">Sin grabación</span>
               </div>
             }
 
@@ -489,34 +554,55 @@ import {
         color: var(--color-primary);
       }
 
-      /* Status badges */
-      .badge--scheduled {
-        background: var(--color-info-bg);
-        color: var(--color-info);
+      /* Live dot */
+      .live-dot {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        margin-right: 0.375rem;
+        border-radius: var(--radius-full);
+        background: currentColor;
+        animation: live-pulse 1.6s ease-in-out infinite;
       }
-      .badge--ringing {
-        background: #fef3c7;
-        color: var(--color-warning);
+      @keyframes live-pulse {
+        50% {
+          opacity: 0.35;
+          transform: scale(0.7);
+        }
       }
-      .badge--in-progress {
-        background: var(--color-success-bg);
-        color: var(--color-success);
+
+      /* Audio player + equalizer */
+      .player {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-2);
+        max-width: 420px;
       }
-      .badge--forwarding {
-        background: var(--color-info-bg);
-        color: var(--color-info);
+      .player__equalizer {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        height: 22px;
       }
-      .badge--ended {
-        background: var(--color-bg-alt);
-        color: var(--color-text-muted);
+      .player__bar {
+        width: 3px;
+        height: 6px;
+        background: var(--color-primary);
       }
-      .badge--failed {
-        background: var(--color-error-bg);
-        color: var(--color-error);
+      .player__equalizer--playing .player__bar {
+        animation: equalizer-bounce 0.9s ease-in-out infinite;
+        animation-delay: var(--bar-delay, 0s);
       }
-      .badge--no-answer {
-        background: #ffedd5;
-        color: #c2410c;
+      @keyframes equalizer-bounce {
+        50% {
+          height: 20px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .live-dot,
+        .player__equalizer--playing .player__bar {
+          animation: none;
+        }
       }
 
       /* Dialog */
@@ -666,6 +752,7 @@ import {
 })
 export class VoiceCallsComponent implements OnInit {
   private readonly api = inject(VoiceApi);
+  private readonly campaignApi = inject(CampaignApi);
   private readonly fb = inject(FormBuilder);
   private readonly errors = inject(ErrorService);
 
@@ -675,6 +762,21 @@ export class VoiceCallsComponent implements OnInit {
   protected readonly logging = signal(false);
   protected readonly selected = signal<VoiceCall | null>(null);
   protected readonly providerHint = signal(false);
+  protected readonly playing = signal(false);
+  protected readonly pollingActive = signal(false);
+  protected readonly voiceCampaigns = signal<CampaignResponse[]>([]);
+  protected readonly hasLiveCalls = computed(() =>
+    this.calls().some((call) => isLiveStatus(call.status))
+  );
+  protected readonly equalizerBars = [
+    '0s',
+    '-0.2s',
+    '-0.4s',
+    '-0.6s',
+    '-0.8s',
+    '-0.3s',
+    '-0.5s'
+  ];
 
   protected readonly startForm = this.fb.nonNullable.group({
     provider: this.fb.nonNullable.control<VoiceProviderType | ''>('', [
@@ -683,7 +785,8 @@ export class VoiceCallsComponent implements OnInit {
     phoneNumber: this.fb.nonNullable.control('', [
       Validators.required,
       Validators.pattern(/^\+?[1-9]\d{6,14}$/)
-    ])
+    ]),
+    campaignId: this.fb.nonNullable.control('')
   });
 
   protected readonly manualForm = this.fb.nonNullable.group({
@@ -711,8 +814,24 @@ export class VoiceCallsComponent implements OnInit {
   @ViewChild('detailDialog', { static: true })
   private readonly detailDialogRef!: ElementRef<HTMLDialogElement>;
 
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  private readonly onVisibilityChange = (): void => {
+    if (document.visibilityState === 'hidden') {
+      this.stopPolling();
+    } else {
+      this.syncPolling();
+    }
+  };
+
   ngOnInit(): void {
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.fetch();
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
   protected reload(): void {
@@ -720,29 +839,15 @@ export class VoiceCallsComponent implements OnInit {
   }
 
   protected selectCall(call: VoiceCall): void {
+    this.playing.set(false);
     this.selected.set(call);
     this.detailDialogRef.nativeElement.showModal();
   }
 
-  protected statusBadgeClass(status: VoiceCallStatus): string {
-    switch (status) {
-      case 'SCHEDULED':
-        return 'badge--scheduled';
-      case 'RINGING':
-        return 'badge--ringing';
-      case 'IN_PROGRESS':
-        return 'badge--in-progress';
-      case 'FORWARDING':
-        return 'badge--forwarding';
-      case 'ENDED':
-        return 'badge--ended';
-      case 'FAILED':
-        return 'badge--failed';
-      case 'NO_ANSWER':
-        return 'badge--no-answer';
-      default:
-        return '';
-    }
+  protected voiceCallPresentation(
+    status: VoiceCallStatus
+  ): VoiceCallStatusPresentation {
+    return voiceCallStatusPresentation(status);
   }
 
   protected formatDate(value: string | null): string {
@@ -792,8 +897,21 @@ export class VoiceCallsComponent implements OnInit {
   /* --- Start dialog --- */
 
   protected openStartDialog(): void {
-    this.startForm.reset({ provider: '' as VoiceProviderType | '', phoneNumber: '' });
+    this.startForm.reset({
+      provider: '' as VoiceProviderType | '',
+      phoneNumber: '',
+      campaignId: ''
+    });
     this.startDialogRef.nativeElement.showModal();
+    // Solo campañas con voz configurada: el filtrado lo hace el backend
+    // (hasVoiceConfig=true); el listado está paginado, no se filtra en cliente.
+    this.campaignApi.list({ hasVoiceConfig: true, size: 100 }).subscribe({
+      next: (page) => this.voiceCampaigns.set(page.content),
+      error: () => {
+        // errorInterceptor ya muestra el toast.
+        this.voiceCampaigns.set([]);
+      }
+    });
   }
 
   protected closeStartDialog(): void {
@@ -820,8 +938,9 @@ export class VoiceCallsComponent implements OnInit {
     }
     const raw = this.startForm.getRawValue();
     const provider = raw.provider as VoiceProviderType;
+    const campaignId = raw.campaignId || undefined;
     this.starting.set(true);
-    this.api.startCall(provider, raw.phoneNumber).subscribe({
+    this.api.startCall(provider, raw.phoneNumber, campaignId).subscribe({
       next: (call) => {
         this.starting.set(false);
         this.providerHint.set(false);
@@ -913,7 +1032,7 @@ export class VoiceCallsComponent implements OnInit {
     this.selected.set(null);
   }
 
-  /* --- Fetch --- */
+  /* --- Fetch & live polling --- */
 
   private fetch(): void {
     this.loading.set(true);
@@ -921,11 +1040,39 @@ export class VoiceCallsComponent implements OnInit {
       next: (list) => {
         this.calls.set(list);
         this.loading.set(false);
+        this.syncPolling();
       },
       error: () => {
         // errorInterceptor ya muestra el toast.
         this.loading.set(false);
+        this.syncPolling();
       }
     });
+  }
+
+  private syncPolling(): void {
+    if (!this.hasLiveCalls() || document.visibilityState === 'hidden') {
+      this.stopPolling();
+      return;
+    }
+    if (this.pollTimer === null) {
+      this.pollTimer = setInterval(() => this.pollTick(), POLL_INTERVAL_MS);
+    }
+    this.pollingActive.set(true);
+  }
+
+  private pollTick(): void {
+    if (this.loading()) {
+      return;
+    }
+    this.fetch();
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer !== null) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    this.pollingActive.set(false);
   }
 }

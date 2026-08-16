@@ -91,13 +91,14 @@ public class VoiceController {
     public ResponseEntity<VoiceCallDto> startCall(
         @RequestParam VoiceProviderType provider,
         @RequestParam String phoneNumber,
+        @RequestParam(required = false) UUID campaignId,
         Authentication auth
     ) {
         UUID userId = resolveUserId(auth.getName());
         if (userId == null) return ResponseEntity.status(403).build();
 
-        var req = new VoiceProvider.StartCallRequest(phoneNumber, null, Map.of());
-        VoiceCall call = service.placeCall(provider, req, userId);
+        var req = new VoiceProvider.StartCallRequest(phoneNumber, null, Map.of(), null);
+        VoiceCall call = service.placeCall(provider, req, userId, campaignId);
         return ResponseEntity.ok(VoiceCallDto.from(call));
     }
 

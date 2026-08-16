@@ -1,17 +1,9 @@
 package com.callsagents.backend.campaigns.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-import java.time.Instant;
-
-public record CreateCampaignRequest(
-    @NotBlank @Size(max = 255) String name,
-    @Size(max = 4096) String description,
-    Instant startAt,
-    Instant endAt,
-    @Size(max = 65535) String script,
+public record VoicePromptPreviewRequest(
     @Size(max = 255) String company,
     @Size(max = 255)
     @Pattern(regexp = VoiceConfigConstraints.WEBSITE_URL_PATTERN, message = VoiceConfigConstraints.WEBSITE_URL_MESSAGE)

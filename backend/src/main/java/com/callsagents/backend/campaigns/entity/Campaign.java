@@ -54,6 +54,21 @@ public class Campaign {
     @Column(name = "script", columnDefinition = "text")
     private String script;
 
+    @Column(name = "company", length = 255)
+    private String company;
+
+    @Column(name = "website", length = 255)
+    private String website;
+
+    @Column(name = "industry", length = 255)
+    private String industry;
+
+    @Column(name = "services", columnDefinition = "text")
+    private String services;
+
+    @Column(name = "tone", length = 255)
+    private String tone;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 

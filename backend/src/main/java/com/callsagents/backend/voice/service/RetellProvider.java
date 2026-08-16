@@ -2,6 +2,7 @@ package com.callsagents.backend.voice.service;
 
 import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import com.callsagents.backend.voice.domain.VoiceProviderType;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -17,6 +18,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -55,22 +59,21 @@ public class RetellProvider implements VoiceProvider {
             throw new IllegalStateException(
                 "Retell is not configured. Set RETELL_API_KEY in .env.");
         }
-        String agentId = (req.assistantId() != null && !req.assistantId().isBlank())
-            ? req.assistantId()
-            : defaultAgentId;
+        String agentId = resolveAgentId(req);
         String fromNumber = defaultFromNumber;
         if (agentId == null || agentId.isBlank() || fromNumber == null || fromNumber.isBlank()) {
+            List<String> missing = new ArrayList<>();
+            if (agentId == null || agentId.isBlank()) {
+                missing.add("RETELL_AGENT_ID");
+            }
+            if (fromNumber == null || fromNumber.isBlank()) {
+                missing.add("RETELL_FROM_NUMBER");
+            }
             throw new IllegalStateException(
-                "Retell requires RETELL_AGENT_ID and RETELL_FROM_NUMBER env vars.");
+                "Retell not fully configured. Missing env var(s): " + String.join(", ", missing));
         }
         try {
-            Map<String, Object> body = Map.of(
-                "from_number", fromNumber,
-                "to_number", req.phoneNumber(),
-                "override_agent_id", agentId,
-                "metadata", req.metadata() != null ? req.metadata() : Map.of()
-            );
-            String json = mapper.writeValueAsString(body);
+            String json = buildBodyJson(req);
             HttpRequest httpReq = HttpRequest.newBuilder()
                 .uri(URI.create(BASE + "/v2/create-phone-call"))
                 .header("Authorization", "Bearer " + apiKey)
@@ -92,6 +95,33 @@ public class RetellProvider implements VoiceProvider {
         } catch (Exception e) {
             throw new RuntimeException("Retell startCall error: " + e.getMessage(), e);
         }
+    }
+
+    private String resolveAgentId(StartCallRequest req) {
+        return (req.assistantId() != null && !req.assistantId().isBlank())
+            ? req.assistantId()
+            : defaultAgentId;
+    }
+
+    /**
+     * Request body for create-phone-call with a stable key order:
+     * from_number, to_number, override_agent_id, metadata and, only when
+     * non-empty, retell_llm_dynamic_variables (FR-2).
+     */
+    Map<String, Object> buildBody(StartCallRequest req) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("from_number", defaultFromNumber);
+        body.put("to_number", req.phoneNumber());
+        body.put("override_agent_id", resolveAgentId(req));
+        body.put("metadata", req.metadata() != null ? req.metadata() : Map.of());
+        if (req.dynamicVariables() != null && !req.dynamicVariables().isEmpty()) {
+            body.put("retell_llm_dynamic_variables", req.dynamicVariables());
+        }
+        return body;
+    }
+
+    String buildBodyJson(StartCallRequest req) throws JsonProcessingException {
+        return mapper.writeValueAsString(buildBody(req));
     }
 
     @Override

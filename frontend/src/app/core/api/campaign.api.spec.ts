@@ -9,7 +9,9 @@ import { apiUrl } from './api-base';
 import { PageResponse } from './http.types';
 import {
   CampaignResponse,
-  UpdateCampaignRequest
+  UpdateCampaignRequest,
+  VoicePromptPreviewRequest,
+  VoicePromptPreviewResponse
 } from '../../shared/models/campaign.model';
 
 describe('CampaignApi', () => {
@@ -26,7 +28,12 @@ describe('CampaignApi', () => {
     script: null,
     createdBy: null,
     createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z'
+    updatedAt: '2026-01-01T00:00:00Z',
+    company: null,
+    website: null,
+    industry: null,
+    services: null,
+    tone: null
   });
 
   const page = (content: CampaignResponse[]): PageResponse<CampaignResponse> => ({
@@ -110,5 +117,45 @@ describe('CampaignApi', () => {
     );
     expect(req.request.method).toBe('POST');
     req.flush(campaign('4'));
+  });
+
+  it('list() envía hasVoiceConfig=true y size cuando el filtro lo pide', () => {
+    api.list({ hasVoiceConfig: true, size: 100 }).subscribe();
+
+    const req = http.expectOne(
+      (r) =>
+        r.method === 'GET' &&
+        r.url === apiUrl('/campaigns') &&
+        r.params.get('hasVoiceConfig') === 'true' &&
+        r.params.get('size') === '100'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush(page([campaign('1')]));
+  });
+
+  it('list() omite hasVoiceConfig cuando el filtro no lo define', () => {
+    api.list().subscribe();
+
+    const req = http.expectOne(
+      (r) => r.method === 'GET' && r.url === apiUrl('/campaigns')
+    );
+    expect(req.request.params.get('hasVoiceConfig')).toBeNull();
+    req.flush(page([]));
+  });
+
+  it('previewVoicePrompt() hace POST /campaigns/voice-prompt/preview con el body', () => {
+    let received: VoicePromptPreviewResponse | undefined;
+    const reqBody: VoicePromptPreviewRequest = { company: 'Acme', tone: 'cercano' };
+
+    api.previewVoicePrompt(reqBody).subscribe((res) => (received = res));
+
+    const req = http.expectOne(
+      (r) =>
+        r.method === 'POST' && r.url === apiUrl('/campaigns/voice-prompt/preview')
+    );
+    expect(req.request.body).toEqual(reqBody);
+    req.flush({ prompt: 'Eres el asistente virtual de Acme...' });
+
+    expect(received?.prompt).toContain('Acme');
   });
 });

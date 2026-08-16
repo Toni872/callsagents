@@ -37,7 +37,8 @@ public interface VoiceProvider {
     record StartCallRequest(
         String phoneNumber,
         String assistantId,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        Map<String, Object> dynamicVariables
     ) {}
 
     record StartCallResult(

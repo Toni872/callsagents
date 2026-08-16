@@ -1,5 +1,10 @@
 package com.callsagents.backend.voice.service;
 
+import com.callsagents.backend.campaigns.entity.Campaign;
+import com.callsagents.backend.campaigns.repository.CampaignRepository;
+import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ResourceNotFoundException;
+import com.callsagents.backend.voice.domain.CampaignVoiceConfig;
 import com.callsagents.backend.voice.domain.VoiceCall;
 import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import com.callsagents.backend.voice.domain.VoiceProviderType;
@@ -11,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,10 +33,15 @@ public class VoiceCallService {
 
     private final VoiceCallRepository repo;
     private final List<VoiceProvider> providers;
+    private final CampaignRepository campaignRepository;
+    private final PromptComposer promptComposer;
 
-    public VoiceCallService(VoiceCallRepository repo, List<VoiceProvider> providers) {
+    public VoiceCallService(VoiceCallRepository repo, List<VoiceProvider> providers,
+                            CampaignRepository campaignRepository, PromptComposer promptComposer) {
         this.repo = repo;
         this.providers = providers;
+        this.campaignRepository = campaignRepository;
+        this.promptComposer = promptComposer;
     }
 
     public VoiceProvider providerOf(VoiceProviderType type) {
@@ -41,15 +52,37 @@ public class VoiceCallService {
                 "No provider bean registered for " + type));
     }
 
-    /** Initiate an outbound call through the given provider. */
+    /**
+     * Initiate an outbound call through the given provider.
+     *
+     * <p>When a {@code campaignId} is supplied, the campaign's voice
+     * configuration applies (Retell-only, FR-2/FR-3): dynamic variables are
+     * resolved through the PromptComposer (NFR-4: any failure degrades to an
+     * empty variables map plus a WARN log) and the campaignId is merged into
+     * the metadata sent to the provider and persisted.
+     */
     @Transactional
-    public VoiceCall placeCall(VoiceProviderType type, VoiceProvider.StartCallRequest req, UUID userId) {
+    public VoiceCall placeCall(VoiceProviderType type, VoiceProvider.StartCallRequest req,
+                               UUID userId, UUID campaignId) {
         var provider = providerOf(type);
         if (!provider.isConfigured()) {
             throw new IllegalStateException(
                 "Provider " + type + " is not configured. Set the appropriate env vars.");
         }
-        var result = provider.startCall(req);
+        Map<String, Object> dynamicVariables = null;
+        if (campaignId != null) {
+            Campaign campaign = campaignRepository.findById(campaignId)
+                .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + campaignId));
+            if (type == VoiceProviderType.VAPI) {
+                throw new BadRequestException(
+                    "Voice configuration is only supported for the RETELL provider");
+            }
+            dynamicVariables = new LinkedHashMap<>(safeBuildVariables(campaign));
+        }
+        var effectiveReq = new VoiceProvider.StartCallRequest(
+            req.phoneNumber(), req.assistantId(),
+            mergedMetadata(req.metadata(), campaignId), dynamicVariables);
+        var result = provider.startCall(effectiveReq);
 
         VoiceCall call = VoiceCall.builder()
             .userId(userId)
@@ -58,9 +91,39 @@ public class VoiceCallService {
             .phoneNumber(req.phoneNumber())
             .status(result.initialStatus() != null ? result.initialStatus() : VoiceCallStatus.SCHEDULED)
             .direction("OUTBOUND")
-            .metadata(req.metadata())
+            .metadata(effectiveReq.metadata())
             .build();
         return repo.save(call);
+    }
+
+    private Map<String, Object> mergedMetadata(Map<String, Object> metadata, UUID campaignId) {
+        if (campaignId == null) {
+            return metadata;
+        }
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (metadata != null) {
+            merged.putAll(metadata);
+        }
+        merged.put("campaignId", campaignId.toString());
+        return merged;
+    }
+
+    private Map<String, String> safeBuildVariables(Campaign campaign) {
+        try {
+            return promptComposer.buildVariables(voiceConfigOf(campaign));
+        } catch (RuntimeException e) {
+            log.warn("Failed to build campaign prompt variables; placing call without them: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private static CampaignVoiceConfig voiceConfigOf(Campaign campaign) {
+        return new CampaignVoiceConfig(
+            campaign.getCompany(),
+            campaign.getWebsite(),
+            campaign.getIndustry(),
+            campaign.getServices(),
+            campaign.getTone());
     }
 
     /** Manually log a call (no provider, no external system). */

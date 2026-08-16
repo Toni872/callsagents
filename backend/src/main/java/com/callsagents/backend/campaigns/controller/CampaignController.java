@@ -6,6 +6,8 @@ import com.callsagents.backend.campaigns.dto.CampaignFilter;
 import com.callsagents.backend.campaigns.dto.CampaignResponse;
 import com.callsagents.backend.campaigns.dto.CreateCampaignRequest;
 import com.callsagents.backend.campaigns.dto.UpdateCampaignRequest;
+import com.callsagents.backend.campaigns.dto.VoicePromptPreviewRequest;
+import com.callsagents.backend.campaigns.dto.VoicePromptPreviewResponse;
 import com.callsagents.backend.campaigns.entity.CampaignStatus;
 import com.callsagents.backend.campaigns.service.CampaignService;
 import com.callsagents.backend.common.dto.PageResponse;
@@ -53,12 +55,13 @@ public class CampaignController {
     public ResponseEntity<PageResponse<CampaignResponse>> findAll(
         @RequestParam(required = false) CampaignStatus status,
         @RequestParam(required = false) UUID createdById,
+        @RequestParam(required = false) Boolean hasVoiceConfig,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
         @RequestParam(defaultValue = "createdAt,desc") String sort
     ) {
         Pageable pageable = buildPageable(page, size, sort);
-        CampaignFilter filter = new CampaignFilter(status, createdById);
+        CampaignFilter filter = new CampaignFilter(status, createdById, hasVoiceConfig);
         return ResponseEntity.ok(campaignService.findAll(filter, pageable));
     }
 
@@ -90,6 +93,15 @@ public class CampaignController {
     ) {
         UUID userId = resolveUserId(user);
         return ResponseEntity.ok(campaignService.update(id, req, userId));
+    }
+
+    @Operation(summary = "Previsualizar el prompt de voz de la campaña (solo ADMIN)")
+    @PostMapping("/voice-prompt/preview")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<VoicePromptPreviewResponse> previewVoicePrompt(
+        @Valid @RequestBody VoicePromptPreviewRequest req
+    ) {
+        return ResponseEntity.ok(campaignService.previewVoicePrompt(req));
     }
 
     @Operation(summary = "Lanzar campaña (solo ADMIN)")

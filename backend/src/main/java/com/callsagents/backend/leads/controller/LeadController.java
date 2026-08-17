@@ -4,6 +4,7 @@ import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import com.callsagents.backend.common.util.PaginationUtils;
 import com.callsagents.backend.leads.dto.CreateLeadRequest;
 import com.callsagents.backend.leads.dto.ImportResultDto;
 import com.callsagents.backend.leads.dto.LeadFilter;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URI;
+import java.util.Set;
 import java.util.UUID;
 
 @Tag(name = "Leads", description = "Gestión de leads: alta, importación CSV, filtros, asignación")
@@ -120,23 +122,12 @@ public class LeadController {
         return ResponseEntity.status(HttpStatus.CREATED).body(leadService.importCsv(file, userId));
     }
 
-    private Pageable buildPageable(int page, int size, String sort) {
-        int safePage = Math.max(0, page);
-        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-        Sort sortSpec = parseSort(sort);
-        return PageRequest.of(safePage, safeSize, sortSpec);
-    }
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+        "createdAt", "updatedAt", "firstName", "lastName", "email", "status", "source", "company"
+    );
 
-    private Sort parseSort(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return Sort.by(Sort.Direction.DESC, "createdAt");
-        }
-        String[] parts = raw.split(",");
-        String field = parts[0].trim();
-        Sort.Direction direction = (parts.length > 1 && parts[1].trim().equalsIgnoreCase("asc"))
-            ? Sort.Direction.ASC
-            : Sort.Direction.DESC;
-        return Sort.by(direction, field);
+    private Pageable buildPageable(int page, int size, String sort) {
+        return PaginationUtils.buildPageable(page, size, sort, "createdAt", Sort.Direction.DESC, ALLOWED_SORT_FIELDS);
     }
 
     private UUID resolveUserId(UserDetails user) {

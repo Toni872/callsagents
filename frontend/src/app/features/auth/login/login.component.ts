@@ -71,9 +71,6 @@ import { AuthService } from '../../../core/auth/auth.service';
         background: linear-gradient(135deg, #003d26 0%, #0f172a 100%);
         padding: var(--spacing-4);
       }
-      [data-theme="light"] .login-page {
-        background: linear-gradient(135deg, #007a4d 0%, #1e293b 100%);
-      }
       .login-card {
         width: 100%;
         max-width: 380px;

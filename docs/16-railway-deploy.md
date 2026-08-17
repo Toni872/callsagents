@@ -45,7 +45,7 @@ VAPI_PHONE_NUMBER_ID=<your-vapi-phone-id>
    - `SPRING_DATASOURCE_PASSWORD=${Postgres.PGPASSWORD}`
    - `SPRING_DATA_REDIS_URL=${Redis.REDIS_URL}`
 
-7. **Deploy** (click the deploy button). The backend should now start successfully, run Flyway V1–V6 migrations, and bind to port 8080.
+7. **Deploy** (click the deploy button). The backend should now start successfully, run Flyway V1–V7 migrations, and bind to port 8080.
 
 8. **Generate a public domain** for the backend:
    - In the backend service settings, click **Generate Domain**

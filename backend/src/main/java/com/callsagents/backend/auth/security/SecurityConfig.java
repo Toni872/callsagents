@@ -51,6 +51,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
                 auth.requestMatchers("/auth/login", "/auth/refresh").permitAll();
+                auth.requestMatchers("/health").permitAll();
                 auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
                 // Webhooks de providers de voz (Vapi, Retell). Sin auth en la capa
                 // de seguridad a propósito: el handler verifica la firma del provider

@@ -1,7 +1,6 @@
 import { ApplicationConfig, APP_INITIALIZER, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { provideAnimations } from '@angular/platform-browser/animations';
 import { routes } from './app.routes';
 import { errorInterceptor } from './core/errors/error.interceptor';
 import { loadingInterceptor } from './core/loading/loading.interceptor';
@@ -30,7 +29,6 @@ export const appConfig: ApplicationConfig = {
         tokenRefreshInterceptor
       ])
     ),
-    provideAnimations(),
     {
       provide: APP_INITIALIZER,
       useFactory: (auth: AuthService) => () => auth.initFromStorage(),

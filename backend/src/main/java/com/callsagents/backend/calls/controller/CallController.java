@@ -13,6 +13,7 @@ import com.callsagents.backend.calls.service.CallService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import com.callsagents.backend.common.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.Set;
 import java.util.UUID;
 
 @Tag(name = "Calls", description = "Registro y consulta de llamadas (outbound)")
@@ -100,23 +102,12 @@ public class CallController {
         return ResponseEntity.ok(callService.update(id, req, current.getId(), current.getRole()));
     }
 
-    private Pageable buildPageable(int page, int size, String sort) {
-        int safePage = Math.max(0, page);
-        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-        Sort sortSpec = parseSort(sort);
-        return PageRequest.of(safePage, safeSize, sortSpec);
-    }
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+        "createdAt", "startedAt", "endedAt", "status", "outcome", "durationSeconds"
+    );
 
-    private Sort parseSort(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return Sort.by(Sort.Direction.DESC, "createdAt");
-        }
-        String[] parts = raw.split(",");
-        String field = parts[0].trim();
-        Sort.Direction direction = (parts.length > 1 && parts[1].trim().equalsIgnoreCase("asc"))
-            ? Sort.Direction.ASC
-            : Sort.Direction.DESC;
-        return Sort.by(direction, field);
+    private Pageable buildPageable(int page, int size, String sort) {
+        return PaginationUtils.buildPageable(page, size, sort, "createdAt", Sort.Direction.DESC, ALLOWED_SORT_FIELDS);
     }
 
     private User resolveUser(UserDetails user) {

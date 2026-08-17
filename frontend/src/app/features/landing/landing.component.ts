@@ -4,12 +4,11 @@ import {
   Component,
   ElementRef,
   inject,
-  NgZone,
   OnDestroy,
-  ViewChild
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FooterComponent } from '../../core/layout/footer/footer.component';
+import { PhoneMockupComponent } from './phone-mockup/phone-mockup.component';
 
 /* ------------------------------------------------------------------
    Prototipo visual — landing "wow" tipo codex.io.
@@ -17,38 +16,24 @@ import { FooterComponent } from '../../core/layout/footer/footer.component';
    el app-footer reutilizado) use la paleta dark del design system.
    ------------------------------------------------------------------ */
 
-interface OrbParticle {
-  angle: number;
-  radius: number;
-  speed: number;
-  drift: number;
-  size: number;
-  baseAlpha: number;
-  phase: number;
-}
-
 interface LandingStep {
   number: string;
   title: string;
   text: string;
 }
 
+interface FaqItem {
+  q: string;
+  a: string;
+}
+
 const ORB_GREEN = '0,168,107';
-const SPEAK_MS = 6000;
-const LISTEN_MS = 3000;
-const RING_COUNT = 3;
-const RING_BASES = [0.5, 0.64, 0.78];
-const RING_AMPS = [0.035, 0.05, 0.065];
-const RING_ALPHAS = [0.25, 0.4, 0.6];
-const RING_SPEEDS = [0.9, 1.15, 1.4];
-const RING_PHASES = [0, 1.2, 2.4];
-const PARTICLE_COUNT = 42;
 
 @Component({
   selector: 'app-landing',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, FooterComponent],
+  imports: [RouterLink, FooterComponent, PhoneMockupComponent],
   host: { 'data-theme': 'dark' },
   template: `
     <nav class="lnd-nav">
@@ -64,7 +49,7 @@ const PARTICLE_COUNT = 42;
           <a href="#como-funciona" (click)="onAnchor($event, '#como-funciona')"
             >Cómo funciona</a
           >
-          <a href="#demo" (click)="onAnchor($event, '#demo')">Demo</a>
+          <a href="#faq" (click)="onAnchor($event, '#faq')">FAQ</a>
         </div>
 
         <a class="lnd-btn lnd-btn--ghost" routerLink="/login">Entrar</a>
@@ -76,47 +61,46 @@ const PARTICLE_COUNT = 42;
         <div class="lnd-hero-copy">
           <span class="lnd-badge">
             <span class="lnd-badge-dot" aria-hidden="true"></span>
-            Agentes de voz y chat con IA
+            Atención automática para tu centro
           </span>
 
           <h1 class="lnd-hero-title">
             <span class="lnd-line"
-              ><span class="lnd-line-inner">Tu negocio no duerme.</span></span
+              ><span class="lnd-line-inner">Tu centro responde</span></span
             >
             <span class="lnd-line"
-              ><span class="lnd-line-inner">Tus <span class="lnd-accent">agentes, tampoco.</span></span
+              ><span class="lnd-line-inner">cuando <span class="lnd-accent">ya es tarde.</span></span
               ></span
             >
           </h1>
 
           <p class="lnd-hero-sub">
-            Agentes de voz y chat que llaman, cualifican y agendan por ti — 24/7, en español
-            nativo.
+            CallsAgents atiende cada solicitud en menos de un minuto, cualifica al alumno
+            y agenda la cita — sin que tu equipo deje de hacer lo que mejor sabe hacer.
           </p>
 
           <div class="lnd-hero-ctas">
-            <a class="lnd-btn lnd-btn--primary" routerLink="/login">Probar demo gratis</a>
-            <a class="lnd-btn lnd-btn--outline" routerLink="/login">Ver panel de control</a>
+            <a class="lnd-btn lnd-btn--primary lnd-btn--hero" routerLink="/login">Probar demo</a>
           </div>
 
           <div class="lnd-stats">
             <div class="lnd-stat">
+              <div class="lnd-stat-num">&lt;1 min</div>
+              <div class="lnd-stat-label">respuesta media</div>
+            </div>
+            <div class="lnd-stat">
               <div class="lnd-stat-num">24/7</div>
-              <div class="lnd-stat-label">llamadas automáticas</div>
+              <div class="lnd-stat-label">disponibilidad</div>
             </div>
             <div class="lnd-stat">
-              <div class="lnd-stat-num">+40%</div>
-              <div class="lnd-stat-label">tasa de conexión</div>
-            </div>
-            <div class="lnd-stat">
-              <div class="lnd-stat-num">10x</div>
-              <div class="lnd-stat-label">menos coste por lead</div>
+              <div class="lnd-stat-num">0</div>
+              <div class="lnd-stat-label">alumnos perdidos por demora</div>
             </div>
           </div>
         </div>
 
-        <div class="lnd-orb" aria-hidden="true">
-          <canvas #voiceOrb class="lnd-orb-canvas"></canvas>
+        <div class="lnd-hero-visual">
+          <app-phone-mockup></app-phone-mockup>
         </div>
       </div>
     </header>
@@ -124,7 +108,7 @@ const PARTICLE_COUNT = 42;
     <section class="lnd-section" id="como-funciona">
       <div class="lnd-container">
         <h2 class="lnd-section-title">Cómo funciona</h2>
-        <p class="lnd-section-sub">De tus guiones a citas agendadas, sin que suene un teléfono humano.</p>
+        <p class="lnd-section-sub">De solicitud a cita en tu calendario, sin intervención manual.</p>
 
         <div class="lnd-grid">
           @for (step of steps; track step.number) {
@@ -138,11 +122,27 @@ const PARTICLE_COUNT = 42;
       </div>
     </section>
 
+    <section class="lnd-section" id="faq">
+      <div class="lnd-container">
+        <h2 class="lnd-section-title">Preguntas frecuentes</h2>
+        <p class="lnd-section-sub">Resolvemos tus dudas antes de que las tengas.</p>
+
+        <div class="lnd-grid">
+          @for (item of faqs; track item.q) {
+            <article class="lnd-card">
+              <h3 class="lnd-card-title">{{ item.q }}</h3>
+              <p class="lnd-card-text">{{ item.a }}</p>
+            </article>
+          }
+        </div>
+      </div>
+    </section>
+
     <section class="lnd-cta" id="demo">
       <div class="lnd-container lnd-cta-inner">
-        <h2 class="lnd-cta-title">¿Listo para vender 24/7?</h2>
-        <p class="lnd-cta-sub">Tu equipo descansa. Tus agentes, no.</p>
-        <a class="lnd-btn lnd-btn--primary lnd-btn--lg" routerLink="/login">Probar demo gratis</a>
+        <h2 class="lnd-cta-title">¿Listo para que tu centro responda en menos de un minuto?</h2>
+        <p class="lnd-cta-sub">Empieza gratis. Sin tarjeta. Sin compromiso.</p>
+        <a class="lnd-btn lnd-btn--primary lnd-btn--lg lnd-btn--hero" routerLink="/login">Probar demo</a>
       </div>
     </section>
 
@@ -264,6 +264,17 @@ const PARTICLE_COUNT = 42;
       .lnd-btn--primary:hover {
         background: var(--color-primary-hover);
         box-shadow: 0 8px 28px color-mix(in srgb, var(--color-primary) 30%, transparent);
+      }
+
+      .lnd-btn--hero {
+        padding: 1rem 2.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        border-radius: var(--radius-full);
+      }
+
+      .lnd-btn--hero:hover {
+        transform: translateY(-2px);
       }
 
       .lnd-btn--outline {
@@ -418,19 +429,17 @@ const PARTICLE_COUNT = 42;
         font-size: 0.85rem;
       }
 
-      /* ─── Voice orb ───────────────────────────────────── */
-      .lnd-orb {
+      /* ─── Hero visual (phone mockup) ─────────────────── */
+      .lnd-hero-visual {
         width: 100%;
-        max-width: 420px;
-        aspect-ratio: 1 / 1;
+        max-width: 320px;
         margin-inline: auto;
         pointer-events: none;
       }
 
-      .lnd-orb-canvas {
+      .lnd-hero-visual app-phone-mockup {
         display: block;
         width: 100%;
-        height: 100%;
       }
 
       /* ─── Sections ────────────────────────────────────── */
@@ -617,45 +626,60 @@ const PARTICLE_COUNT = 42;
 })
 export class LandingComponent implements AfterViewInit, OnDestroy {
   private readonly el = inject(ElementRef<HTMLElement>);
-  private readonly ngZone = inject(NgZone);
-
-  @ViewChild('voiceOrb') private readonly orbCanvas?: ElementRef<HTMLCanvasElement>;
+  private textRevealObserver: IntersectionObserver | null = null;
 
   protected readonly steps: LandingStep[] = [
     {
       number: '01',
-      title: 'Sube tus guiones',
-      text: 'El agente lee tu tono, tu oferta y tus objeciones. Solo copia y pega lo que ya les dices a tus clientes.'
+      title: 'El alumno te escribe',
+      text: 'Rellena tu formulario o te contacta. CallsAgents le responde en menos de un minuto, con su nombre y los datos de su solicitud.'
     },
     {
       number: '02',
-      title: 'Lanza la campaña',
-      text: 'Callsagents llama a tu base de leads por ti, en paralelo y 24/7, hablando en español nativo.'
+      title: 'Se hace la pregunta correcta',
+      text: 'Pregunta qué quiere estudiar, cuándo quiere empezar y si necesita información sobre precios, requisitos o horarios.'
     },
     {
       number: '03',
-      title: 'Recibe citas y leads',
-      text: 'Cada conversación queda transcrita y los resultados llegan a tu panel en tiempo real.'
+      title: 'Cita en tu calendario',
+      text: 'Si hay interés, reserva la cita con el asesor. Si no responde, le llama automáticamente al día siguiente.'
     }
   ];
 
-  private particles: OrbParticle[] = [];
-  private orbSize = 420;
-  private animationFrame = 0;
-  private resizeObserver?: ResizeObserver;
+  protected readonly faqs = [
+    {
+      q: '¿Necesito saber programar?',
+      a: 'No. Lo configuramos en 15 minutos con tu formulario y tu calendario.'
+    },
+    {
+      q: '¿Funciona con mi web actual?',
+      a: 'Sí. Se conecta con tu formulario existente, sin tocar nada en tu web.'
+    },
+    {
+      q: '¿Y si el alumno no responde al chat?',
+      a: 'CallsAgents le llama al día siguiente para recuperar el contacto. No se pierde ningún alumno.'
+    },
+    {
+      q: '¿Puedo probarlo gratis?',
+      a: 'Sí. 14 días sin tarjeta. Solo pagas si decides quedarte.'
+    },
+    {
+      q: '¿La voz suena natural?',
+      a: 'Sí. Habla en español con acento natural. Sin pausas raras ni robóticos.'
+    },
+    {
+      q: '¿Cuánto cuesta?',
+      a: 'Desde 49€/mes para centros pequeños. Sin permanencia.'
+    }
+  ];
 
   ngAfterViewInit(): void {
     this.loadFonts();
-    this.resizeCanvas();
-    this.particles = this.createParticles();
-    this.observeResize();
     this.initTextReveal();
-    this.startOrb();
   }
 
   ngOnDestroy(): void {
-    cancelAnimationFrame(this.animationFrame);
-    this.resizeObserver?.disconnect();
+    this.textRevealObserver?.disconnect();
   }
 
   /* ─── Google Fonts (Space Grotesk + Inter, pesos completos) ── */
@@ -702,139 +726,13 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const observer = new IntersectionObserver((entries) => {
+    this.textRevealObserver = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         window.clearTimeout(fallback);
         reveal();
-        observer.disconnect();
+        this.textRevealObserver?.disconnect();
       }
     }, { threshold: 0.3 });
-    observer.observe(title);
-  }
-
-  /* ─── Voice orb (canvas 2D, puro) ─────────────────────── */
-  private createParticles(): OrbParticle[] {
-    return Array.from({ length: PARTICLE_COUNT }, () => ({
-      angle: Math.random() * Math.PI * 2,
-      radius: 0.36 + Math.random() * 0.62,
-      speed: (Math.random() * 0.0009 - 0.00045) * (Math.random() > 0.5 ? 1 : -1),
-      drift: Math.random() * 0.00012 - 0.00006,
-      size: 1 + Math.random() * 1.6,
-      baseAlpha: 0.2 + Math.random() * 0.5,
-      phase: Math.random() * Math.PI * 2
-    }));
-  }
-
-  private resizeCanvas(): void {
-    const canvas = this.orbCanvas?.nativeElement;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) {
-      return;
-    }
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const size = canvas.clientWidth || 420;
-    this.orbSize = size;
-    canvas.width = Math.round(size * dpr);
-    canvas.height = Math.round(size * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-
-  private observeResize(): void {
-    const canvas = this.orbCanvas?.nativeElement;
-    if (!canvas || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-    this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
-    this.resizeObserver.observe(canvas);
-  }
-
-  private startOrb(): void {
-    this.ngZone.runOutsideAngular(() => {
-      const canvas = this.orbCanvas?.nativeElement;
-      const ctx = canvas?.getContext('2d');
-      if (!canvas || !ctx) {
-        return;
-      }
-      const start = performance.now();
-      let last = start;
-
-      const frame = (now: number): void => {
-        const dt = Math.min(now - last, 50);
-        last = now;
-        this.drawOrb(ctx, now - start, dt);
-        this.animationFrame = requestAnimationFrame(frame);
-      };
-
-      this.animationFrame = requestAnimationFrame(frame);
-    });
-  }
-
-  private drawOrb(ctx: CanvasRenderingContext2D, t: number, dt: number): void {
-    const size = this.orbSize;
-    const cx = size / 2;
-    const cy = size / 2;
-    const R = size * 0.42;
-
-    const speakPhase = (t % SPEAK_MS) / SPEAK_MS;
-    const speakBurst = Math.exp(-speakPhase * 7);
-    const listenPhase = (t % LISTEN_MS) / LISTEN_MS;
-    const listenBurst = Math.exp(-listenPhase * 9) * 0.55;
-
-    ctx.clearRect(0, 0, size, size);
-
-    // Núcleo con glow
-    const coreR = R * (0.24 + 0.02 * Math.sin(t * 0.001 * 0.8) + speakBurst * 0.05);
-    const glowR = coreR * 2.4;
-    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-    gradient.addColorStop(0, `rgba(${ORB_GREEN},0.6)`);
-    gradient.addColorStop(0.45, `rgba(${ORB_GREEN},0.18)`);
-    gradient.addColorStop(1, `rgba(${ORB_GREEN},0)`);
-
-    ctx.save();
-    ctx.shadowColor = `rgba(${ORB_GREEN},0.5)`;
-    ctx.shadowBlur = R * 0.4 + speakBurst * 40;
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // 3 anillos concéntricos que respiran
-    for (let i = 0; i < RING_COUNT; i++) {
-      const breathe = Math.sin(t * 0.001 * RING_SPEEDS[i] + RING_PHASES[i]);
-      let radius = R * (RING_BASES[i] + RING_AMPS[i] * breathe);
-      radius += R * 0.2 * speakBurst + R * 0.05 * listenBurst;
-      const alpha = Math.min(RING_ALPHAS[i] + speakBurst * 0.3 + listenBurst * 0.18, 0.85);
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(${ORB_GREEN},${alpha.toFixed(3)})`;
-      ctx.lineWidth = 1.1;
-      ctx.stroke();
-    }
-
-    // Partículas orbitando
-    for (const particle of this.particles) {
-      particle.angle += particle.speed * dt;
-      particle.radius += particle.drift * dt;
-      if (particle.radius < 0.34) {
-        particle.radius = 0.34;
-      }
-      if (particle.radius > 1.02) {
-        particle.radius = 1.02;
-      }
-
-      const pRadius = (particle.radius + speakBurst * 0.07) * R;
-      const x = cx + Math.cos(particle.angle) * pRadius;
-      const y = cy + Math.sin(particle.angle) * pRadius * 0.94;
-      const alpha =
-        particle.baseAlpha * (0.7 + 0.3 * Math.sin(t * 0.001 + particle.phase)) +
-        speakBurst * 0.25;
-
-      ctx.beginPath();
-      ctx.arc(x, y, particle.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${ORB_GREEN},${Math.min(alpha, 0.95).toFixed(3)})`;
-      ctx.fill();
-    }
+    this.textRevealObserver.observe(title);
   }
 }

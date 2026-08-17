@@ -10,11 +10,3 @@ export interface DashboardSummary {
   /** ISO date string */
   generatedAt: string;
 }
-
-export interface SeedResult {
-  leads: number;
-  campaigns: number;
-  calls: number;
-  appointments: number;
-  seeded: boolean;
-}

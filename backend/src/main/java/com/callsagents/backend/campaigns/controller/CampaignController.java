@@ -12,6 +12,7 @@ import com.callsagents.backend.campaigns.entity.CampaignStatus;
 import com.callsagents.backend.campaigns.service.CampaignService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import com.callsagents.backend.common.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.Set;
 import java.util.UUID;
 
 @Tag(name = "Campaigns", description = "Gestión de campañas outbound: alta, edición, lanzamiento y pausa")
@@ -41,6 +43,9 @@ public class CampaignController {
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+        "createdAt", "updatedAt", "name", "status", "startAt"
+    );
 
     private final CampaignService campaignService;
     private final UserRepository userRepository;
@@ -127,22 +132,7 @@ public class CampaignController {
     }
 
     private Pageable buildPageable(int page, int size, String sort) {
-        int safePage = Math.max(0, page);
-        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-        Sort sortSpec = parseSort(sort);
-        return PageRequest.of(safePage, safeSize, sortSpec);
-    }
-
-    private Sort parseSort(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return Sort.by(Sort.Direction.DESC, "createdAt");
-        }
-        String[] parts = raw.split(",");
-        String field = parts[0].trim();
-        Sort.Direction direction = (parts.length > 1 && parts[1].trim().equalsIgnoreCase("asc"))
-            ? Sort.Direction.ASC
-            : Sort.Direction.DESC;
-        return Sort.by(direction, field);
+        return PaginationUtils.buildPageable(page, size, sort, "createdAt", Sort.Direction.DESC, ALLOWED_SORT_FIELDS);
     }
 
     private UUID resolveUserId(UserDetails user) {

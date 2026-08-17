@@ -7,8 +7,6 @@ import {
   signal
 } from '@angular/core';
 import { DashboardApi } from '../../core/api/dashboard.api';
-import { AuthService } from '../../core/auth/auth.service';
-import { ErrorService } from '../../core/errors/error.service';
 import { DashboardSummary } from '../../shared/models/dashboard.model';
 import { CardComponent } from '../../shared/components/card.component';
 import { BadgeComponent } from '../../shared/components/badge.component';
@@ -36,11 +34,6 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
         <button class="btn btn--secondary" type="button" (click)="refresh()" [disabled]="loading()">
           {{ loading() ? 'Actualizando…' : 'Actualizar' }}
         </button>
-        @if (isAdmin() && !hasData()) {
-          <button class="btn btn--primary" type="button" (click)="loadDemo()" [disabled]="seeding()">
-            {{ seeding() ? 'Cargando…' : 'Cargar datos de demo' }}
-          </button>
-        }
       </app-page-header>
 
       @if (loading() && summary() === null) {
@@ -77,17 +70,6 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
                 />
               </svg>
             </span>
-            @if (isAdmin()) {
-              <button
-                slot="actions"
-                class="btn btn--primary"
-                type="button"
-                (click)="loadDemo()"
-                [disabled]="seeding()"
-              >
-                {{ seeding() ? 'Cargando…' : 'Cargar datos de demo' }}
-              </button>
-            }
           </app-empty-state>
         </app-card>
       } @else {
@@ -395,19 +377,9 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
 })
 export class DashboardComponent implements OnInit {
   private readonly dashboardApi = inject(DashboardApi);
-  private readonly auth = inject(AuthService);
-  private readonly errorService = inject(ErrorService);
 
   protected readonly summary = signal<DashboardSummary | null>(null);
   protected readonly loading = signal(false);
-  protected readonly seeding = signal(false);
-
-  protected readonly isAdmin = computed(() => this.auth.currentRole() === 'ADMIN');
-
-  protected readonly hasData = computed(() => {
-    const s = this.summary();
-    return s !== null && s.totalLeads > 0;
-  });
 
   protected readonly connectionRatePercent = computed(() =>
     Math.round((this.summary()?.connectionRateToday ?? 0) * 100)
@@ -457,28 +429,6 @@ export class DashboardComponent implements OnInit {
       error: () => {
         // errorInterceptor already shows a toast. Don't duplicate it.
         this.loading.set(false);
-      }
-    });
-  }
-
-  protected loadDemo(): void {
-    if (!this.isAdmin() || this.seeding()) {
-      return;
-    }
-    this.seeding.set(true);
-    this.dashboardApi.seedDemoData().subscribe({
-      next: (result) => {
-        this.seeding.set(false);
-        if (result.seeded) {
-          this.errorService.success(
-            `Datos de demo cargados: ${result.leads} leads, ${result.campaigns} campañas, ${result.calls} llamadas, ${result.appointments} citas`
-          );
-        }
-        this.loadSummary();
-      },
-      error: () => {
-        // errorInterceptor already shows a toast. Don't duplicate it.
-        this.seeding.set(false);
       }
     });
   }

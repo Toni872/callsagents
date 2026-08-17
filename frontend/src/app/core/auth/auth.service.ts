@@ -71,7 +71,7 @@ export class AuthService {
     if (showToast) {
       this.errorService.info('Sesión cerrada');
     }
-    this.router.navigateByUrl('/login');
+    this.router.navigateByUrl('/landing');
   }
 
   private handleAuthSuccess(access: string, refresh: string, user: UserDto): void {

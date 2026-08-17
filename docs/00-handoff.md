@@ -20,7 +20,7 @@ Callsagents is an **outbound sales platform** (à la Calligence) built for one c
 | Cache + Auth state | Redis | 7 |
 | Auth | JWT (HS256, access 15min / refresh 7d rotatable) + BCrypt | nimbus-jose-jwt 10.0.2 |
 | ORM | Hibernate with `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for Postgres ENUMs | 6.x |
-| Migrations | Flyway (V1–V5 so far) | 11.7.2 |
+| Migrations | Flyway (V1–V7 so far) | 11.7.2 |
 | Docs | springdoc-openapi (Swagger UI) | 2.9.0 |
 | Containerization | Docker Compose (4 services) | Docker 29+ |
 | CI | GitHub Actions (backend + frontend workflows) | n/a |
@@ -77,10 +77,7 @@ callsagents/
 │   ├── 01-arquitectura.md              # Phase 1 design
 │   ├── 02-modelo-de-datos.md           # Phase 2 design (entities)
 │   ├── rdd-workflow.md                 # How to use the gentle-ai RDD gate
-│   ├── 03-fase-3-auth.md               # ← TODO: backfill
-│   ├── 04-fase-4-api.md                # ← TODO
 │   ├── ...                              # 12, 13, 14, 15 per phase
-│   └── 99-known-issues.md              # Bugs, workarounds, known sharp edges
 ├── backend/                            # Spring Boot app
 │   ├── src/main/java/com/callsagents/backend/
 │   │   ├── auth/                       # JWT, security, login/refresh/logout
@@ -99,12 +96,14 @@ callsagents/
 │   │   ├── application.yml             # Common config
 │   │   ├── application-dev.yml         # Dev profile (uses local DB)
 │   │   ├── application-test.yml        # Test profile
-│   │   └── db/migration/               # Flyway migrations V1–V5
+│   │   └── db/migration/               # Flyway migrations V1–V7
 │   │       ├── V1__initial_schema.sql
 │   │       ├── V2__seed_admin.sql
 │   │       ├── V3__campaign_leads_audit_timestamps.sql
 │   │       ├── V4__calendar_integrations.sql
-│   │       └── V5__appointment_external_sync.sql
+│   │       ├── V5__appointment_external_sync.sql
+│   │       ├── V6__...
+│   │       └── V7__...
 │   ├── src/test/                       # 100 unit tests
 │   └── Dockerfile                      # Multi-stage Maven → Temurin JRE
 ├── frontend/                           # Angular app
@@ -193,7 +192,7 @@ Read `docs/rdd-workflow.md` for full details. If the push fails with "candidate 
 | You want to... | Touch this | Be careful |
 |---|---|---|
 | Add a new REST endpoint | `backend/.../{module}/controller/`, service, dto | Update `pom.xml` only if you need new deps. Add `@PreAuthorize` to controller. Add `@Schema` to DTO for Swagger. |
-| Add a field to an existing entity | `backend/.../{module}/entity/Entity.java` + new `V{n}__...sql` migration | DO NOT edit the V1–V5 migrations. Always add a new migration. If the field is NOT NULL, set a sensible DEFAULT in the SQL. |
+| Add a field to an existing entity | `backend/.../{module}/entity/Entity.java` + new `V{n}__...sql` migration | DO NOT edit the V1–V7 migrations. Always add a new migration. If the field is NOT NULL, set a sensible DEFAULT in the SQL. |
 | Add a new ENUM value | New `V{n}__...sql`: `ALTER TYPE foo ADD VALUE 'BAR';` | Postgres ENUMs are immutable. `ALTER TYPE` is the only way. Restart the backend after. |
 | Add a new role beyond ADMIN/SUPERVISOR/AGENT | Entity `UserRole` + `SecurityConfig` + tests | High-impact change. The auth flow uses these roles in @PreAuthorize across the codebase. |
 | Add a new nav item in the sidebar | `core/layout/main-layout/main-layout.component.ts` (`navItems` array) | Add a corresponding route in `app.routes.ts`. |
@@ -214,7 +213,7 @@ Read `docs/rdd-workflow.md` for full details. If the push fails with "candidate 
 | Phase | What | Status |
 |---|---|---|
 | 1 | Architecture (modules, contracts) | ✅ done |
-| 2 | Data model (8 entities, 5 migrations) | ✅ done |
+| 2 | Data model (8 entities, 7 migrations) | ✅ done |
 | 3 | Auth backend (JWT + Spring Security) | ✅ done |
 | 4 | CRUD API (21 endpoints across 5 modules) | ✅ done |
 | 5 | Frontend base (Angular shell, layouts, API services) | ✅ done |
@@ -241,9 +240,8 @@ Read `docs/rdd-workflow.md` for full details. If the push fails with "candidate 
 3. **AuthController `/me` endpoint must use `Authentication.getName()`** — NOT `@AuthenticationPrincipal UserDetails`. The `JwtAuthenticationFilter` sets the principal as a String, not a UserDetails. Using `@AuthenticationPrincipal UserDetails` returns null.
 4. **EncryptionService is MVP-tolerant**: if `ENCRYPTION_KEY` is empty, the bean still instantiates with `ready=false` so the rest of the app boots. Encrypt/decrypt throw at runtime. Calendar endpoints return 503.
 5. **Console 401 noise**: `GET /api/auth/me` fires on `MainLayoutComponent` mount even when not logged in. This produces 401 errors in the browser console. Cosmetic only.
-6. **`/api/admin/seed-demo-data` is idempotent** — safe to call multiple times. Returns `seeded: false` if data already exists.
-7. **No soft delete**. Hard delete + AuditLog. If you need to undelete, restore from AuditLog.
-8. **Outbound sync to Google is one-way**. Calendar → Callsagents (webhook-based) is NOT implemented. The `external_event_id` is stored but never used for updates or deletes from external events.
+6. **No soft delete**. Hard delete + AuditLog. If you need to undelete, restore from AuditLog.
+7. **Outbound sync to Google is one-way**. Calendar → Callsagents (webhook-based) is NOT implemented. The `external_event_id` is stored but never used for updates or deletes from external events.
 
 ## 11. Glossary
 

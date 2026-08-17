@@ -1,11 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, OnDestroy } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet, NavigationEnd } from '@angular/router';
+import { ChangeDetectionStrategy, Component, inject, OnDestroy } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { LoadingService } from '../../loading/loading.service';
 import { ToastHostComponent } from '../../errors/toast-host/toast-host.component';
 import { AuthService } from '../../auth/auth.service';
 import { ThemeService } from '../../theme/theme.service';
 import { TourService } from '../../tour/tour.service';
-import { Subscription, filter } from 'rxjs';
 
 interface NavItem {
   label: string;
@@ -69,15 +68,15 @@ interface NavItem {
             <button
               type="button"
               class="header__tour-btn"
-              (click)="startTour()"
-              aria-label="Iniciar tour guiado"
+              (click)="startGuide()"
+              aria-label="Mostrar guía"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/>
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
                 <line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              Tour
+              Guía
             </button>
             <button
               type="button"
@@ -377,7 +376,7 @@ interface NavItem {
     `
   ]
 })
-export class MainLayoutComponent implements OnInit, OnDestroy {
+export class MainLayoutComponent implements OnDestroy {
   protected readonly loading = inject(LoadingService);
   protected readonly auth = inject(AuthService);
   protected readonly themeService = inject(ThemeService);
@@ -385,25 +384,11 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   private readonly tourService = inject(TourService);
 
   protected readonly theme = this.themeService.theme;
-  private routerSub?: Subscription;
 
-  ngOnInit(): void {
-    this.routerSub = this.router.events.pipe(
-      filter(event => event instanceof NavigationEnd)
-    ).subscribe((event) => {
-      const navEnd = event as NavigationEnd;
-      if (this.tourService.shouldShowTour(navEnd.urlAfterRedirects || navEnd.url)) {
-        setTimeout(() => this.tourService.startTour(navEnd.urlAfterRedirects || navEnd.url), 500);
-      }
-    });
-  }
+  ngOnDestroy(): void {}
 
-  ngOnDestroy(): void {
-    this.routerSub?.unsubscribe();
-  }
-
-  protected startTour(): void {
-    this.tourService.startTour(this.router.url);
+  protected startGuide(): void {
+    this.tourService.startGuide(this.router.url);
   }
 
   protected userName(): string {

@@ -6,7 +6,6 @@ import { driver, DriveStep } from 'driver.js';
 
 /** One segment of the multi-page tour. */
 interface TourSegment {
-  /** Path to navigate to before highlighting these steps. */
   path: string;
   steps: DriveStep[];
 }
@@ -19,7 +18,6 @@ export class TourService {
   private readonly router = inject(Router);
   private readonly zone = inject(NgZone);
 
-  /** Whether the welcome banner is visible. */
   readonly showWelcome = signal(false);
 
   private driverInstance: ReturnType<typeof driver> | null = null;
@@ -28,7 +26,7 @@ export class TourService {
   private isFullTourActive = false;
   private navigationSubscription: Subscription | null = null;
 
-  /** Ordered tour across the entire app. */
+  /** Ordered tour across the entire app — no emojis, clean text. */
   private readonly fullTour: TourSegment[] = [
     {
       path: '/dashboard',
@@ -36,8 +34,8 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/dashboard"]',
           popover: {
-            title: '📊 Panel de control',
-            description: 'Tu centro de mando. Aquí ves todo de un vistazo: leads, llamadas, campañas y citas. Se actualiza solo.',
+            title: 'Panel de control',
+            description: 'Tu centro de mando. Aqui ves todo de un vistazo: leads, llamadas, campanas y citas. Se actualiza solo.',
             side: 'right' as const,
             align: 'start' as const,
           },
@@ -45,8 +43,8 @@ export class TourService {
         {
           element: '.dashboard-page .hero-card',
           popover: {
-            title: '📞 Llamadas de hoy',
-            description: 'El KPI más importante: cuántas llamadas se hicieron y cuántas se conectaron. Si sube, tu equipo está activo.',
+            title: 'Llamadas de hoy',
+            description: 'El KPI mas importante: cuantas llamadas se hicieron y cuantas se conectaron. Si sube, tu equipo esta activo.',
             side: 'bottom' as const,
             align: 'center' as const,
           },
@@ -54,8 +52,8 @@ export class TourService {
         {
           element: '.dashboard-page__grid',
           popover: {
-            title: '📈 Métricas clave',
-            description: 'Leads totales, campañas activas, tasa de conexión y próximas citas. Cada tarjeta se actualiza automáticamente.',
+            title: 'Metricas clave',
+            description: 'Leads totales, campanas activas, tasa de conexion y proximas citas. Cada tarjeta se actualiza automaticamente.',
             side: 'top' as const,
             align: 'center' as const,
           },
@@ -68,7 +66,7 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/leads"]',
           popover: {
-            title: '👤 Gestión de leads',
+            title: 'Gestion de leads',
             description: 'Tu base de datos de prospectos. Cada lead es un posible cliente que ha contactado tu centro o que vas a contactar.',
             side: 'right' as const,
             align: 'start' as const,
@@ -77,8 +75,8 @@ export class TourService {
         {
           element: 'app-lead-list section.page > header.page__header',
           popover: {
-            title: '➕ Crear lead',
-            description: 'Añade leads manualmente o importa desde CSV. También se crean automáticamente desde tu formulario web.',
+            title: 'Crear lead',
+            description: 'Aniade leads manualmente o importa desde CSV. Tambien se crean automaticamente desde tu formulario web.',
             side: 'bottom' as const,
             align: 'start' as const,
           },
@@ -86,8 +84,8 @@ export class TourService {
         {
           element: 'app-lead-list .card',
           popover: {
-            title: '📋 Lista de leads',
-            description: 'Cada fila muestra nombre, teléfono, email y estado. Haz clic en uno para ver su historial completo.',
+            title: 'Lista de leads',
+            description: 'Cada fila muestra nombre, telefono, email y estado. Haz clic en uno para ver su historial completo.',
             side: 'top' as const,
             align: 'center' as const,
           },
@@ -100,8 +98,8 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/campaigns"]',
           popover: {
-            title: '🚀 Campañas',
-            description: 'Un grupo de leads que se procesan juntos. Crea una campaña por producto, zona o período.',
+            title: 'Campanas',
+            description: 'Un grupo de leads que se procesan juntos. Crea una campana por producto, zona o periodo.',
             side: 'right' as const,
             align: 'start' as const,
           },
@@ -109,8 +107,8 @@ export class TourService {
         {
           element: 'app-campaign-list section.page > header.page__header',
           popover: {
-            title: '➕ Crear campaña',
-            description: 'Define nombre, descripción y el script que la IA usará para hablar con los leads. La IA personaliza cada llamada.',
+            title: 'Crear campana',
+            description: 'Define nombre, descripcion y el script que la IA usara para hablar con los leads. La IA personaliza cada llamada.',
             side: 'bottom' as const,
             align: 'start' as const,
           },
@@ -118,8 +116,8 @@ export class TourService {
         {
           element: 'app-campaign-list .card',
           popover: {
-            title: '📊 Tus campañas',
-            description: 'Cada campaña muestra leads asignados, llamadas realizadas y tasa de conversión. Activa o pausa cuando quieras.',
+            title: 'Tus campanas',
+            description: 'Cada campana muestra leads asignados, llamadas realizadas y tasa de conversion. Activa o pausa cuando quieras.',
             side: 'top' as const,
             align: 'center' as const,
           },
@@ -132,8 +130,8 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/calls"]',
           popover: {
-            title: '📞 Registro de llamadas',
-            description: 'Bitácora completa: a quién, cuándo, duración y resultado de cada llamada. Aquí auditas todo.',
+            title: 'Registro de llamadas',
+            description: 'Bitacora completa: a quien, cuando, duracion y resultado de cada llamada. Aqui auditas todo.',
             side: 'right' as const,
             align: 'start' as const,
           },
@@ -141,8 +139,8 @@ export class TourService {
         {
           element: 'app-call-list section.page > header.page__header',
           popover: {
-            title: '🔍 Filtrar llamadas',
-            description: 'Busca por estado, fecha o responsable. Cada fila muestra si se conectó, buzón, ocupado o no respondieron.',
+            title: 'Filtrar llamadas',
+            description: 'Busca por estado, fecha o responsable. Cada fila muestra si se conecto, buzon, ocupado o no respondieron.',
             side: 'bottom' as const,
             align: 'start' as const,
           },
@@ -155,8 +153,8 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/voice-calls"]',
           popover: {
-            title: '🎙️ Voz IA',
-            description: 'Configura tu agente de voz: número, tono, velocidad e instrucciones. La IA habla con los leads como un humano.',
+            title: 'Voz IA',
+            description: 'Configura tu agente de voz: numero, tono, velocidad e instrucciones. La IA habla con los leads como un humano.',
             side: 'right' as const,
             align: 'start' as const,
           },
@@ -169,8 +167,8 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/appointments"]',
           popover: {
-            title: '📅 Citas',
-            description: 'Cuando la IA detecta interés, agenda una cita automáticamente. Aquí ves todas las programadas.',
+            title: 'Citas',
+            description: 'Cuando la IA detecta interes, agenda una cita automaticamente. Aqui ves todas las programadas.',
             side: 'right' as const,
             align: 'start' as const,
           },
@@ -178,8 +176,8 @@ export class TourService {
         {
           element: 'app-appointment-list section.page > header.page__header',
           popover: {
-            title: '✅ Gestionar citas',
-            description: 'Cada cita muestra lead, fecha, duración y estado. Se sincroniza con Google Calendar.',
+            title: 'Gestionar citas',
+            description: 'Cada cita muestra lead, fecha, duracion y estado. Se sincroniza con Google Calendar.',
             side: 'bottom' as const,
             align: 'start' as const,
           },
@@ -192,7 +190,7 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/users"]',
           popover: {
-            title: '👥 Usuarios',
+            title: 'Usuarios',
             description: 'Administra tu equipo: administrador, supervisor o agente. Cada rol controla los permisos del panel.',
             side: 'right' as const,
             align: 'start' as const,
@@ -206,8 +204,8 @@ export class TourService {
         {
           element: '.sidebar__nav a[href="/settings/calendar"]',
           popover: {
-            title: '📆 Calendario',
-            description: 'Conecta Google Calendar para que las citas se sincronicen automáticamente. Así nunca pierdes una.',
+            title: 'Calendario',
+            description: 'Conecta Google Calendar para que las citas se sincronicen automaticamente. Asi nunca pierdes una.',
             side: 'right' as const,
             align: 'start' as const,
           },
@@ -226,7 +224,7 @@ export class TourService {
     }
   }
 
-  /** User accepts the welcome → start full continuous tour. */
+  /** User accepts the welcome -> start full continuous tour. */
   startFullTour(): void {
     this.showWelcome.set(false);
     sessionStorage.setItem(SESSION_SHOWN_KEY, 'yes');
@@ -241,10 +239,19 @@ export class TourService {
     if (currentPath === firstPath) {
       this.startSegment(0);
     } else {
-      // Navigate to first page, then start segment via router event
       this.listenForNavigationThenStart();
       this.router.navigate([firstPath]);
     }
+  }
+
+  /** Cancel the tour mid-way. */
+  cancelTour(): void {
+    this.driverInstance?.destroy();
+    this.isFullTourActive = false;
+    this.currentSegmentIndex = 0;
+    this.navigationSubscription?.unsubscribe();
+    this.navigationSubscription = null;
+    sessionStorage.setItem(SESSION_SHOWN_KEY, 'yes');
   }
 
   /** Start a single segment (one page's steps). */
@@ -268,11 +275,14 @@ export class TourService {
           stagePadding: 6,
           stageRadius: 8,
           popoverOffset: 10,
-          progressText: `${index + 1}/${this.segments.length} — Paso {{current}} de {{total}}`,
+          progressText: `${index + 1}/${this.segments.length} \u2014 Paso {{current}} de {{total}}`,
           nextBtnText: 'Siguiente',
           prevBtnText: 'Anterior',
           doneBtnText: 'Continuar',
           steps: segment.steps,
+          onHighlighted: () => {
+            this.injectCancelButton();
+          },
           onDestroyed: () => {
             this.zone.run(() => {
               this.onSegmentDestroyed();
@@ -282,6 +292,34 @@ export class TourService {
         this.driverInstance.drive();
       });
     }, 400);
+  }
+
+  /** Inject a "Cancelar" button into every popover after it renders. */
+  private injectCancelButton(): void {
+    const popover = document.querySelector('.driver-popover');
+    if (!popover) return;
+
+    // Don't inject twice
+    if (popover.querySelector('.guide-cancel-btn')) return;
+
+    const footer = popover.querySelector('.driver-popover-footer');
+    if (!footer) return;
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancelar';
+    cancelBtn.className = 'guide-cancel-btn';
+    cancelBtn.addEventListener('click', () => {
+      this.zone.run(() => this.cancelTour());
+    });
+
+    // Insert before the navigation buttons
+    const navBtns = footer.querySelector('.driver-popover-navigation-btns');
+    if (navBtns) {
+      footer.insertBefore(cancelBtn, navBtns);
+    } else {
+      footer.appendChild(cancelBtn);
+    }
   }
 
   /** When a segment ends, move to next page or finish. */
@@ -299,7 +337,6 @@ export class TourService {
     const currentPath = this.router.url;
 
     if (currentPath === nextPath) {
-      // Already on the page (shouldn't happen, but safety)
       this.startSegment(nextIndex);
     } else {
       this.listenForNavigationThenStart();
@@ -322,7 +359,7 @@ export class TourService {
       });
   }
 
-  /** Tour finished — mark completed and reset state. */
+  /** Tour finished -- mark completed and reset state. */
   private finishFullTour(): void {
     this.isFullTourActive = false;
     this.currentSegmentIndex = 0;

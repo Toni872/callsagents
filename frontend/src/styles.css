@@ -384,3 +384,23 @@ table tbody tr:hover {
   position: relative;
   z-index: 1000000000;
 }
+/* Cancel button injected into every guide popover */
+.guide-cancel-btn {
+  all: unset;
+  display: inline-block;
+  box-sizing: border-box;
+  cursor: pointer;
+  color: #6b7280;
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  padding: 5px 10px;
+  font-size: 12px;
+  line-height: 1.3;
+  margin-right: auto;
+}
+.guide-cancel-btn:hover {
+  color: #dc2626;
+  border-color: #fca5a5;
+  background: #fef2f2;
+}

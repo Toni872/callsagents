@@ -1,16 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { LoadingService } from '../../loading/loading.service';
 import { ToastHostComponent } from '../../errors/toast-host/toast-host.component';
 import { AuthService } from '../../auth/auth.service';
 import { ThemeService } from '../../theme/theme.service';
 import { TourService } from '../../tour/tour.service';
-
-interface NavItem {
-  label: string;
-  path: string;
-  id: string;
-}
 
 @Component({
   selector: 'app-main-layout',
@@ -19,6 +13,28 @@ interface NavItem {
   imports: [RouterLink, RouterLinkActive, RouterOutlet, ToastHostComponent],
   template: `
     <div class="layout">
+      <!-- Welcome banner -->
+      @if (tourService.showWelcome()) {
+        <div class="welcome-overlay">
+          <div class="welcome-banner">
+            <div class="welcome-icon">👋</div>
+            <h2 class="welcome-title">Bienvenido a Callsagents</h2>
+            <p class="welcome-text">
+              Te mostramos cómo funciona cada sección en un recorrido rápido.
+              Puedes saltarlo si lo prefieres.
+            </p>
+            <div class="welcome-actions">
+              <button type="button" class="welcome-btn welcome-btn--primary" (click)="tourService.startFullTour()">
+                Guíame
+              </button>
+              <button type="button" class="welcome-btn welcome-btn--secondary" (click)="tourService.dismissWelcome()">
+                Ahora no
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
       <aside class="sidebar">
         <div class="sidebar__brand">
           <a routerLink="/landing" class="sidebar__wordmark" aria-label="Callsagents — Ver sitio web">
@@ -68,8 +84,8 @@ interface NavItem {
             <button
               type="button"
               class="header__tour-btn"
-              (click)="startGuide()"
-              aria-label="Mostrar guía"
+              (click)="tourService.startFullTour()"
+              aria-label="Iniciar guía completa"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/>
@@ -85,18 +101,7 @@ interface NavItem {
               (click)="themeService.toggle()"
             >
               @if (theme() === 'dark') {
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="4"></circle>
                   <path d="M12 2v2"></path>
                   <path d="M12 20v2"></path>
@@ -108,18 +113,7 @@ interface NavItem {
                   <path d="m19.07 4.93-1.41 1.41"></path>
                 </svg>
               } @else {
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
                 </svg>
               }
@@ -155,240 +149,291 @@ interface NavItem {
       <app-toast-host></app-toast-host>
     </div>
   `,
-  styles: [
-    `
-      :host {
-        display: block;
-        min-height: 100%;
-      }
-      .layout {
-        display: grid;
-        grid-template-columns: 240px 1fr;
-        min-height: 100vh;
-      }
-      .sidebar {
-        background: var(--color-bg);
-        color: var(--color-text);
-        display: flex;
-        flex-direction: column;
-        padding: var(--spacing-6) 0;
-        border-right: 1px solid var(--color-border);
-      }
-      .sidebar__brand {
-        display: flex;
-        align-items: center;
-        padding: 0 var(--spacing-6) var(--spacing-6);
-        border-bottom: 1px solid var(--color-border);
-      }
-      .sidebar__wordmark {
-        font-family: var(--font-display), 'Inter', system-ui, sans-serif;
-        font-size: 1.15rem;
-        font-weight: 800;
-        letter-spacing: -0.02em;
-        line-height: 1;
-        display: inline-flex;
-        text-decoration: none;
-        cursor: pointer;
-        transition: opacity 0.15s ease;
-      }
-      .sidebar__wordmark:hover {
-        opacity: 0.8;
-      }
-      .sidebar__wordmark-calls {
-        color: var(--color-text-strong);
-      }
-      .sidebar__wordmark-agents {
-        color: var(--color-primary);
-      }
-      .sidebar__nav {
-        display: flex;
-        flex-direction: column;
-        padding: var(--spacing-4) var(--spacing-3);
-        gap: var(--spacing-1);
-      }
-      .sidebar__link {
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-3);
-        padding: var(--spacing-2) var(--spacing-3);
-        border-radius: var(--radius);
-        color: var(--color-text-muted);
-        text-decoration: none;
-        font-size: 0.875rem;
-        transition: background 0.15s ease, color 0.15s ease;
-      }
-      .sidebar__link:hover {
-        background: var(--color-bg-alt);
-        color: var(--color-text);
-        text-decoration: none;
-      }
-      .sidebar__link--active {
-        background: var(--color-primary);
-        color: #fff;
-      }
-      .sidebar__icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 20px;
-        height: 20px;
-        flex-shrink: 0;
-      }
-      .sidebar__icon svg {
-        width: 18px;
-        height: 18px;
-      }
-      .main {
-        display: flex;
-        flex-direction: column;
-        background: var(--color-bg);
-      }
-      .header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: var(--spacing-4) var(--spacing-6);
-        background: var(--color-bg);
-        border-bottom: none;
-      }
-      .header__title {
-        margin: 0;
-        font-size: 1.125rem;
-        font-weight: 600;
-      }
-      .header__actions {
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-3);
-      }
-      .header__theme-toggle {
-        display: grid;
-        place-items: center;
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        background: transparent;
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius);
-        color: var(--color-text-muted);
-        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-      }
-      .header__theme-toggle:hover {
-        background: var(--color-bg-alt);
-        border-color: var(--color-border-strong);
-        color: var(--color-text);
-      }
-      .header__tour-btn {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 12px;
-        background: var(--color-bg-alt);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        color: var(--color-text);
-        font-size: 0.8rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-      .header__tour-btn:hover {
-        background: var(--color-primary);
-        color: white;
-        border-color: var(--color-primary);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .header__theme-toggle {
-          transition: none;
-        }
-      }
-      .header__user {
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-3);
-      }
-      .header__user-info {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        line-height: 1.2;
-      }
-      .header__user-name {
-        font-size: 0.875rem;
-        color: var(--color-text);
-        font-weight: 500;
-      }
-      .header__user-role {
-        font-size: 0.7rem;
-        color: var(--color-text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .header__user-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: var(--color-primary);
-        color: #fff;
-        display: grid;
-        place-items: center;
-        font-weight: 600;
-        font-size: 0.875rem;
-      }
-      .header__logout {
-        padding: var(--spacing-1) var(--spacing-3);
-        background: transparent;
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius);
-        color: var(--color-text);
-        font-size: 0.8125rem;
-        cursor: pointer;
-        transition: background 0.15s ease, border-color 0.15s ease;
-      }
-      .header__logout:hover {
-        background: var(--color-bg-alt);
-        border-color: var(--color-text-muted);
-      }
-      .content {
-        flex: 1;
-        padding: var(--spacing-6);
-        padding-bottom: var(--spacing-8);
-        position: relative;
-      }
-      .loading-bar {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
-        background-size: 200% 100%;
-        animation: loading-slide 1.2s linear infinite;
-      }
-      @keyframes loading-slide {
-        from {
-          background-position: 200% 0;
-        }
-        to {
-          background-position: -200% 0;
-        }
-      }
-    `
-  ]
+  styles: [`
+    :host {
+      display: block;
+      min-height: 100%;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ── Welcome banner ── */
+    .welcome-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 999999998;
+      background: rgba(0, 0, 0, 0.45);
+      display: grid;
+      place-items: center;
+    }
+    .welcome-banner {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 2.5rem 2rem;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+      box-shadow: var(--shadow-lg);
+    }
+    .welcome-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .welcome-title {
+      margin: 0 0 0.5rem;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--color-text-strong);
+    }
+    .welcome-text {
+      margin: 0 0 1.5rem;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: var(--color-text-muted);
+    }
+    .welcome-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+    .welcome-btn {
+      padding: 0.5rem 1.25rem;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    .welcome-btn--primary {
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+      border-color: var(--color-primary);
+    }
+    .welcome-btn--primary:hover {
+      background: var(--color-primary-hover);
+    }
+    .welcome-btn--secondary {
+      background: transparent;
+      color: var(--color-text-muted);
+      border-color: var(--color-border);
+    }
+    .welcome-btn--secondary:hover {
+      background: var(--color-bg-alt);
+      color: var(--color-text);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      background: var(--color-bg);
+      color: var(--color-text);
+      display: flex;
+      flex-direction: column;
+      padding: var(--spacing-6) 0;
+      border-right: 1px solid var(--color-border);
+    }
+    .sidebar__brand {
+      display: flex;
+      align-items: center;
+      padding: 0 var(--spacing-6) var(--spacing-6);
+      border-bottom: 1px solid var(--color-border);
+    }
+    .sidebar__wordmark {
+      font-family: var(--font-display), 'Inter', system-ui, sans-serif;
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      display: inline-flex;
+      text-decoration: none;
+      cursor: pointer;
+      transition: opacity 0.15s ease;
+    }
+    .sidebar__wordmark:hover { opacity: 0.8; }
+    .sidebar__wordmark-calls { color: var(--color-text-strong); }
+    .sidebar__wordmark-agents { color: var(--color-primary); }
+    .sidebar__nav {
+      display: flex;
+      flex-direction: column;
+      padding: var(--spacing-4) var(--spacing-3);
+      gap: var(--spacing-1);
+    }
+    .sidebar__link {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-3);
+      padding: var(--spacing-2) var(--spacing-3);
+      border-radius: var(--radius);
+      color: var(--color-text-muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .sidebar__link:hover {
+      background: var(--color-bg-alt);
+      color: var(--color-text);
+      text-decoration: none;
+    }
+    .sidebar__link--active {
+      background: var(--color-primary);
+      color: #fff;
+    }
+    .sidebar__icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .sidebar__icon svg { width: 18px; height: 18px; }
+
+    /* ── Main area ── */
+    .main {
+      display: flex;
+      flex-direction: column;
+      background: var(--color-bg);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--spacing-4) var(--spacing-6);
+      background: var(--color-bg);
+    }
+    .header__title {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+    .header__actions {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-3);
+    }
+    .header__theme-toggle {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      color: var(--color-text-muted);
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    .header__theme-toggle:hover {
+      background: var(--color-bg-alt);
+      border-color: var(--color-border-strong);
+      color: var(--color-text);
+    }
+    .header__tour-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--color-bg-alt);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      color: var(--color-text);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .header__tour-btn:hover {
+      background: var(--color-primary);
+      color: white;
+      border-color: var(--color-primary);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .header__theme-toggle { transition: none; }
+    }
+    .header__user {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-3);
+    }
+    .header__user-info {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      line-height: 1.2;
+    }
+    .header__user-name {
+      font-size: 0.875rem;
+      color: var(--color-text);
+      font-weight: 500;
+    }
+    .header__user-role {
+      font-size: 0.7rem;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .header__user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--color-primary);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    .header__logout {
+      padding: var(--spacing-1) var(--spacing-3);
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      color: var(--color-text);
+      font-size: 0.8125rem;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .header__logout:hover {
+      background: var(--color-bg-alt);
+      border-color: var(--color-text-muted);
+    }
+    .content {
+      flex: 1;
+      padding: var(--spacing-6);
+      padding-bottom: var(--spacing-8);
+      position: relative;
+    }
+    .loading-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+      background-size: 200% 100%;
+      animation: loading-slide 1.2s linear infinite;
+    }
+    @keyframes loading-slide {
+      from { background-position: 200% 0; }
+      to { background-position: -200% 0; }
+    }
+  `]
 })
-export class MainLayoutComponent implements OnDestroy {
+export class MainLayoutComponent implements OnInit {
   protected readonly loading = inject(LoadingService);
   protected readonly auth = inject(AuthService);
   protected readonly themeService = inject(ThemeService);
   private readonly router = inject(Router);
-  private readonly tourService = inject(TourService);
+  readonly tourService = inject(TourService);
 
   protected readonly theme = this.themeService.theme;
 
-  ngOnDestroy(): void {}
-
-  protected startGuide(): void {
-    this.tourService.startGuide(this.router.url);
+  ngOnInit(): void {
+    this.tourService.checkWelcome();
   }
 
   protected userName(): string {

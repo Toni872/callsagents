@@ -270,6 +270,10 @@ export class TourService {
           prevBtnText: 'Anterior',
           doneBtnText: 'Continuar',
           steps: segment.steps,
+          onCloseClick: () => {
+            // User clicked X — stop tour entirely
+            this.isFullTourActive = false;
+          },
           onDestroyed: () => {
             this.zone.run(() => {
               this.onSegmentDestroyed();

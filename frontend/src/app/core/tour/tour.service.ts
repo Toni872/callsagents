@@ -270,19 +270,14 @@ export class TourService {
           prevBtnText: 'Anterior',
           doneBtnText: 'Continuar',
           steps: segment.steps,
-          // Native driver.js close hook: fires when the user clicks X, the
-          // overlay, or presses ESC. Kills the whole tour immediately.
+          // CRITICAL: defining onCloseClick REPLACES driver.js's internal close
+          // hook (which called destroy). driver.js 1.8 resolves the popover hook
+          // as `g || n.onCloseClick`, so we MUST destroy the driver manually or
+          // the X button does nothing at all. Fires on X click, overlay click
+          // and ESC — kills the whole tour immediately.
           onCloseClick: () => {
             this.isFullTourActive = false;
-          },
-          // driver.js re-renders the popover on EVERY step, so the close button
-          // is a brand-new element each time. Re-attach a direct DOM listener on
-          // every highlighted step so X always closes the tour, in any window.
-          onHighlighted: () => {
-            const closeBtn = document.querySelector('.driver-popover-close-btn');
-            closeBtn?.addEventListener('click', () => {
-              this.isFullTourActive = false;
-            });
+            this.driverInstance?.destroy();
           },
           onDestroyed: () => {
             this.zone.run(() => {

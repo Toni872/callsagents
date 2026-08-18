@@ -10,6 +10,7 @@ import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CalendarApi } from '../../../core/api/calendar.api';
+import { AuthService } from '../../../core/auth/auth.service';
 import { ErrorService } from '../../../core/errors/error.service';
 import {
   CalendarIntegration,
@@ -145,6 +146,32 @@ import {
               </div>
             </div>
           }
+        </div>
+      }
+
+      @if (isAdmin() && googleIntegration()) {
+        <div class="card backfill-panel">
+          <div class="backfill-panel__text">
+            <h3>Sincronizar citas existentes</h3>
+            <p class="muted">
+              Crea los eventos de Google Calendar para las citas futuras que se
+              crearon antes de conectar la cuenta o que fallaron al sincronizar.
+            </p>
+            @if (backfillResult(); as r) {
+              <p class="backfill-panel__result">
+                {{ r.scanned }} citas revisadas · {{ r.created }} eventos creados ·
+                {{ r.failed }} fallos
+              </p>
+            }
+          </div>
+          <button
+            type="button"
+            class="btn btn--primary"
+            [disabled]="backfilling()"
+            (click)="runBackfill()"
+          >
+            {{ backfilling() ? 'Sincronizando...' : 'Sincronizar ahora' }}
+          </button>
         </div>
       }
     </section>
@@ -306,6 +333,28 @@ import {
         border-radius: var(--radius-lg);
       }
 
+      .backfill-panel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--spacing-4);
+        flex-wrap: wrap;
+      }
+      .backfill-panel__text {
+        flex: 1;
+        min-width: 240px;
+      }
+      .backfill-panel__text h3 {
+        margin: 0 0 var(--spacing-1);
+        font-size: 0.95rem;
+      }
+      .backfill-panel__result {
+        margin: var(--spacing-2) 0 0;
+        font-size: 0.875rem;
+        color: var(--color-primary);
+        font-weight: 500;
+      }
+
       .btn {
         padding: var(--spacing-2) var(--spacing-4);
         border-radius: var(--radius);
@@ -345,6 +394,7 @@ import {
 })
 export class CalendarSettingsComponent implements OnInit {
   private readonly api = inject(CalendarApi);
+  private readonly auth = inject(AuthService);
   private readonly error = inject(ErrorService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -352,6 +402,10 @@ export class CalendarSettingsComponent implements OnInit {
   protected readonly integrations = signal<CalendarIntegration[]>([]);
   protected readonly loading = signal(false);
   protected readonly googleConfigured = signal(true);
+  protected readonly backfilling = signal(false);
+  protected readonly backfillResult = signal<{ scanned: number; created: number; failed: number } | null>(null);
+
+  protected readonly isAdmin = computed(() => this.auth.currentRole() === 'ADMIN');
 
   protected readonly googleIntegration = computed(
     () => this.integrations().find((i) => i.provider === 'GOOGLE') ?? null
@@ -435,6 +489,27 @@ export class CalendarSettingsComponent implements OnInit {
         this.error.success('Desconectado');
       }
       // errorInterceptor maneja el toast de error
+    });
+  }
+
+  protected runBackfill(): void {
+    this.backfilling.set(true);
+    this.api.backfill().subscribe({
+      next: (result) => {
+        this.backfilling.set(false);
+        this.backfillResult.set(result);
+        this.error.success(
+          `Sincronización: ${result.created} eventos creados, ${result.failed} fallos`
+        );
+        // Refresca el estado de sync de las integraciones
+        this.api.list().subscribe({
+          next: (list) => this.integrations.set(list)
+        });
+      },
+      error: () => {
+        this.backfilling.set(false);
+        // errorInterceptor maneja el toast de error
+      }
     });
   }
 

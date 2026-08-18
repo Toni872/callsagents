@@ -23,6 +23,18 @@ export class CalendarApi {
   }
 
   /**
+   * Admin-only: create Google events for existing future appointments that were
+   * never synced (created before the integration existed, or sync failed).
+   * Returns { scanned, created, failed }.
+   */
+  backfill(): Observable<{ scanned: number; created: number; failed: number }> {
+    return this.http.post<{ scanned: number; created: number; failed: number }>(
+      apiUrl('/calendar/integrations/backfill'),
+      {}
+    );
+  }
+
+  /**
    * Asks the backend (with the JWT) for the Google OAuth authorize URL.
    * Returns { authorizeUrl } — the browser must follow it with
    * window.location.href after this authenticated call succeeds.

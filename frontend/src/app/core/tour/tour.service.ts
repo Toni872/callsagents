@@ -270,10 +270,6 @@ export class TourService {
           prevBtnText: 'Anterior',
           doneBtnText: 'Continuar',
           steps: segment.steps,
-          onCloseClick: () => {
-            // User clicked X — stop tour entirely
-            this.isFullTourActive = false;
-          },
           onDestroyed: () => {
             this.zone.run(() => {
               this.onSegmentDestroyed();
@@ -281,6 +277,12 @@ export class TourService {
           },
         });
         this.driverInstance.drive();
+
+        // Direct DOM listener on X button — most reliable way to detect user close
+        const closeBtn = document.querySelector('.driver-popover-close-btn');
+        closeBtn?.addEventListener('click', () => {
+          this.isFullTourActive = false;
+        }, { once: true });
       });
     }, 400);
   }

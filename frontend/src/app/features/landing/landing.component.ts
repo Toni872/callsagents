@@ -83,6 +83,10 @@ const ORB_GREEN = '0,168,107';
             <a class="lnd-btn lnd-btn--primary lnd-btn--hero" routerLink="/login">Probar demo</a>
           </div>
 
+          <p class="lnd-demo-creds">
+            Cuenta demo: demo&#64;callsagents.com · contraseña: demo12345
+          </p>
+
           <div class="lnd-stats">
             <div class="lnd-stat">
               <div class="lnd-stat-num">&lt;1 min</div>
@@ -399,6 +403,13 @@ const ORB_GREEN = '0,168,107';
         flex-wrap: wrap;
         gap: var(--spacing-4);
         margin-bottom: var(--spacing-8);
+      }
+
+      .lnd-demo-creds {
+        margin: calc(-1 * var(--spacing-4)) 0 var(--spacing-8);
+        color: var(--color-text-muted);
+        font-size: 0.8rem;
+        font-family: var(--font-mono, monospace);
       }
 
       .lnd-stats {

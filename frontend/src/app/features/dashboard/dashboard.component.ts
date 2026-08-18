@@ -7,6 +7,8 @@ import {
   signal
 } from '@angular/core';
 import { DashboardApi } from '../../core/api/dashboard.api';
+import { AuthService } from '../../core/auth/auth.service';
+import { Router } from '@angular/router';
 import { DashboardSummary } from '../../shared/models/dashboard.model';
 import { CardComponent } from '../../shared/components/card.component';
 import { BadgeComponent } from '../../shared/components/badge.component';
@@ -35,6 +37,24 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
           {{ loading() ? 'Actualizando…' : 'Actualizar' }}
         </button>
       </app-page-header>
+
+      @if (isDemoUser()) {
+        <app-card class="demo-cta" padding="lg">
+          <div class="demo-cta__content">
+            <div class="demo-cta__text">
+              <span class="demo-cta__eyebrow">Demo · Asistente conversacional</span>
+              <h2 class="demo-cta__title">Prueba el asistente con una conversación</h2>
+              <p class="demo-cta__desc">
+                Simula cómo el asistente conversa con un alumno interesado, responde sus dudas
+                y agenda una prueba de nivel en tu calendario.
+              </p>
+            </div>
+            <button class="btn btn--primary demo-cta__btn" type="button" (click)="openAssistant()">
+              Probar el asistente con una conversación
+            </button>
+          </div>
+        </app-card>
+      }
 
       @if (loading() && summary() === null) {
         <div class="dashboard-page__grid" role="status" aria-label="Cargando métricas">
@@ -342,6 +362,51 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
         background: var(--color-bg-alt);
         border-color: var(--color-border-strong);
       }
+
+      /* ---------- Demo assistant CTA ---------- */
+      .demo-cta {
+        margin-bottom: var(--spacing-4);
+      }
+      :host ::ng-deep .demo-cta .app-card {
+        background: color-mix(in srgb, var(--color-primary), var(--color-bg) 93%);
+        border-color: color-mix(in srgb, var(--color-primary), var(--color-border) 30%);
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      :host ::ng-deep .demo-cta:hover .app-card {
+        border-color: var(--color-primary);
+        box-shadow:
+          0 0 0 1px color-mix(in srgb, var(--color-primary), transparent 55%),
+          var(--shadow-sm);
+      }
+      .demo-cta__content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--spacing-6);
+        flex-wrap: wrap;
+      }
+      .demo-cta__eyebrow {
+        display: inline-block;
+        margin-bottom: var(--spacing-2);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--color-primary);
+      }
+      .demo-cta__title {
+        margin: 0 0 var(--spacing-2);
+        font-size: 1.25rem;
+      }
+      .demo-cta__desc {
+        margin: 0;
+        max-width: 520px;
+        font-size: 0.875rem;
+        color: var(--color-text-muted);
+      }
+      .demo-cta__btn {
+        flex-shrink: 0;
+      }
       .empty-icon {
         display: inline-block;
       }
@@ -377,9 +442,15 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
 })
 export class DashboardComponent implements OnInit {
   private readonly dashboardApi = inject(DashboardApi);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
 
   protected readonly summary = signal<DashboardSummary | null>(null);
   protected readonly loading = signal(false);
+
+  protected readonly isDemoUser = computed(
+    () => this.authService.currentUser()?.email === 'demo@callsagents.com'
+  );
 
   protected readonly connectionRatePercent = computed(() =>
     Math.round((this.summary()?.connectionRateToday ?? 0) * 100)
@@ -417,6 +488,10 @@ export class DashboardComponent implements OnInit {
 
   protected refresh(): void {
     this.loadSummary();
+  }
+
+  protected openAssistant(): void {
+    this.router.navigate(['/assistant-demo']);
   }
 
   private loadSummary(): void {

@@ -19,6 +19,13 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'assistant-demo',
+        loadComponent: () =>
+          import('./features/assistant/assistant-demo.component').then(
+            (m) => m.AssistantDemoComponent
+          )
+      },
+      {
         path: 'leads',
         loadChildren: () =>
           import('./features/leads/leads.routes').then((m) => m.LEADS_ROUTES)

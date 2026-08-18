@@ -43,9 +43,11 @@ public interface CalendarProvider {
 
     /**
      * Create an external calendar event. Returns the provider-assigned event id
-     * so we can locate/update/delete it later.
+     * plus the provider's canonical HTML link to the event (used for the
+     * "Ver en Google Calendar" deep link). The URL may be null when the
+     * provider does not expose one.
      */
-    String createEvent(
+    EventRef createEvent(
         String decryptedAccessToken,
         String externalCalendarId,
         EventPayload event
@@ -56,7 +58,7 @@ public interface CalendarProvider {
      * Only meaningful when eventId is known; callers fall back to create
      * when the event was never persisted.
      */
-    String updateEvent(
+    EventRef updateEvent(
         String decryptedAccessToken,
         String externalCalendarId,
         String eventId,
@@ -111,4 +113,7 @@ public interface CalendarProvider {
         String timeZone,
         List<UUID> attendeeEmails
     ) {}
+
+    /** Provider-assigned event identity + canonical link (may be null). */
+    record EventRef(String id, String url) {}
 }

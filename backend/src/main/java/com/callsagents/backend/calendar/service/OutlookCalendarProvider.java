@@ -67,12 +67,12 @@ public class OutlookCalendarProvider implements CalendarProvider {
     }
 
     @Override
-    public String createEvent(String accessToken, String externalCalendarId, EventPayload event) {
+    public EventRef createEvent(String accessToken, String externalCalendarId, EventPayload event) {
         throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 
     @Override
-    public String updateEvent(String accessToken, String externalCalendarId, String eventId, EventPayload event) {
+    public EventRef updateEvent(String accessToken, String externalCalendarId, String eventId, EventPayload event) {
         throw new ServiceUnavailableException("Outlook calendar provider is not implemented yet");
     }
 

@@ -62,6 +62,10 @@ public class Appointment {
     @Column(name = "external_event_id", length = 255)
     private String externalEventId;
 
+    /** Provider's canonical deep link to the event (Google htmlLink). */
+    @Column(name = "external_event_url", length = 1024)
+    private String externalEventUrl;
+
     @Column(name = "external_synced_at")
     private Instant externalSyncedAt;
 

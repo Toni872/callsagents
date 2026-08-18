@@ -211,7 +211,7 @@ public class GoogleCalendarProvider implements CalendarProvider {
     }
 
     @Override
-    public String createEvent(String accessToken, String externalCalendarId, EventPayload event) {
+    public EventRef createEvent(String accessToken, String externalCalendarId, EventPayload event) {
         if (!isConfigured()) throw new IllegalStateException("Google OAuth not configured");
         if (accessToken == null || accessToken.isBlank()) {
             throw new IllegalArgumentException("Access token is empty — user must re-authenticate");
@@ -238,14 +238,19 @@ public class GoogleCalendarProvider implements CalendarProvider {
                     + resp.statusCode() + " — " + resp.body());
             }
             JsonNode created = mapper.readTree(resp.body());
-            return created.path("id").asText();
+            // htmlLink is Google's canonical deep link — always works. The
+            // base64(eid) construction does NOT (404 on secondary calendars).
+            return new EventRef(
+                created.path("id").asText(),
+                created.path("htmlLink").asText(null)
+            );
         } catch (Exception e) {
             throw new RuntimeException("Google createEvent failed: " + e.getMessage(), e);
         }
     }
 
     @Override
-    public String updateEvent(String accessToken, String externalCalendarId, String eventId, EventPayload event) {
+    public EventRef updateEvent(String accessToken, String externalCalendarId, String eventId, EventPayload event) {
         if (!isConfigured()) throw new IllegalStateException("Google OAuth not configured");
         if (accessToken == null || accessToken.isBlank()) {
             throw new IllegalArgumentException("Access token is empty — user must re-authenticate");
@@ -275,7 +280,10 @@ public class GoogleCalendarProvider implements CalendarProvider {
                     + resp.statusCode() + " — " + resp.body());
             }
             JsonNode updated = mapper.readTree(resp.body());
-            return updated.path("id").asText();
+            return new EventRef(
+                updated.path("id").asText(),
+                updated.path("htmlLink").asText(null)
+            );
         } catch (Exception e) {
             throw new RuntimeException("Google updateEvent failed: " + e.getMessage(), e);
         }

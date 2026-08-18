@@ -128,7 +128,9 @@ class CalendarSyncServiceTest {
             .thenReturn(Optional.of(integration));
         when(googleProvider.isConfigured()).thenReturn(true);
         when(googleProvider.provider()).thenReturn(CalendarProviderType.GOOGLE);
-        when(googleProvider.createEvent(eq("decrypted-access"), any(), any())).thenReturn("external-event-id-999");
+        when(googleProvider.createEvent(eq("decrypted-access"), any(), any()))
+            .thenReturn(new CalendarProvider.EventRef("external-event-id-999",
+                "https://calendar.google.com/calendar/event?eid=test-999"));
         when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
 
         service.syncAppointment(a);
@@ -183,6 +185,9 @@ class CalendarSyncServiceTest {
             .thenReturn(Optional.of(integration));
         when(googleProvider.isConfigured()).thenReturn(true);
         when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
+        when(googleProvider.updateEvent(eq("decrypted-access"), eq("primary"), eq("evt-existing"), any()))
+            .thenReturn(new CalendarProvider.EventRef("evt-existing",
+                "https://calendar.google.com/calendar/event?eid=evt-existing"));
 
         service.updateAppointment(a);
 
@@ -202,7 +207,9 @@ class CalendarSyncServiceTest {
             .thenReturn(Optional.of(integration));
         when(googleProvider.isConfigured()).thenReturn(true);
         when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
-        when(googleProvider.createEvent(eq("decrypted-access"), any(), any())).thenReturn("evt-new");
+        when(googleProvider.createEvent(eq("decrypted-access"), any(), any()))
+            .thenReturn(new CalendarProvider.EventRef("evt-new",
+                "https://calendar.google.com/calendar/event?eid=evt-new"));
 
         service.updateAppointment(a);
 
@@ -239,7 +246,9 @@ class CalendarSyncServiceTest {
             .thenReturn(Optional.of(integration));
         when(googleProvider.isConfigured()).thenReturn(true);
         when(encryption.decrypt("encrypted-token")).thenReturn("decrypted-access");
-        when(googleProvider.createEvent(eq("decrypted-access"), any(), any())).thenReturn("evt-backfill");
+        when(googleProvider.createEvent(eq("decrypted-access"), any(), any()))
+            .thenReturn(new CalendarProvider.EventRef("evt-backfill",
+                "https://calendar.google.com/calendar/event?eid=evt-backfill"));
 
         CalendarSyncService.BackfillResult result = service.backfillUnsynced();
 
@@ -264,7 +273,9 @@ class CalendarSyncServiceTest {
         when(encryption.decrypt("encrypted-refresh")).thenReturn("refresh-token");
         when(googleProvider.refreshAccessToken("refresh-token"))
             .thenReturn(new CalendarProvider.TokenResponse("new-token", null, 3600L, "calendar", "Bearer"));
-        when(googleProvider.createEvent(eq("new-token"), any(), any())).thenReturn("evt-after-refresh");
+        when(googleProvider.createEvent(eq("new-token"), any(), any()))
+            .thenReturn(new CalendarProvider.EventRef("evt-after-refresh",
+                "https://calendar.google.com/calendar/event?eid=evt-after-refresh"));
 
         service.syncAppointment(a);
 
@@ -290,7 +301,9 @@ class CalendarSyncServiceTest {
             .thenReturn(new CalendarProvider.TokenResponse("fresh-token", null, 3600L, "calendar", "Bearer"));
         when(googleProvider.createEvent(eq("stale-token"), any(), any()))
             .thenThrow(new RuntimeException("Google access token rejected (401) — user must re-authenticate"));
-        when(googleProvider.createEvent(eq("fresh-token"), any(), any())).thenReturn("evt-after-401");
+        when(googleProvider.createEvent(eq("fresh-token"), any(), any()))
+            .thenReturn(new CalendarProvider.EventRef("evt-after-401",
+                "https://calendar.google.com/calendar/event?eid=evt-after-401"));
 
         service.syncAppointment(a);
 

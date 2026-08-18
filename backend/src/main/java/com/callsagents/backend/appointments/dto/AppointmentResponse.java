@@ -33,19 +33,24 @@ public record AppointmentResponse(
             appointment.getCreatedAt(),
             appointment.getUpdatedAt(),
             appointment.getExternalEventId(),
-            googleEventUrl(appointment)
+            externalEventUrl(appointment)
         );
     }
 
     /**
-     * One-click deep link to the event in Google Calendar.
-     * Format: https://calendar.google.com/calendar/event?eid=<base64url(eventId)>
-     * Only meaningful when the appointment was actually synced to Google.
+     * Deep link to the event in Google Calendar. Prefers the provider's own
+     * canonical link (Google htmlLink, stored at sync time — always works).
+     * Falls back to the legacy base64(eid) construction for events synced
+     * before the URL was stored; that format only works on the primary
+     * calendar, so a stale event may still 404 until re-synced.
      */
-    private static String googleEventUrl(Appointment appointment) {
+    private static String externalEventUrl(Appointment appointment) {
         String eventId = appointment.getExternalEventId();
         if (eventId == null || eventId.isBlank()) return null;
         if (!"GOOGLE".equalsIgnoreCase(appointment.getExternalProvider())) return null;
+        if (appointment.getExternalEventUrl() != null && !appointment.getExternalEventUrl().isBlank()) {
+            return appointment.getExternalEventUrl();
+        }
         String eid = Base64.getUrlEncoder().withoutPadding()
             .encodeToString(eventId.getBytes(StandardCharsets.UTF_8));
         return "https://calendar.google.com/calendar/event?eid=" + eid;

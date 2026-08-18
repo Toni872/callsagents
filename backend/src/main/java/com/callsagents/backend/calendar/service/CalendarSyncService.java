@@ -89,16 +89,17 @@ public class CalendarSyncService {
         }
 
         try {
-            String eventId = runWithRefresh(integration,
+            CalendarProvider.EventRef eventRef = runWithRefresh(integration,
                 t -> provider.createEvent(t, integration.getExternalCalendarId(), toPayload(appointment)));
             // Persist the linkage on the appointment itself — separate update so we
             // don't tie ourselves to the outer transaction.
             appointment.setExternalProvider(provider.provider().name());
-            appointment.setExternalEventId(eventId);
+            appointment.setExternalEventId(eventRef.id());
+            appointment.setExternalEventUrl(eventRef.url());
             appointment.setExternalSyncedAt(Instant.now());
             markSuccess(integration);
             log.info("Synced appointment {} to {} as event {}", appointment.getId(),
-                provider.provider(), eventId);
+                provider.provider(), eventRef.id());
         } catch (Exception e) {
             log.warn("syncAppointment failed for appointment {}: {}", appointment.getId(), e.getMessage());
             markFailure(integration, e.getMessage());
@@ -132,9 +133,15 @@ public class CalendarSyncService {
         }
 
         try {
-            runWithRefresh(integration,
+            CalendarProvider.EventRef eventRef = runWithRefresh(integration,
                 t -> provider.updateEvent(t, integration.getExternalCalendarId(),
                     appointment.getExternalEventId(), toPayload(appointment)));
+            if (eventRef != null) {
+                appointment.setExternalEventId(eventRef.id());
+                if (eventRef.url() != null) {
+                    appointment.setExternalEventUrl(eventRef.url());
+                }
+            }
             appointment.setExternalSyncedAt(Instant.now());
             markSuccess(integration);
             log.info("Updated Google event {} for appointment {}",
@@ -247,7 +254,7 @@ public class CalendarSyncService {
      * Run a provider call with a usable token. On a 401 (token expired early /
      * clock skew / revoked), refresh once and retry a single time.
      */
-    private String runWithRefresh(CalendarIntegration integration, TokenCall call) {
+    private <T> T runWithRefresh(CalendarIntegration integration, TokenCall<T> call) {
         String token = usableToken(integration);
         try {
             return call.run(token);
@@ -261,8 +268,8 @@ public class CalendarSyncService {
     }
 
     @FunctionalInterface
-    private interface TokenCall {
-        String run(String token);
+    private interface TokenCall<T> {
+        T run(String token);
     }
 
     /** Event payload shared by create/update sync. */

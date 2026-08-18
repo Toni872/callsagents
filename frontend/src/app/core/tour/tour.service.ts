@@ -244,16 +244,6 @@ export class TourService {
     }
   }
 
-  /** Cancel the tour mid-way. */
-  cancelTour(): void {
-    this.driverInstance?.destroy();
-    this.isFullTourActive = false;
-    this.currentSegmentIndex = 0;
-    this.navigationSubscription?.unsubscribe();
-    this.navigationSubscription = null;
-    sessionStorage.setItem(SESSION_SHOWN_KEY, 'yes');
-  }
-
   /** Start a single segment (one page's steps). */
   private startSegment(index: number): void {
     if (index >= this.segments.length) {
@@ -280,9 +270,6 @@ export class TourService {
           prevBtnText: 'Anterior',
           doneBtnText: 'Continuar',
           steps: segment.steps,
-          onHighlighted: () => {
-            this.injectCancelButton();
-          },
           onDestroyed: () => {
             this.zone.run(() => {
               this.onSegmentDestroyed();
@@ -292,34 +279,6 @@ export class TourService {
         this.driverInstance.drive();
       });
     }, 400);
-  }
-
-  /** Inject a "Cancelar" button into every popover after it renders. */
-  private injectCancelButton(): void {
-    const popover = document.querySelector('.driver-popover');
-    if (!popover) return;
-
-    // Don't inject twice
-    if (popover.querySelector('.guide-cancel-btn')) return;
-
-    const footer = popover.querySelector('.driver-popover-footer');
-    if (!footer) return;
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancelar';
-    cancelBtn.className = 'guide-cancel-btn';
-    cancelBtn.addEventListener('click', () => {
-      this.zone.run(() => this.cancelTour());
-    });
-
-    // Insert before the navigation buttons
-    const navBtns = footer.querySelector('.driver-popover-navigation-btns');
-    if (navBtns) {
-      footer.insertBefore(cancelBtn, navBtns);
-    } else {
-      footer.appendChild(cancelBtn);
-    }
   }
 
   /** When a segment ends, move to next page or finish. */

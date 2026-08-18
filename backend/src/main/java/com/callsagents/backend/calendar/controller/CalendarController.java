@@ -189,6 +189,17 @@ public class CalendarController {
             .toList();
     }
 
+    /** Provider configuration status — lets the SPA show/hide connect buttons. */
+    @GetMapping("/providers")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
+    @Operation(summary = "Estado de configuración de proveedores de calendario")
+    public List<Map<String, Object>> providers() {
+        return providers.stream().map(p -> Map.<String, Object>of(
+            "provider", p.provider().name(),
+            "configured", p.isConfigured()
+        )).toList();
+    }
+
     /** Disconnect an integration. */
     @DeleteMapping("/integrations/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")

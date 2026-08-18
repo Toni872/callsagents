@@ -2,6 +2,11 @@ export type CalendarProviderType = 'GOOGLE' | 'OUTLOOK';
 
 export type CalendarSyncStatus = 'PENDING' | 'SYNCED' | 'FAILED';
 
+export interface CalendarProviderStatus {
+  provider: CalendarProviderType;
+  configured: boolean;
+}
+
 export interface CalendarIntegration {
   id: string;
   userId: string;

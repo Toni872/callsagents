@@ -31,13 +31,19 @@ The backend Dockerfile **must live at the repo ROOT** (Railway looks for `Docker
 ```bash
 JWT_SECRET=<openssl rand -base64 32>
 ENCRYPTION_KEY=<openssl rand -base64 32>
-APP_CALENDAR_GOOGLE_CLIENT_ID=<your-google-client-id>
-APP_CALENDAR_GOOGLE_CLIENT_SECRET=<your-google-client-secret>
-GOOGLE_REDIRECT_URI=https://<your-backend-domain>/api/calendar/oauth/callback/google
+GOOGLE_CLIENT_ID=<your-google-client-id>
+GOOGLE_CLIENT_SECRET=<your-google-client-secret>
+GOOGLE_REDIRECT_URI=https://<your-backend-domain>/api/calendar/integrations/google/callback
+FRONTEND_BASE_URL=https://<your-frontend-domain>
 VAPI_API_KEY=<your-vapi-api-key>
 VAPI_ASSISTANT_ID=<your-vapi-assistant-id>
 VAPI_PHONE_NUMBER_ID=<your-vapi-phone-id>
 ```
+
+> **Variable names**: the backend maps `app.calendar.google.client-id` from `GOOGLE_CLIENT_ID`
+> (and `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`) directly — see `application.yml`.
+> `FRONTEND_BASE_URL` is REQUIRED in production: the OAuth callback redirects the
+> browser back to the SPA, and the default is `http://localhost`.
 
 6. **Reference variables** from Postgres and Redis plugins (Railway exposes them automatically, but you may need to add explicit references if not auto-injected):
    - `SPRING_DATASOURCE_URL=jdbc:${Postgres.DATABASE_URL}` (use Railway's variable reference syntax)
@@ -96,6 +102,24 @@ Internet → Railway edge (TLS) → callsagents-frontend (nginx :80)
                                     ↓ Lettuce
                                   Redis (REDIS_URL injected)
 ```
+
+## Deploying changes (IMPORTANT)
+
+**Use `railway up`, NOT `railway redeploy`.** `railway redeploy` reuses the OLD
+deployment's code — fixes committed to `main` silently never reach production.
+`railway up` uploads the current code and rebuilds.
+
+```bash
+# From the repo root — one command does tests + local smoke + deploy + prod smoke
+pwsh -NoProfile -File scripts\verify-deploy.ps1
+
+# Verification only (no deploy):
+pwsh -NoProfile -File scripts\verify-deploy.ps1 -SkipDeploy
+```
+
+The script aborts BEFORE deploying when: backend tests fail, the frontend build
+fails, or required Railway variables are missing (it caught
+`GOOGLE_CLIENT_ID`-style mistakes before they hit production).
 
 ## Auto-deploy from GitHub
 

@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { apiUrl } from './api-base';
 import {
   CalendarIntegration,
+  CalendarProviderStatus,
   CalendarProviderType
 } from '../../shared/models/calendar.model';
 
@@ -14,6 +15,11 @@ export class CalendarApi {
   /** Returns current user's integrations. NEVER returns decrypted tokens (server side never sends them). */
   list(): Observable<CalendarIntegration[]> {
     return this.http.get<CalendarIntegration[]>(apiUrl('/calendar/integrations'));
+  }
+
+  /** Provider configuration status — used to show/hide connect buttons. */
+  providers(): Observable<CalendarProviderStatus[]> {
+    return this.http.get<CalendarProviderStatus[]>(apiUrl('/calendar/providers'));
   }
 
   /**

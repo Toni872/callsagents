@@ -364,16 +364,24 @@ export class CalendarSettingsComponent implements OnInit {
 
   protected load(): void {
     this.loading.set(true);
+    this.api.providers().subscribe({
+      next: (providers) => {
+        const google = providers.find((p) => p.provider === 'GOOGLE');
+        this.googleConfigured.set(google?.configured ?? false);
+      },
+      error: () => {
+        // No se puede saber el estado; asumimos no configurado para no
+        // ofrecer un botón que fallará. El errorInterceptor muestra el toast.
+        this.googleConfigured.set(false);
+      }
+    });
     this.api.list().subscribe({
       next: (list) => {
         this.integrations.set(list);
         this.loading.set(false);
       },
-      error: (err: HttpErrorResponse) => {
+      error: () => {
         this.loading.set(false);
-        if (err.status === 503) {
-          this.googleConfigured.set(false);
-        }
         // errorInterceptor ya muestra el toast; el componente solo
         // agrega el contexto adicional (panel de Google no configurado).
       }
@@ -386,8 +394,15 @@ export class CalendarSettingsComponent implements OnInit {
     this.api.startConnect('GOOGLE').subscribe({
       next: (res) => {
         window.location.href = res.authorizeUrl;
+      },
+      error: (err: HttpErrorResponse) => {
+        // 503 = provider no configurado en el servidor: mostramos el panel
+        // y deshabilitamos el botón en vez de dejar el error crudo.
+        if (err.status === 503) {
+          this.googleConfigured.set(false);
+        }
+        // errorInterceptor maneja el toast (401/503/etc.)
       }
-      // errorInterceptor maneja el toast (401/503/etc.)
     });
   }
 

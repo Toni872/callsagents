@@ -17,7 +17,6 @@ import { TourService } from '../../tour/tour.service';
       @if (tourService.showWelcome()) {
         <div class="welcome-overlay">
           <div class="welcome-banner">
-            <div class="welcome-icon">👋</div>
             <h2 class="welcome-title">Bienvenido a Callsagents</h2>
             <p class="welcome-text">
               Te mostramos cómo funciona cada sección en un recorrido rápido.
@@ -178,10 +177,6 @@ import { TourService } from '../../tour/tour.service';
       width: 90%;
       text-align: center;
       box-shadow: var(--shadow-lg);
-    }
-    .welcome-icon {
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
     }
     .welcome-title {
       margin: 0 0 0.5rem;

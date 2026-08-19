@@ -53,7 +53,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                 </svg>
               </div>
-              <span>¿Qué curso te interesa?</span>
+              <span>¿Qué servicio te interesa?</span>
             </div>
             <div class="screen__bubble screen__bubble--outgoing">
               <span>Marketing Digital</span>

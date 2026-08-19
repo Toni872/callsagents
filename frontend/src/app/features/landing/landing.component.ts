@@ -61,12 +61,12 @@ const ORB_GREEN = '0,168,107';
         <div class="lnd-hero-copy">
           <span class="lnd-badge">
             <span class="lnd-badge-dot" aria-hidden="true"></span>
-            Atención automática para tu centro
+            Atención automática para tu negocio
           </span>
 
           <h1 class="lnd-hero-title">
             <span class="lnd-line"
-              ><span class="lnd-line-inner">Tu centro responde</span></span
+              ><span class="lnd-line-inner">Tu negocio responde</span></span
             >
             <span class="lnd-line"
               ><span class="lnd-line-inner">cuando <span class="lnd-accent">ya es tarde.</span></span
@@ -75,7 +75,7 @@ const ORB_GREEN = '0,168,107';
           </h1>
 
           <p class="lnd-hero-sub">
-            CallsAgents atiende cada solicitud en menos de un minuto, cualifica al alumno
+            CallsAgents atiende cada solicitud en menos de un minuto, cualifica al lead
             y agenda la cita — sin que tu equipo deje de hacer lo que mejor sabe hacer.
           </p>
 
@@ -98,7 +98,7 @@ const ORB_GREEN = '0,168,107';
             </div>
             <div class="lnd-stat">
               <div class="lnd-stat-num">0</div>
-              <div class="lnd-stat-label">alumnos perdidos por demora</div>
+              <div class="lnd-stat-label">leads perdidos por demora</div>
             </div>
           </div>
         </div>
@@ -144,7 +144,7 @@ const ORB_GREEN = '0,168,107';
 
     <section class="lnd-cta" id="demo">
       <div class="lnd-container lnd-cta-inner">
-        <h2 class="lnd-cta-title">¿Listo para que tu centro responda en menos de un minuto?</h2>
+        <h2 class="lnd-cta-title">¿Listo para que tu negocio responda en menos de un minuto?</h2>
         <p class="lnd-cta-sub">Empieza gratis. Sin tarjeta. Sin compromiso.</p>
         <a class="lnd-btn lnd-btn--primary lnd-btn--lg lnd-btn--hero" routerLink="/login">Probar demo</a>
       </div>
@@ -642,18 +642,18 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
   protected readonly steps: LandingStep[] = [
     {
       number: '01',
-      title: 'El alumno te escribe',
+      title: 'El lead te contacta',
       text: 'Rellena tu formulario o te contacta. CallsAgents le responde en menos de un minuto, con su nombre y los datos de su solicitud.'
     },
     {
       number: '02',
       title: 'Se hace la pregunta correcta',
-      text: 'Pregunta qué quiere estudiar, cuándo quiere empezar y si necesita información sobre precios, requisitos o horarios.'
+      text: 'Pregunta qué necesita, cuándo quiere empezar y si necesita información sobre precios, disponibilidad o requisitos.'
     },
     {
       number: '03',
       title: 'Cita en tu calendario',
-      text: 'Si hay interés, reserva la cita con el asesor. Si no responde, le llama automáticamente al día siguiente.'
+      text: 'Si hay interés, reserva la cita con el responsable. Si no responde, le llama automáticamente al día siguiente.'
     }
   ];
 
@@ -667,8 +667,8 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
       a: 'Sí. Se conecta con tu formulario existente, sin tocar nada en tu web.'
     },
     {
-      q: '¿Y si el alumno no responde al chat?',
-      a: 'CallsAgents le llama al día siguiente para recuperar el contacto. No se pierde ningún alumno.'
+      q: '¿Y si el lead no responde al chat?',
+      a: 'CallsAgents le llama al día siguiente para recuperar el contacto. No se pierde ningún lead.'
     },
     {
       q: '¿Puedo probarlo gratis?',
@@ -680,7 +680,7 @@ export class LandingComponent implements AfterViewInit, OnDestroy {
     },
     {
       q: '¿Cuánto cuesta?',
-      a: 'Desde 49€/mes para centros pequeños. Sin permanencia.'
+      a: 'Desde 49€/mes para negocios pequeños. Sin permanencia.'
     }
   ];
 

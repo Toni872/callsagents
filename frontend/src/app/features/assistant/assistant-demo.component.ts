@@ -17,17 +17,17 @@ import { AppointmentApi } from '../../core/api/appointment.api';
 const DEMO_EMAIL = 'demo@callsagents.com';
 
 const GREETING =
-  '¡Hola! Soy el asistente virtual de Academia Meridiano. He visto que te interesan nuestros cursos. Para empezar, ¿cómo te llamas?';
+  '¡Hola! Soy el asistente virtual de tu empresa. He visto que te interesan nuestros servicios. Para empezar, ¿cómo te llamas?';
 const FALLBACK_ANSWER =
-  'Buena pregunta. Te recomiendo hacer una prueba de nivel gratuita: allí te resuelvo todas las dudas en detalle y sin compromiso.';
+  'Buena pregunta. Te recomiendo agendar una llamada con nuestro equipo: allí te resuelvo todas las dudas en detalle y sin compromiso.';
 const OFFER_TEXT =
-  'Perfecto. ¿Te agendo una prueba de nivel gratuita para mañana a las 10:00? Dura 30 minutos y la hacemos online o en el centro, como prefieras.';
+  'Perfecto. ¿Te agendo una llamada informativa para mañana a las 10:00? Dura 30 minutos y la hacemos por videollamada o en persona, como prefieras.';
 
 const QUESTION_CHIPS = [
-  '¿Cuánto cuesta el curso de inglés?',
-  '¿Hay clases online?',
-  '¿Preparación DELE?',
-  '¿Qué horarios tenéis?'
+  '¿Qué servicios ofrecen?',
+  '¿Cómo funciona?',
+  '¿Cuánto cuesta?',
+  '¿Qué horarios tienen?'
 ];
 
 const OFFER_CHIPS = ['Sí, agenda', 'Tengo otra pregunta', 'No, gracias'];
@@ -42,22 +42,22 @@ const ANSWER_RULES: AnswerRule[] = [
   {
     keywords: ['precio', 'cuesta', 'coste', 'caro', '€', 'euro', 'dinero', 'tarifa', 'cuota', 'mensualidad'],
     answer:
-      'Nuestros cursos de idiomas parten de 49€/mes en grupo y 79€/mes en clases individuales. La prueba de nivel es gratuita y sin compromiso. El precio final depende del idioma y del nivel: te lo confirmo todo en la prueba.'
+      'Nuestros planes parten de 49€/mes para pymes y 99€/mes para empresas. La primera consulta es gratuita y sin compromiso. El precio final depende del tamaño y las necesidades: te lo confirmo todo en la llamada.'
   },
   {
-    keywords: ['online', 'remoto', 'virtual', 'presencial', 'modalidad', 'a distancia', 'videollamada'],
+    keywords: ['como funciona', 'funcionamiento', 'proceso', 'mecanica', 'como se usa', 'onboarding'],
     answer:
-      'Sí, ofrecemos clases 100% online en directo y también presenciales en el centro. Las online son en grupos reducidos por videollamada, con el mismo material y los mismos profesores que las presenciales.'
+      'Nuestro sistema se integra con tu web o formulario existente. Cuando un potencial cliente te contacta, nuestro asistente le responde al instante, cualifica su interés y agenda una cita en tu calendario — todo automático.'
   },
   {
-    keywords: ['dele', 'examen', 'certificado', 'oficial', 'diploma'],
+    keywords: ['servicio', 'servicios', 'ofrecen', 'qué hacen', 'solución', 'soluciones', 'funcionalidad'],
     answer:
-      'Sí, preparamos el DELE en todos los niveles, de A1 a C2, con profesores certificados. Además, hacemos un simulacro de examen cada mes para que llegues con confianza.'
+      'Ofrecemos asistentes virtuales que atienden llamadas y mensajes 24/7, cualifican leads y agenda citas directamente en tu calendario. Sin intervención manual, sin leads perdidos.'
   },
   {
     keywords: ['horario', 'horarios', 'hora', 'cuando', 'dias', 'turno', 'manana', 'tarde', 'lunes', 'sabado', 'fin de semana', 'apertura'],
     answer:
-      'Nuestro horario es de lunes a viernes de 9:00 a 21:00 y los sábados de 9:00 a 14:00, con clases por la mañana y por la tarde. En las clases online también podemos adaptarnos a tu disponibilidad.'
+      'Nuestro asistente está disponible 24/7, todos los días del año. Tu equipo puede atender en su horario habitual: el asistente cubre fuera de horario y nunca pierde un contacto.'
   }
 ];
 
@@ -98,7 +98,7 @@ type ChatStage = 'awaiting-name' | 'questions' | 'offering' | 'booking' | 'done'
           </div>
           <div>
             <h1 class="assistant-page__title">Asistente conversacional</h1>
-            <p class="assistant-page__subtitle">Simulador demo · Academia Meridiano</p>
+            <p class="assistant-page__subtitle">Simulador demo · Asistente conversacional</p>
           </div>
         </div>
         <div class="assistant-page__actions">
@@ -513,7 +513,7 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
     this.userName.set(name);
     this.stage.set('questions');
     this.reply(
-      `Encantado de conocerte, ${name}. Soy el asistente virtual de Academia Meridiano. ¿Qué te gustaría saber?`,
+      `Encantado de conocerte, ${name}. Soy el asistente virtual de tu empresa. ¿Qué te gustaría saber?`,
       QUESTION_CHIPS
     );
   }
@@ -561,7 +561,7 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
       return;
     }
     this.reply(
-      'Disculpa, no te he entendido del todo. ¿Te agendo la prueba de nivel para mañana a las 10:00?',
+      'Disculpa, no te he entendido del todo. ¿Te agendo la llamada para mañana a las 10:00?',
       OFFER_CHIPS
     );
   }
@@ -576,7 +576,7 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
       return;
     }
     this.reply(
-      `Sin problema, ${this.userName()}. Cuando quieras, dime y te agendo la prueba de nivel.`
+      `Sin problema, ${this.userName()}. Cuando quieras, dime y te agendo la llamada.`
     );
   }
 
@@ -596,7 +596,7 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
 
   private startBooking(): void {
     this.stage.set('booking');
-    this.reply('¡Perfecto! Dame un momento, estoy agendando tu prueba de nivel…');
+    this.reply('¡Perfecto! Dame un momento, estoy agendando tu llamada…');
     this.schedule(() => this.book(), 900);
   }
 
@@ -611,17 +611,17 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
     this.typing.set(true);
 
     const parts = name.split(/\s+/);
-    const firstName = this.capitalize(parts[0] ?? 'Alumno');
-    const lastName = parts.length > 1 ? this.capitalizeAll(parts.slice(1).join(' ')) : 'Alumno';
+    const firstName = this.capitalize(parts[0] ?? 'Cliente');
+    const lastName = parts.length > 1 ? this.capitalizeAll(parts.slice(1).join(' ')) : 'Cliente';
 
     this.leadApi
       .create({
         firstName,
         lastName,
-        email: `${this.slugify(name)}.alumno@example.com`,
+        email: `${this.slugify(name)}.lead@example.com`,
         phone: '+34 600 000 000',
         source: 'API',
-        notes: 'Creado por el simulador de asistente conversacional (cuenta demo). Solicita prueba de nivel.'
+        notes: 'Creado por el simulador de asistente conversacional (cuenta demo).'
       })
       .subscribe({
         next: (lead) => this.createAppointment(lead.id, user.id, name),
@@ -635,7 +635,7 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
       .map((m) => `"${m.text}"`);
     const summary =
       interests.length > 0
-        ? `Intereses del alumno: ${interests.join(' — ')}.`
+        ? `Intereses del lead: ${interests.join(' — ')}.`
         : 'Sin preguntas previas.';
 
     this.appointmentApi
@@ -645,7 +645,7 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
         scheduledAt: this.tomorrowAtTen(),
         durationMinutes: 30,
         status: 'PENDING',
-        notes: `Prueba de nivel agendada por el asistente conversacional (simulador demo). Alumno: ${name}. ${summary}`
+        notes: `Llamada agendada por el asistente conversacional (simulador demo). Lead: ${name}. ${summary}`
       })
       .subscribe({
         next: () => {
@@ -656,7 +656,7 @@ export class AssistantDemoComponent implements OnInit, OnDestroy {
             ...msgs,
             {
               role: 'assistant',
-              text: `¡Listo, ${name}! Te he agendado una prueba de nivel para mañana a las 10:00 (30 minutos). Ya puedes verla en tu agenda.`,
+              text: `¡Listo, ${name}! Te he agendado una llamada informativa para mañana a las 10:00 (30 minutos). Ya puedes verla en tu agenda.`,
               kind: 'success'
             }
           ]);

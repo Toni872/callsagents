@@ -45,8 +45,8 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
               <span class="demo-cta__eyebrow">Demo · Asistente conversacional</span>
               <h2 class="demo-cta__title">Prueba el asistente con una conversación</h2>
               <p class="demo-cta__desc">
-                Simula cómo el asistente conversa con un alumno interesado, responde sus dudas
-                y agenda una prueba de nivel en tu calendario.
+                Simula cómo el asistente conversa con un lead interesado, responde sus dudas
+                y agenda una cita en tu calendario.
               </p>
             </div>
             <button class="btn btn--primary demo-cta__btn" type="button" (click)="openAssistant()">

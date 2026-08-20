@@ -35,7 +35,7 @@ export class TourService {
           element: '.sidebar__nav a[href="/dashboard"]',
           popover: {
             title: 'Panel de control',
-            description: 'Tu centro de mando. Aquí ves todo de un vistazo: leads, llamadas, campañas y citas. Se actualiza solo.',
+            description: 'Tu panel de control. Aquí ves todo de un vistazo: leads, llamadas, campañas y citas. Se actualiza solo.',
             side: 'right' as const,
             align: 'start' as const,
           },
@@ -67,7 +67,7 @@ export class TourService {
           element: '.sidebar__nav a[href="/leads"]',
           popover: {
             title: 'Gestion de leads',
-            description: 'Tu base de datos de prospectos. Cada lead es un posible cliente que ha contactado tu centro o que vas a contactar.',
+            description: 'Tu base de datos de prospectos. Cada lead es un posible cliente que ha contactado tu negocio o que vas a contactar.',
             side: 'right' as const,
             align: 'start' as const,
           },

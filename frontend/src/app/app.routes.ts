@@ -98,5 +98,12 @@ export const routes: Routes = [
         (m) => m.LandingComponent
       )
   },
+  {
+    path: 'demo',
+    loadComponent: () =>
+      import('./features/demo/demo-chat.component').then(
+        (m) => m.DemoChatComponent
+      )
+  },
   { path: '**', redirectTo: '' }
 ];

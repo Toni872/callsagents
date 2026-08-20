@@ -80,12 +80,8 @@ const ORB_GREEN = '0,168,107';
           </p>
 
           <div class="lnd-hero-ctas">
-            <a class="lnd-btn lnd-btn--primary lnd-btn--hero" routerLink="/login">Probar demo</a>
+            <a class="lnd-btn lnd-btn--primary lnd-btn--hero" routerLink="/demo">Probar demo</a>
           </div>
-
-          <p class="lnd-demo-creds">
-            Cuenta demo: demo&#64;callsagents.com · contraseña: demo12345
-          </p>
 
           <div class="lnd-stats">
             <div class="lnd-stat">
@@ -146,7 +142,7 @@ const ORB_GREEN = '0,168,107';
       <div class="lnd-container lnd-cta-inner">
         <h2 class="lnd-cta-title">¿Listo para que tu negocio responda en menos de un minuto?</h2>
         <p class="lnd-cta-sub">Empieza gratis. Sin tarjeta. Sin compromiso.</p>
-        <a class="lnd-btn lnd-btn--primary lnd-btn--lg lnd-btn--hero" routerLink="/login">Probar demo</a>
+        <a class="lnd-btn lnd-btn--primary lnd-btn--lg lnd-btn--hero" routerLink="/demo">Probar demo</a>
       </div>
     </section>
 

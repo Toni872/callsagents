@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/callsagents
+    url: jdbc:postgresql://localhost:5432/callsagents
     username: callsagents
     password: callsagents
     driver-class-name: org.postgresql.Driver

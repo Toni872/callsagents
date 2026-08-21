@@ -67,6 +67,9 @@ public class SecurityConfig {
                 // WhatsApp webhook (Twilio): sin auth, Twilio llama directamente.
                 auth.requestMatchers("/webhooks/whatsapp").permitAll();
                 auth.requestMatchers("/webhooks/whatsapp/**").permitAll();
+                // WhatsApp webhook (Vonage sandbox): sin auth, Vonage llama directamente.
+                auth.requestMatchers("/webhooks/vonage").permitAll();
+                auth.requestMatchers("/webhooks/vonage/**").permitAll();
                 // Callback OAuth de calendario: Google redirige el navegador aquí
                 // SIN Authorization header (es una navegación de browser). Es seguro
                 // exponerlo: solo intercambia un code de un solo uso que solo quien

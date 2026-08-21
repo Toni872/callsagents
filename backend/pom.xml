@@ -99,6 +99,13 @@
             <version>10.5.0</version>
         </dependency>
 
+        <!-- Vonage Java SDK for WhatsApp sandbox integration -->
+        <dependency>
+            <groupId>com.vonage</groupId>
+            <artifactId>server-sdk</artifactId>
+            <version>9.13.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

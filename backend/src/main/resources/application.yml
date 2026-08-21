@@ -80,6 +80,13 @@ app:
     whatsapp:
       from: ${TWILIO_WHATSAPP_FROM:}
       to: ${TWILIO_WHATSAPP_TO:}
+  vonage:
+    api:
+      key: ${VONAGE_API_KEY:}
+      secret: ${VONAGE_API_SECRET:}
+    sandbox:
+      number: ${VONAGE_SANDBOX_NUMBER:}
+      url: ${VONAGE_SANDBOX_URL:https://messages-sandbox.nexmo.com/v1/messages}
 
 server:
   port: ${PORT:8080}

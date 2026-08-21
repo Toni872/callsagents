@@ -224,7 +224,7 @@ public class LeadService {
     }
 
     private UserDto toUserDto(User user) {
-        return new UserDto(user.getId(), user.getEmail(), user.getFullName(), user.getRole().name());
+        return new UserDto(user.getId(), user.getEmail(), user.getFullName(), user.getRole().name(), user.getTrialEndsAt());
     }
 
     private static void validateContact(String email, String phone) {

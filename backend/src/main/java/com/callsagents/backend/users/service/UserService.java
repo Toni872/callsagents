@@ -3,6 +3,7 @@ package com.callsagents.backend.users.service;
 import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.entity.UserStatus;
+import com.callsagents.backend.auth.dto.RegisterRequest;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
@@ -16,6 +17,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -83,6 +87,36 @@ public class UserService {
 
         User saved = userRepository.save(user);
         log.info("Created user {} with role {}", saved.getEmail(), saved.getRole());
+        return saved;
+    }
+
+    /**
+     * Public self-registration. Always creates an AGENT account with a 14-day
+     * trial (trialEndsAt = now + 14 days). The email is normalized to
+     * lowercase so uniqueness is case-insensitive.
+     *
+     * @throws BadRequestException if the email is already registered
+     */
+    @Transactional
+    public User register(RegisterRequest req) {
+        String email = req.email().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmail(email)) {
+            throw new BadRequestException(
+                "A user with email '" + email + "' already exists"
+            );
+        }
+
+        User user = User.builder()
+            .email(email)
+            .passwordHash(passwordEncoder.encode(req.password()))
+            .fullName(req.fullName())
+            .role(UserRole.AGENT)
+            .status(UserStatus.ACTIVE)
+            .trialEndsAt(Instant.now().plus(14, ChronoUnit.DAYS))
+            .build();
+
+        User saved = userRepository.save(user);
+        log.info("Registered user {} with 14-day trial ending {}", saved.getEmail(), saved.getTrialEndsAt());
         return saved;
     }
 

@@ -4,6 +4,7 @@ import com.callsagents.backend.auth.dto.LoginRequest;
 import com.callsagents.backend.auth.dto.LoginResponse;
 import com.callsagents.backend.auth.dto.RefreshRequest;
 import com.callsagents.backend.auth.dto.RefreshResponse;
+import com.callsagents.backend.auth.dto.RegisterRequest;
 import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +46,19 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest req) {
         return ResponseEntity.ok(authService.login(req));
+    }
+
+    @Operation(
+        summary = "Registro público",
+        description = "Crea una cuenta AGENT con trial de 14 días y hace login automático: devuelve los mismos tokens que POST /auth/login."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Cuenta creada y sesión iniciada"),
+        @ApiResponse(responseCode = "400", description = "Payload inválido o email ya registrado")
+    })
+    @PostMapping("/register")
+    public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(req));
     }
 
     @Operation(

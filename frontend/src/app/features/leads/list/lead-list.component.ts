@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { LeadApi } from '../../../core/api/lead.api';
+import { AuthService } from '../../../core/auth/auth.service';
 import { LeadResponse } from '../../../shared/models/lead.model';
 
 @Component({
@@ -26,7 +27,12 @@ import { LeadResponse } from '../../../shared/models/lead.model';
           />
           <button class="secondary" type="button" (click)="onSearch()">Buscar</button>
           <button type="button" (click)="reload()">Recargar</button>
-          <a [routerLink]="['/leads', 'new']">+ Nuevo lead</a>
+          <a
+            [routerLink]="trialLocked() ? null : ['/leads', 'new']"
+            [title]="trialLocked() ? 'Disponible al contratar' : undefined"
+            [attr.aria-disabled]="trialLocked()"
+            [class.is-locked]="trialLocked()"
+          >+ Nuevo lead</a>
         </div>
       </header>
 
@@ -135,11 +141,19 @@ import { LeadResponse } from '../../../shared/models/lead.model';
       a:hover {
         text-decoration: underline;
       }
+      a.is-locked {
+        opacity: 0.5;
+        cursor: not-allowed;
+        text-decoration: none;
+      }
     `
   ]
 })
 export class LeadListComponent implements OnInit {
   private readonly api = inject(LeadApi);
+  private readonly auth = inject(AuthService);
+
+  protected readonly trialLocked = this.auth.isTrialExpired;
 
   protected readonly searchControl = new FormControl<string>('', { nonNullable: true });
 

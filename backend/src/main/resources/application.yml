@@ -74,6 +74,12 @@ app:
       api-key: ${RETELL_API_KEY:}
       agent-id: ${RETELL_AGENT_ID:}
       from-number: ${RETELL_FROM_NUMBER:}
+  twilio:
+    account-sid: ${TWILIO_ACCOUNT_SID:}
+    auth-token: ${TWILIO_AUTH_TOKEN:}
+    whatsapp:
+      from: ${TWILIO_WHATSAPP_FROM:}
+      to: ${TWILIO_WHATSAPP_TO:}
 
 server:
   port: ${PORT:8080}

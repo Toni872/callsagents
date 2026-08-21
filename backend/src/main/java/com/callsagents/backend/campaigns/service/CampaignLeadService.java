@@ -122,7 +122,7 @@ public class CampaignLeadService {
         UserDto assignee = cl.getAssignedTo() == null
             ? null
             : userRepository.findById(cl.getAssignedTo())
-                .map(u -> new UserDto(u.getId(), u.getEmail(), u.getFullName(), u.getRole().name()))
+                .map(u -> new UserDto(u.getId(), u.getEmail(), u.getFullName(), u.getRole().name(), u.getTrialEndsAt()))
                 .orElse(null);
         return CampaignLeadResponse.from(cl, lead, assignee);
     }

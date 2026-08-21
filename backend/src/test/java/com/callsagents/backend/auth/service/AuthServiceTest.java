@@ -13,6 +13,7 @@ import com.callsagents.backend.auth.security.JwtProperties;
 import com.callsagents.backend.auth.security.JwtService;
 import com.callsagents.backend.auth.security.RefreshTokenService;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import com.callsagents.backend.users.service.UserService;
 import com.nimbusds.jwt.JWTClaimsSet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +57,7 @@ class AuthServiceTest {
     @Mock private JwtService jwtService;
     @Mock private JwtProperties jwtProperties;
     @Mock private RefreshTokenService refreshTokenService;
+    @Mock private UserService userService;
 
     private AuthService authService;
 
@@ -76,7 +78,8 @@ class AuthServiceTest {
             userRepository,
             jwtService,
             jwtProperties,
-            refreshTokenService
+            refreshTokenService,
+            userService
         );
     }
 

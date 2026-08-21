@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/callsagents
+    url: jdbc:postgresql://localhost:5433/callsagents
     username: callsagents
     password: callsagents
     driver-class-name: org.postgresql.Driver
@@ -9,3 +9,8 @@ spring:
   # Dev keeps the admin seed (db/migration/dev), production does not.
   flyway:
     locations: classpath:db/migration,classpath:db/migration/dev
+
+app:
+  cors:
+    # Dev: ng serve (4200) y frontend docker (puerto 80). Vacío en producción (same-origin vía nginx).
+    allowed-origins: http://localhost:4200,http://localhost:80,http://localhost

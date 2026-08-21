@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@ang
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { CallApi } from '../../../core/api/call.api';
+import { AuthService } from '../../../core/auth/auth.service';
 import { CallResponse } from '../../../shared/models/call.model';
 
 @Component({
@@ -18,7 +19,12 @@ import { CallResponse } from '../../../shared/models/call.model';
         </div>
         <div class="page__actions">
           <button type="button" class="secondary" (click)="fetch()">Recargar</button>
-          <a [routerLink]="['/calls', 'new']">+ Nueva llamada</a>
+          <a
+            [routerLink]="trialLocked() ? null : ['/calls', 'new']"
+            [title]="trialLocked() ? 'Disponible al contratar' : undefined"
+            [attr.aria-disabled]="trialLocked()"
+            [class.is-locked]="trialLocked()"
+          >+ Nueva llamada</a>
         </div>
       </header>
 
@@ -139,11 +145,19 @@ import { CallResponse } from '../../../shared/models/call.model';
       a:hover {
         text-decoration: underline;
       }
+      a.is-locked {
+        opacity: 0.5;
+        cursor: not-allowed;
+        text-decoration: none;
+      }
     `
   ]
 })
 export class CallListComponent implements OnInit {
   private readonly api = inject(CallApi);
+  private readonly auth = inject(AuthService);
+
+  protected readonly trialLocked = this.auth.isTrialExpired;
 
   protected readonly calls = signal<CallResponse[]>([]);
   protected readonly loading = signal(false);

@@ -7,6 +7,7 @@ import {
   LoginResponse,
   RefreshRequest,
   RefreshResponse,
+  RegisterRequest,
   UserDto
 } from '../../shared/models/auth.model';
 
@@ -16,6 +17,10 @@ export class AuthApi {
 
   login(req: LoginRequest): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(apiUrl('/auth/login'), req);
+  }
+
+  register(req: RegisterRequest): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(apiUrl('/auth/register'), req);
   }
 
   refresh(req: RefreshRequest): Observable<RefreshResponse> {

@@ -3,11 +3,18 @@ export interface UserDto {
   email: string;
   fullName: string;
   role: string;
+  trialEndsAt: string | null;
 }
 
 export interface LoginRequest {
   email: string;
   password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  fullName: string;
 }
 
 export interface LoginResponse {

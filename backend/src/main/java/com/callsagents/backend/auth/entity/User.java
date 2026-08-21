@@ -56,6 +56,9 @@ public class User {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Column(name = "trial_ends_at")
+    private Instant trialEndsAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

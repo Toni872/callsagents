@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@ang
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AppointmentApi } from '../../../core/api/appointment.api';
+import { AuthService } from '../../../core/auth/auth.service';
 import { AppointmentResponse } from '../../../shared/models/appointment.model';
 
 @Component({
@@ -18,7 +19,12 @@ import { AppointmentResponse } from '../../../shared/models/appointment.model';
         </div>
         <div class="page__actions">
           <button type="button" class="secondary" (click)="fetch()">Recargar</button>
-          <a [routerLink]="['/appointments', 'new']">+ Nueva cita</a>
+          <a
+            [routerLink]="trialLocked() ? null : ['/appointments', 'new']"
+            [title]="trialLocked() ? 'Disponible al contratar' : undefined"
+            [attr.aria-disabled]="trialLocked()"
+            [class.is-locked]="trialLocked()"
+          >+ Nueva cita</a>
         </div>
       </header>
 
@@ -129,11 +135,19 @@ import { AppointmentResponse } from '../../../shared/models/appointment.model';
       a:hover {
         text-decoration: underline;
       }
+      a.is-locked {
+        opacity: 0.5;
+        cursor: not-allowed;
+        text-decoration: none;
+      }
     `
   ]
 })
 export class AppointmentListComponent implements OnInit {
   private readonly api = inject(AppointmentApi);
+  private readonly auth = inject(AuthService);
+
+  protected readonly trialLocked = this.auth.isTrialExpired;
 
   protected readonly appointments = signal<AppointmentResponse[]>([]);
   protected readonly loading = signal(false);

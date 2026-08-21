@@ -137,6 +137,30 @@ import { TourService } from '../../tour/tour.service';
           </div>
         </header>
 
+        @if (auth.isTrialExpired()) {
+          <div class="trial-banner trial-banner--expired" role="alert">
+            <span class="trial-banner__text">
+              Tu prueba de 14 días ha finalizado. Contrata el servicio para seguir
+              creando y gestionando.
+            </span>
+            <a
+              class="trial-banner__cta"
+              href="https://wa.me/34687723287"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Contratar
+            </a>
+          </div>
+        } @else if (auth.trialDaysLeft() !== null) {
+          <div class="trial-banner trial-banner--active">
+            <span class="trial-banner__text">
+              Prueba gratuita · {{ auth.trialDaysLeft() }}
+              {{ auth.trialDaysLeft() === 1 ? 'día restante' : 'días restantes' }}
+            </span>
+          </div>
+        }
+
         <main class="content">
           @if (loading.isLoading()) {
             <div class="loading-bar" aria-hidden="true"></div>
@@ -401,6 +425,45 @@ import { TourService } from '../../tour/tour.service';
       padding: var(--spacing-6);
       padding-bottom: var(--spacing-8);
       position: relative;
+    }
+    /* ── Trial banner ── */
+    .trial-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--spacing-4);
+      flex-wrap: wrap;
+      margin: 0 var(--spacing-6) var(--spacing-2);
+      padding: var(--spacing-3) var(--spacing-4);
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+    }
+    .trial-banner--expired {
+      background: var(--color-warning-bg);
+      border: 1px solid var(--color-warning);
+      color: var(--color-warning);
+    }
+    .trial-banner--active {
+      background: var(--color-success-bg);
+      border: 1px solid var(--color-success);
+      color: var(--color-success);
+    }
+    .trial-banner__text {
+      line-height: 1.4;
+    }
+    .trial-banner__cta {
+      flex-shrink: 0;
+      padding: 0.4rem 1rem;
+      border-radius: var(--radius);
+      background: var(--color-warning);
+      color: var(--color-bg);
+      font-weight: 600;
+      font-size: 0.8125rem;
+      text-decoration: none;
+      transition: opacity 0.15s ease;
+    }
+    .trial-banner__cta:hover {
+      opacity: 0.85;
     }
     .loading-bar {
       position: absolute;

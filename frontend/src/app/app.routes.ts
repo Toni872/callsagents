@@ -78,6 +78,13 @@ export const routes: Routes = [
       )
   },
   {
+    path: 'register',
+    loadComponent: () =>
+      import('./features/auth/register/register.component').then(
+        (m) => m.RegisterComponent
+      )
+  },
+  {
     path: 'terms',
     loadComponent: () =>
       import('./features/legal/terms/terms.component').then(

@@ -2,6 +2,7 @@ package com.callsagents.backend.auth.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Schema(description = "Perfil público del usuario")
@@ -16,6 +17,9 @@ public record UserDto(
     String fullName,
 
     @Schema(description = "Rol del usuario", example = "ADMIN", allowableValues = {"ADMIN", "SUPERVISOR", "AGENT"})
-    String role
+    String role,
+
+    @Schema(description = "Fin del trial de 14 días; null = plan completo", example = "2026-09-03T10:15:30Z")
+    Instant trialEndsAt
 ) {
 }

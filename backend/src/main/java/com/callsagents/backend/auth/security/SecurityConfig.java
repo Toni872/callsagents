@@ -19,8 +19,12 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 @Configuration
@@ -32,31 +36,37 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
     private final boolean springdocEnabled;
+    private final List<String> corsAllowedOrigins;
 
     public SecurityConfig(CustomUserDetailsService customUserDetailsService,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
                           ObjectMapper objectMapper,
-                          @Value("${springdoc.api-docs.enabled:true}") boolean springdocEnabled) {
+                          @Value("${springdoc.api-docs.enabled:true}") boolean springdocEnabled,
+                          @Value("${app.cors.allowed-origins:}") List<String> corsAllowedOrigins) {
         this.customUserDetailsService = customUserDetailsService;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.objectMapper = objectMapper;
         this.springdocEnabled = springdocEnabled;
+        this.corsAllowedOrigins = corsAllowedOrigins;
     }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
-            .cors(AbstractHttpConfigurer::disable)
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
-                auth.requestMatchers("/auth/login", "/auth/refresh").permitAll();
+                auth.requestMatchers("/auth/login", "/auth/refresh", "/auth/register").permitAll();
                 auth.requestMatchers("/health").permitAll();
                 auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
                 // Webhooks de providers de voz (Vapi, Retell). Sin auth en la capa
                 // de seguridad a propósito: el handler verifica la firma del provider
                 // (Retell HMAC-SHA256, Vapi X-Vapi-Secret) y devuelve 401 si no cuadra.
                 auth.requestMatchers("/voice/webhook/**").permitAll();
+                // WhatsApp webhook (Twilio): sin auth, Twilio llama directamente.
+                auth.requestMatchers("/webhooks/whatsapp").permitAll();
+                auth.requestMatchers("/webhooks/whatsapp/**").permitAll();
                 // Callback OAuth de calendario: Google redirige el navegador aquí
                 // SIN Authorization header (es una navegación de browser). Es seguro
                 // exponerlo: solo intercambia un code de un solo uso que solo quien
@@ -91,6 +101,25 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(10);
+    }
+
+    /**
+     * CORS para desarrollo local. En producción el frontend se sirve en el mismo
+     * origin (nginx proxy), así que la lista queda vacía y no se permite ningún
+     * origin externo. En dev se permite el dev server de Angular (localhost:4200).
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(corsAllowedOrigins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("Authorization"));
+        config.setAllowCredentials(false);
+        config.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     @Bean

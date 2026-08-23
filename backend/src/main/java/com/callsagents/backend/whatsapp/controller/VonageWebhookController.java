@@ -1,6 +1,7 @@
 package com.callsagents.backend.whatsapp.controller;
 
 import com.callsagents.backend.whatsapp.service.VonageMessageService;
+import com.callsagents.backend.whatsapp.service.WhatsAppAiChatbotService;
 import com.callsagents.backend.whatsapp.service.WhatsAppService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,11 +17,14 @@ public class VonageWebhookController {
     private static final Logger log = LoggerFactory.getLogger(VonageWebhookController.class);
 
     private final WhatsAppService whatsAppService;
+    private final WhatsAppAiChatbotService aiChatbotService;
     private final VonageMessageService vonageMessageService;
 
     public VonageWebhookController(WhatsAppService whatsAppService,
+                                    WhatsAppAiChatbotService aiChatbotService,
                                     VonageMessageService vonageMessageService) {
         this.whatsAppService = whatsAppService;
+        this.aiChatbotService = aiChatbotService;
         this.vonageMessageService = vonageMessageService;
     }
 
@@ -29,7 +33,7 @@ public class VonageWebhookController {
      * { "from": "447700900000", "to": "14157386102", "channel": "whatsapp",
      *   "message_type": "text", "text": "Hello!" }
      *
-     * We process the message and send the reply via Vonage API (async).
+     * We try AI first (Groq), fall back to basic state machine if Groq is not configured.
      */
     @PostMapping
     public ResponseEntity<Void> handleInbound(@RequestBody Map<String, Object> payload) {
@@ -44,8 +48,13 @@ public class VonageWebhookController {
             return ResponseEntity.ok().build();
         }
 
-        // Process conversation (same logic as Twilio)
-        String reply = whatsAppService.processMessage(from, text);
+        // Try AI chatbot first
+        String reply = aiChatbotService.processMessage(from, text);
+
+        // Fall back to basic state machine if AI is not configured
+        if (reply == null) {
+            reply = whatsAppService.processMessage(from, text);
+        }
 
         // Send reply via Vonage API
         boolean sent = vonageMessageService.sendText(from, reply);

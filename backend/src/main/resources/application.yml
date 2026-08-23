@@ -87,6 +87,11 @@ app:
     sandbox:
       number: ${VONAGE_SANDBOX_NUMBER:}
       url: ${VONAGE_SANDBOX_URL:https://messages-sandbox.nexmo.com/v1/messages}
+  groq:
+    api:
+      key: ${GROQ_API_KEY:}
+      url: ${GROQ_API_URL:https://api.groq.com/openai/v1/chat/completions}
+    model: ${GROQ_MODEL:llama-3.3-70b-versatile}
 
 server:
   port: ${PORT:8080}

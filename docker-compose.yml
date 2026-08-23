@@ -76,7 +76,7 @@ services:
       VONAGE_SANDBOX_NUMBER: ${VONAGE_SANDBOX_NUMBER}
       # Groq AI (free tier) — WhatsApp chatbot intelligence
       GROQ_API_KEY: ${GROQ_API_KEY}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
       # Swagger/OpenAPI (off in production)
       SPRINGDOC_ENABLED: ${SPRINGDOC_ENABLED:-true}
       JAVA_OPTS: "-Xms256m -Xmx512m"

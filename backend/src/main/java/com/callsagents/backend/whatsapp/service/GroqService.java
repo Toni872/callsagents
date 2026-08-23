@@ -83,6 +83,8 @@ public class GroqService {
                 if (choices != null && !choices.isEmpty()) {
                     Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
                     String content = (String) message.get("content");
+                    // Strip thinking tags from response
+                    content = stripThinkingTags(content);
                     log.info("Groq response: {}", content);
                     return content;
                 }
@@ -95,5 +97,17 @@ public class GroqService {
             log.error("Groq API error", e);
             return null;
         }
+    }
+
+    /**
+     * Strip thinking/reasoning tags from model responses.
+     * Qwen and similar models wrap reasoning in ... tags.
+     */
+    private String stripThinkingTags(String content) {
+        if (content == null) return null;
+        // Remove ... blocks
+        String result = content.replaceAll("(?s)<think>.*?</think>", "").trim();
+        // If nothing left after stripping, return original (might not have had tags)
+        return result.isEmpty() ? content.trim() : result;
     }
 }

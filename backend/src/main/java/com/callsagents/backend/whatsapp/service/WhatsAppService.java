@@ -34,7 +34,7 @@ public class WhatsAppService {
         // Global commands — always handled regardless of step
         if (isReset(text)) {
             conversations.remove(phone);
-            return "¡Hasta pronto! Si necesitas algo más, escríbeme. 😊";
+            return "¡Hasta pronto! Si necesitas algo más, escríbeme.";
         }
         if (isCallRequest(text)) {
             conversations.put(phone, state.withStep(ConversationStep.COMPLETED));
@@ -56,7 +56,7 @@ public class WhatsAppService {
 
     private String handleInitial(ConversationState state, String text) {
         if (text.isEmpty()) {
-            return "¡Hola! 👋 Soy el asistente de Script9. ¿En qué puedo ayudarte?";
+            return "¡Hola! Soy el asistente de Script9. ¿En qué puedo ayudarte?";
         }
         // First real message → treat as service interest
         String service = extractService(text);
@@ -85,7 +85,7 @@ public class WhatsAppService {
     private String handleEmail(ConversationState state, String text) {
         // After email is provided, conversation is effectively complete
         conversations.put(phone(state), state.withStep(ConversationStep.COMPLETED));
-        return "¿Hay algo más en lo que te pueda ayudar? 😊";
+        return "¿Hay algo más en lo que te pueda ayudar?";
     }
 
     private void saveLead(ConversationState state) {

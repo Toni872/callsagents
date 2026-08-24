@@ -70,6 +70,8 @@ public class SecurityConfig {
                 // WhatsApp webhook (Vonage sandbox): sin auth, Vonage llama directamente.
                 auth.requestMatchers("/webhooks/vonage").permitAll();
                 auth.requestMatchers("/webhooks/vonage/**").permitAll();
+                // Chat widget API: sin auth, el widget del sitio web llama directamente.
+                auth.requestMatchers("/chat/**").permitAll();
                 // Callback OAuth de calendario: Google redirige el navegador aquí
                 // SIN Authorization header (es una navegación de browser). Es seguro
                 // exponerlo: solo intercambia un code de un solo uso que solo quien

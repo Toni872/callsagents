@@ -44,6 +44,9 @@ spring:
 app:
   # Base URL of the SPA so OAuth callbacks can redirect the browser back to it.
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost}
+  cors:
+    # Comma-separated origins for the chat widget. In dev, application-dev.yml adds localhost.
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:https://script-9.com,https://www.script-9.com}
   # AES-256-GCM master key for OAuth tokens at rest (calendar integrations).
   # Any length works — SHA-256 derives the AES key. REQUIRED for calendar sync.
   encryption:

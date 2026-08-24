@@ -29,24 +29,26 @@ public class VonageWebhookController {
     }
 
     /**
-     * Vonage inbound webhook. Receives JSON:
-     * { "from": "447700900000", "to": "14157386102", "channel": "whatsapp",
-     *   "message_type": "text", "text": "Hello!" }
-     *
-     * We try AI first (Groq), fall back to basic state machine if Groq is not configured.
+     * Vonage inbound webhook. Handles text messages, button replies, and list replies.
      */
+    @SuppressWarnings("unchecked")
     @PostMapping
     public ResponseEntity<Void> handleInbound(@RequestBody Map<String, Object> payload) {
         String from = (String) payload.getOrDefault("from", "");
-        String text = (String) payload.getOrDefault("text", "");
         String channel = (String) payload.getOrDefault("channel", "");
+        String messageType = (String) payload.getOrDefault("message_type", "");
 
-        log.info("Vonage inbound: from={} channel={} text='{}'", from, channel, text);
+        log.info("Vonage inbound: from={} channel={} type={}", from, channel, messageType);
+        log.debug("Vonage raw payload: {}", payload);
 
         if (!"whatsapp".equals(channel) || from.isBlank()) {
             log.warn("Vonage inbound ignored: channel={} from={}", channel, from);
             return ResponseEntity.ok().build();
         }
+
+        // Extract text based on message type
+        String text = extractText(payload, messageType);
+        log.info("Vonage extracted text: '{}'", text);
 
         // Try AI chatbot first
         String reply = aiChatbotService.processMessage(from, text);
@@ -66,8 +68,56 @@ public class VonageWebhookController {
     }
 
     /**
+     * Extract text content from various message types.
+     */
+    @SuppressWarnings("unchecked")
+    private String extractText(Map<String, Object> payload, String messageType) {
+        if ("text".equals(messageType)) {
+            return (String) payload.getOrDefault("text", "");
+        }
+
+        // Vonage sends button/list replies as message_type="reply" with a "reply" object
+        if ("reply".equals(messageType)) {
+            Map<String, Object> reply = (Map<String, Object>) payload.get("reply");
+            if (reply != null) {
+                String id = (String) reply.get("id");
+                String title = (String) reply.get("title");
+                log.info("Reply received: id={} title={}", id, title);
+                return id != null ? id : (title != null ? title : "");
+            }
+        }
+
+        // Fallback: check interactive block (some Vonage versions)
+        if ("interactive".equals(messageType)) {
+            Map<String, Object> interactive = (Map<String, Object>) payload.get("interactive");
+            if (interactive == null) return "";
+
+            String type = (String) interactive.get("type");
+
+            if ("button_reply".equals(type)) {
+                Map<String, Object> buttonReply = (Map<String, Object>) interactive.get("button_reply");
+                if (buttonReply != null) {
+                    String id = (String) buttonReply.get("id");
+                    log.info("Button reply (interactive): id={}", id);
+                    return id;
+                }
+            }
+
+            if ("list_reply".equals(type)) {
+                Map<String, Object> listReply = (Map<String, Object>) interactive.get("list_reply");
+                if (listReply != null) {
+                    String id = (String) listReply.get("id");
+                    log.info("List reply (interactive): id={}", id);
+                    return id;
+                }
+            }
+        }
+
+        return (String) payload.getOrDefault("text", "");
+    }
+
+    /**
      * Vonage status webhook — delivery/read receipts.
-     * For MVP we just log it.
      */
     @PostMapping("/status")
     public ResponseEntity<Void> handleStatus(@RequestBody Map<String, Object> payload) {

@@ -33,6 +33,10 @@ public class VonageMessageService {
      * Send a plain text WhatsApp message via Vonage.
      */
     public boolean sendText(String to, String text) {
+        if (!config.isConfigured()) {
+            log.warn("Vonage not configured — cannot send text to {}", to);
+            return false;
+        }
         Map<String, Object> body = Map.of(
             "from", config.getSandboxNumber(),
             "to", to,
@@ -49,6 +53,10 @@ public class VonageMessageService {
      * @param buttons List of [id, title] pairs. Max 3. Title max 20 chars.
      */
     public boolean sendButtons(String to, String bodyText, List<String[]> buttons) {
+        if (!config.isConfigured()) {
+            log.warn("Vonage not configured — cannot send buttons to {}", to);
+            return false;
+        }
         List<Map<String, Object>> buttonObjects = new ArrayList<>();
         for (String[] btn : buttons) {
             buttonObjects.add(Map.of(
@@ -83,6 +91,10 @@ public class VonageMessageService {
      */
     public boolean sendList(String to, String headerText, String bodyText, String buttonText,
                             List<Map<String, List<String[]>>> sections) {
+        if (!config.isConfigured()) {
+            log.warn("Vonage not configured — cannot send list to {}", to);
+            return false;
+        }
         List<Map<String, Object>> sectionObjects = new ArrayList<>();
         for (Map<String, List<String[]>> section : sections) {
             String title = section.keySet().iterator().next();

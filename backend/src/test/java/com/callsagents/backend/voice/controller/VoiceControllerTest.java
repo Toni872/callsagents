@@ -6,6 +6,7 @@ import com.callsagents.backend.auth.security.JwtService;
 import com.callsagents.backend.voice.domain.VoiceCall;
 import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import com.callsagents.backend.voice.domain.VoiceProviderType;
+import com.callsagents.backend.voice.service.RetellProvider;
 import com.callsagents.backend.voice.service.VoiceCallService;
 import com.callsagents.backend.voice.service.VoiceProvider;
 import com.callsagents.backend.voice.service.WebhookSignatureValidator;
@@ -46,6 +47,7 @@ class VoiceControllerTest {
 
     @MockBean private VoiceCallService service;
     @MockBean private WebhookSignatureValidator signatureValidator;
+    @MockBean private RetellProvider retellProvider;
     @MockBean private UserRepository userRepository;
     @MockBean private JwtService jwtService;
 

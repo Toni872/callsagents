@@ -172,7 +172,7 @@ export class LoginComponent implements AfterViewInit {
     google.accounts.id.renderButton(this.googleBtn.nativeElement, {
       theme: 'outline',
       size: 'large',
-      width: '100%',
+      width: 380,
       text: 'continue_with',
       locale: 'es'
     });

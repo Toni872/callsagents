@@ -184,4 +184,41 @@ public class RetellProvider implements VoiceProvider {
     private static String enc(String s) {
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }
+
+    /**
+     * Create a browser-based web call (WebRTC). Returns a short-lived access_token
+     * that the frontend uses to start the call via the Retell Web SDK.
+     * No phone number required, no telephony cost.
+     */
+    public String createWebCall(String agentId) {
+        if (!isConfigured()) {
+            throw new IllegalStateException("Retell is not configured. Set RETELL_API_KEY in .env.");
+        }
+        String resolvedAgentId = (agentId != null && !agentId.isBlank()) ? agentId : defaultAgentId;
+        if (resolvedAgentId == null || resolvedAgentId.isBlank()) {
+            throw new IllegalStateException("Retell not configured. Missing RETELL_AGENT_ID.");
+        }
+        try {
+            Map<String, Object> body = Map.of("agent_id", resolvedAgentId);
+            String json = mapper.writeValueAsString(body);
+            HttpRequest httpReq = HttpRequest.newBuilder()
+                .uri(URI.create(BASE + "/v2/create-web-call"))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(15))
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+            HttpResponse<String> resp = http.send(httpReq, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() / 100 != 2) {
+                throw new RuntimeException("Retell create-web-call failed: HTTP "
+                    + resp.statusCode() + " - " + resp.body());
+            }
+            JsonNode root = mapper.readTree(resp.body());
+            String accessToken = root.path("access_token").asText();
+            log.info("Retell web call created, agent={}", resolvedAgentId);
+            return accessToken;
+        } catch (Exception e) {
+            throw new RuntimeException("Retell createWebCall error: " + e.getMessage(), e);
+        }
+    }
 }

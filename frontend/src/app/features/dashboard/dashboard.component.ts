@@ -38,24 +38,6 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
         </button>
       </app-page-header>
 
-      @if (isDemoUser()) {
-        <app-card class="demo-cta" padding="lg">
-          <div class="demo-cta__content">
-            <div class="demo-cta__text">
-              <span class="demo-cta__eyebrow">Demo · Asistente conversacional</span>
-              <h2 class="demo-cta__title">Prueba el asistente con una conversación</h2>
-              <p class="demo-cta__desc">
-                Simula cómo el asistente conversa con un lead interesado, responde sus dudas
-                y agenda una cita en tu calendario.
-              </p>
-            </div>
-            <button class="btn btn--primary demo-cta__btn" type="button" (click)="openAssistant()">
-              Probar el asistente con una conversación
-            </button>
-          </div>
-        </app-card>
-      }
-
       @if (loading() && summary() === null) {
         <div class="dashboard-page__grid" role="status" aria-label="Cargando métricas">
           <app-skeleton class="sk-hero" [height]="'220px'" [radius]="'var(--radius-lg)'"></app-skeleton>
@@ -448,10 +430,6 @@ export class DashboardComponent implements OnInit {
   protected readonly summary = signal<DashboardSummary | null>(null);
   protected readonly loading = signal(false);
 
-  protected readonly isDemoUser = computed(
-    () => this.authService.currentUser()?.email === 'demo@callsagents.com'
-  );
-
   protected readonly connectionRatePercent = computed(() =>
     Math.round((this.summary()?.connectionRateToday ?? 0) * 100)
   );
@@ -488,10 +466,6 @@ export class DashboardComponent implements OnInit {
 
   protected refresh(): void {
     this.loadSummary();
-  }
-
-  protected openAssistant(): void {
-    this.router.navigate(['/assistant-demo']);
   }
 
   private loadSummary(): void {

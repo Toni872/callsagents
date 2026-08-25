@@ -4,12 +4,14 @@ import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.entity.LeadSource;
 import com.callsagents.backend.leads.entity.LeadStatus;
 import com.callsagents.backend.leads.repository.LeadRepository;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class WhatsAppAiChatbotService {
@@ -20,12 +22,19 @@ public class WhatsAppAiChatbotService {
     private final LeadRepository leadRepository;
     private final VonageMessageService vonageMessageService;
 
-    // Conversation history per phone number
-    private final Map<String, List<Map<String, String>>> conversationHistory = new ConcurrentHashMap<>();
-    // Collected lead data per phone
-    private final Map<String, Map<String, String>> leadData = new ConcurrentHashMap<>();
-    // Conversation step per phone (for interactive flow)
-    private final Map<String, String> conversationStep = new ConcurrentHashMap<>();
+    // Bounded caches: max 2000 entries each, evict after 30min inactivity
+    private final Cache<String, List<Map<String, String>>> conversationHistory = Caffeine.newBuilder()
+        .maximumSize(2_000)
+        .expireAfterWrite(Duration.ofMinutes(30))
+        .build();
+    private final Cache<String, Map<String, String>> leadData = Caffeine.newBuilder()
+        .maximumSize(2_000)
+        .expireAfterWrite(Duration.ofMinutes(30))
+        .build();
+    private final Cache<String, String> conversationStep = Caffeine.newBuilder()
+        .maximumSize(2_000)
+        .expireAfterWrite(Duration.ofMinutes(30))
+        .build();
 
     private static final int MAX_HISTORY = 20;
 
@@ -82,7 +91,8 @@ public class WhatsAppAiChatbotService {
         }
 
         String text = message == null ? "" : message.trim();
-        String step = conversationStep.getOrDefault(phone, "initial");
+        var stepVal = conversationStep.getIfPresent(phone);
+        String step = stepVal == null ? "initial" : stepVal;
         log.info("processMessage [{}]: step={} text='{}'", phone, step, text);
 
         // Global commands
@@ -102,7 +112,7 @@ public class WhatsAppAiChatbotService {
         }
 
         // Get or create conversation history
-        List<Map<String, String>> history = conversationHistory.computeIfAbsent(phone, k -> new ArrayList<>());
+        List<Map<String, String>> history = conversationHistory.get(phone, k -> new ArrayList<>());
 
         // Call Groq AI
         String aiResponse = groqService.chat(SYSTEM_PROMPT, history, text);
@@ -163,17 +173,17 @@ public class WhatsAppAiChatbotService {
             return switch (text) {
                 case "intent_ventas" -> {
                     conversationStep.put(phone, "collecting_info");
-                    conversationHistory.remove(phone);
+                    conversationHistory.invalidate(phone);
                     yield new String[]{"Perfecto, te ayudo con ventas.\n\n¿Cómo te llamas y cuál es tu email?", "false"};
                 }
                 case "intent_soporte" -> {
                     conversationStep.put(phone, "support");
-                    conversationHistory.remove(phone);
+                    conversationHistory.invalidate(phone);
                     yield new String[]{"Claro, ¿en qué puedo ayudarte con soporte?", "false"};
                 }
                 case "intent_demo" -> {
                     conversationStep.put(phone, "collecting_info");
-                    conversationHistory.remove(phone);
+                    conversationHistory.invalidate(phone);
                     yield new String[]{"Genial, agendemos una demo.\n\n¿Cómo te llamas y tu email?", "false"};
                 }
                 default -> new String[]{null, "false"};
@@ -200,13 +210,13 @@ public class WhatsAppAiChatbotService {
         if ("confirmation".equals(step)) {
             return switch (text) {
                 case "confirm_yes" -> {
-                    conversationStep.remove(phone);
-                    leadData.remove(phone);
+                    conversationStep.invalidate(phone);
+                    leadData.invalidate(phone);
                     yield new String[]{"¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nTe envío un email con el link para agendar.\n\n¿Te parece bien esta semana?", "false"};
                 }
                 case "confirm_no" -> {
-                    conversationStep.remove(phone);
-                    leadData.remove(phone);
+                    conversationStep.invalidate(phone);
+                    leadData.invalidate(phone);
                     yield new String[]{"No te preocupes. Cuando quieras, aquí estoy.\n\n¡Hasta pronto!", "false"};
                 }
                 default -> new String[]{null, "false"};
@@ -234,7 +244,8 @@ public class WhatsAppAiChatbotService {
      * Send confirmation buttons.
      */
     private void sendConfirmationButtons(String phone) {
-        Map<String, String> data = leadData.getOrDefault(phone, Map.of());
+        Map<String, String> cachedData = leadData.getIfPresent(phone);
+        Map<String, String> data = cachedData == null ? Map.of() : cachedData;
         String name = data.getOrDefault("name", "");
         String email = data.getOrDefault("email", "");
         String timing = data.getOrDefault("timing", "");
@@ -273,16 +284,16 @@ public class WhatsAppAiChatbotService {
      * Save timing data for the lead.
      */
     private void saveTiming(String phone, String timing) {
-        leadData.computeIfAbsent(phone, k -> new HashMap<>()).put("timing", timing);
+        leadData.get(phone, k -> new HashMap<>()).put("timing", timing);
     }
 
     /**
      * Reset conversation state.
      */
     private void resetConversation(String phone) {
-        conversationHistory.remove(phone);
-        leadData.remove(phone);
-        conversationStep.remove(phone);
+        conversationHistory.invalidate(phone);
+        leadData.invalidate(phone);
+        conversationStep.invalidate(phone);
     }
 
     private static boolean isReset(String text) {
@@ -317,9 +328,10 @@ public class WhatsAppAiChatbotService {
         }
 
         // Merge with existing lead data
-        leadData.computeIfAbsent(phone, k -> new HashMap<>()).putAll(data);
+        leadData.get(phone, k -> new HashMap<>()).putAll(data);
 
-        saveLead(phone, leadData.get(phone));
+        Map<String, String> leadForSave = leadData.getIfPresent(phone);
+        saveLead(phone, leadForSave != null ? leadForSave : Map.of());
         return cleanResponse;
     }
 

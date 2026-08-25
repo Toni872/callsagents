@@ -53,16 +53,19 @@ public class VoiceController {
 
     private final VoiceCallService service;
     private final WebhookSignatureValidator signatureValidator;
+    private final RetellProvider retellProvider;
     private final com.callsagents.backend.auth.repository.UserRepository userRepository;
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
     public VoiceController(
         VoiceCallService service,
         WebhookSignatureValidator signatureValidator,
+        RetellProvider retellProvider,
         com.callsagents.backend.auth.repository.UserRepository userRepository
     ) {
         this.service = service;
         this.signatureValidator = signatureValidator;
+        this.retellProvider = retellProvider;
         this.userRepository = userRepository;
     }
 
@@ -181,6 +184,24 @@ public class VoiceController {
     }
 
     // -------- helpers --------
+
+    /**
+     * Create a browser-based web call (WebRTC). No auth required — used by the
+     * public demo page. Returns a short-lived access_token for the Retell Web SDK.
+     */
+    @PostMapping("/web-call")
+    public ResponseEntity<Map<String, String>> createWebCall(
+        @RequestBody(required = false) Map<String, String> body
+    ) {
+        String agentId = body != null ? body.getOrDefault("agent_id", null) : null;
+        try {
+            String accessToken = retellProvider.createWebCall(agentId);
+            return ResponseEntity.ok(Map.of("access_token", accessToken));
+        } catch (Exception e) {
+            log.warn("Web call creation failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 
     private UUID resolveUserId(String email) {
         return userRepository.findByEmail(email).map(u -> u.getId()).orElse(null);

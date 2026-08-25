@@ -4,6 +4,7 @@ import com.callsagents.backend.whatsapp.config.VonageConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -20,7 +21,12 @@ public class VonageMessageService {
 
     public VonageMessageService(VonageConfig config) {
         this.config = config;
-        this.restTemplate = new RestTemplate();
+
+        // Configure RestTemplate with timeouts to prevent thread starvation
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);  // 5s connect
+        factory.setReadTimeout(10000);    // 10s read
+        this.restTemplate = new RestTemplate(factory);
     }
 
     /**

@@ -19,13 +19,6 @@ export const routes: Routes = [
           )
       },
       {
-        path: 'assistant-demo',
-        loadComponent: () =>
-          import('./features/assistant/assistant-demo.component').then(
-            (m) => m.AssistantDemoComponent
-          )
-      },
-      {
         path: 'leads',
         loadChildren: () =>
           import('./features/leads/leads.routes').then((m) => m.LEADS_ROUTES)
@@ -106,10 +99,10 @@ export const routes: Routes = [
       )
   },
   {
-    path: 'demo',
+    path: 'widget',
     loadComponent: () =>
-      import('./features/demo/demo-chat.component').then(
-        (m) => m.DemoChatComponent
+      import('./features/chat-widget/chat-widget.component').then(
+        (m) => m.ChatWidgetComponent
       )
   },
   { path: '**', redirectTo: '' }

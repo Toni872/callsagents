@@ -31,6 +31,10 @@ export class AuthApi {
     return this.http.post<void>(apiUrl('/auth/logout'), {});
   }
 
+  googleLogin(credential: string): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(apiUrl('/auth/google'), { credential });
+  }
+
   me(): Observable<UserDto> {
     return this.http.get<UserDto>(apiUrl('/auth/me'));
   }

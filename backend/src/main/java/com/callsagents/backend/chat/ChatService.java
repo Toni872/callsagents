@@ -5,12 +5,14 @@ import com.callsagents.backend.leads.entity.LeadSource;
 import com.callsagents.backend.leads.entity.LeadStatus;
 import com.callsagents.backend.leads.repository.LeadRepository;
 import com.callsagents.backend.whatsapp.service.GroqService;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ChatService {
@@ -20,7 +22,11 @@ public class ChatService {
     private final GroqService groqService;
     private final LeadRepository leadRepository;
 
-    private final Map<String, List<Map<String, String>>> conversationHistory = new ConcurrentHashMap<>();
+    // Bounded cache: max 1000 sessions, evict after 30min inactivity
+    private final Cache<String, List<Map<String, String>>> conversationHistory = Caffeine.newBuilder()
+        .maximumSize(1_000)
+        .expireAfterWrite(Duration.ofMinutes(30))
+        .build();
 
     private static final int MAX_HISTORY = 20;
 
@@ -67,7 +73,7 @@ public class ChatService {
             return new ChatResponse(sessionId, "¿En qué puedo ayudarte?", false);
         }
 
-        List<Map<String, String>> history = conversationHistory.computeIfAbsent(sessionId, k -> new ArrayList<>());
+        List<Map<String, String>> history = conversationHistory.get(sessionId, k -> new ArrayList<>());
 
         String aiResponse = groqService.chat(SYSTEM_PROMPT, history, text);
         if (aiResponse == null) {
@@ -105,8 +111,17 @@ public class ChatService {
         return new ChatResponse(sessionId, aiResponse, leadCaptured);
     }
 
+    private static final int TRIAL_LEAD_LIMIT = 50;
+
     private boolean saveLead(String sessionId, Map<String, String> data) {
         try {
+            // Trial lead limit check
+            long totalLeads = leadRepository.count();
+            if (totalLeads >= TRIAL_LEAD_LIMIT) {
+                log.warn("Lead limit reached ({}) — skipping lead creation for session {}", TRIAL_LEAD_LIMIT, sessionId);
+                return false;
+            }
+
             String name = data.getOrDefault("name", "Desconocido");
             String email = data.get("email");
             String service = data.getOrDefault("service", "web-chat");
@@ -121,7 +136,7 @@ public class ChatService {
                 .phone(null)
                 .company(null)
                 .status(LeadStatus.NEW)
-                .source(LeadSource.WHATSAPP) // TODO: add WEB_CHAT source
+                .source(LeadSource.WEB_CHAT)
                 .notes("Servicio de interés: " + service + " |来源: web chat |sessionId: " + sessionId)
                 .doNotCall(false)
                 .build();

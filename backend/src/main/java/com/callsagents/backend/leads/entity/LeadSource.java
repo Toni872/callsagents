@@ -4,5 +4,6 @@ public enum LeadSource {
     MANUAL,
     IMPORT,
     API,
-    WHATSAPP
+    WHATSAPP,
+    WEB_CHAT
 }

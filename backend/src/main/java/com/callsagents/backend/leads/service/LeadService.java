@@ -44,6 +44,7 @@ public class LeadService {
     private static final Logger log = LoggerFactory.getLogger(LeadService.class);
     private static final int CSV_HEADER_EXPECTED = 6;
     private static final String[] CSV_HEADER = {"firstName", "lastName", "email", "phone", "company", "source"};
+    private static final int TRIAL_LEAD_LIMIT = 50;
 
     private final LeadRepository leadRepository;
     private final UserRepository userRepository;
@@ -70,6 +71,15 @@ public class LeadService {
 
     @Transactional
     public LeadResponse create(CreateLeadRequest req, UUID currentUserId) {
+        // Trial lead limit check
+        long totalLeads = leadRepository.count();
+        if (totalLeads >= TRIAL_LEAD_LIMIT) {
+            throw new BadRequestException(
+                "Límite de leads alcanzado (" + TRIAL_LEAD_LIMIT + "). " +
+                "Contacta soporte para ampliar tu plan."
+            );
+        }
+
         validateContact(req.email(), req.phone());
         LeadSource source = parseSource(req.source());
 

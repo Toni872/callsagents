@@ -6,6 +6,7 @@ import com.callsagents.backend.auth.dto.RefreshRequest;
 import com.callsagents.backend.auth.dto.RefreshResponse;
 import com.callsagents.backend.auth.dto.RegisterRequest;
 import com.callsagents.backend.auth.dto.UserDto;
+import com.callsagents.backend.auth.dto.GoogleAuthRequest;
 import com.callsagents.backend.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -13,6 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -29,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final Environment environment;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, Environment environment) {
         this.authService = authService;
+        this.environment = environment;
     }
 
     @Operation(
@@ -50,7 +54,7 @@ public class AuthController {
 
     @Operation(
         summary = "Registro público",
-        description = "Crea una cuenta AGENT con trial de 14 días y hace login automático: devuelve los mismos tokens que POST /auth/login."
+        description = "Crea una cuenta AGENT con trial de 7 días y hace login automático: devuelve los mismos tokens que POST /auth/login."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Cuenta creada y sesión iniciada"),
@@ -59,6 +63,20 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(req));
+    }
+
+    @Operation(
+        summary = "Login/registro con Google",
+        description = "Acepta un Google ID token. Si el email no existe, crea la cuenta automáticamente (registro + login)."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Login exitoso"),
+        @ApiResponse(responseCode = "400", description = "Token de Google inválido")
+    })
+    @PostMapping("/google")
+    public ResponseEntity<LoginResponse> googleLogin(@Valid @RequestBody GoogleAuthRequest req) {
+        String clientId = environment.getProperty("app.google.client-id", "");
+        return ResponseEntity.ok(authService.googleLogin(req.credential(), clientId));
     }
 
     @Operation(

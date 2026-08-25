@@ -13,6 +13,10 @@ import com.callsagents.backend.auth.security.JwtService;
 import com.callsagents.backend.auth.security.RefreshTokenService;
 import com.callsagents.backend.common.exception.UnauthorizedException;
 import com.callsagents.backend.users.service.UserService;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 import com.nimbusds.jwt.JWTClaimsSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,6 +82,53 @@ public class AuthService {
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
         log.info("Auto-login after registration for {}", user.getEmail());
+        return issueTokens(user);
+    }
+
+    @Transactional
+    public LoginResponse googleLogin(String idTokenString, String googleClientId) {
+        GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
+                new NetHttpTransport(), GsonFactory.getDefaultInstance())
+            .setAudience(java.util.Collections.singletonList(googleClientId))
+            .build();
+
+        GoogleIdToken idToken;
+        try {
+            idToken = verifier.verify(idTokenString);
+        } catch (Exception e) {
+            log.warn("Google token verification failed: {}", e.getMessage());
+            throw new com.callsagents.backend.common.exception.BadRequestException(
+                "Token de Google inválido o expirado");
+        }
+
+        if (idToken == null) {
+            throw new com.callsagents.backend.common.exception.BadRequestException(
+                "Token de Google inválido");
+        }
+
+        GoogleIdToken.Payload payload = idToken.getPayload();
+        String email = payload.getEmail().toLowerCase(Locale.ROOT);
+        String name = (String) payload.get("name");
+        String picture = (String) payload.get("picture");
+
+        // Find or create user
+        User user = userRepository.findByEmail(email).orElseGet(() -> {
+            log.info("Google login: creating new user for {}", email);
+            User newUser = User.builder()
+                .email(email)
+                .passwordHash("")  // No password for Google users
+                .fullName(name != null ? name : email)
+                .role(com.callsagents.backend.auth.entity.UserRole.AGENT)
+                .status(com.callsagents.backend.auth.entity.UserStatus.ACTIVE)
+                .trialEndsAt(Instant.now().plus(7, java.time.temporal.ChronoUnit.DAYS))
+                .build();
+            return userRepository.save(newUser);
+        });
+
+        user.setLastLoginAt(Instant.now());
+        userRepository.save(user);
+
+        log.info("Google login success for {}", email);
         return issueTokens(user);
     }
 

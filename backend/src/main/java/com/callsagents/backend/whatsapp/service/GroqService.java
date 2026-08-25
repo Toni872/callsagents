@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -22,8 +23,13 @@ public class GroqService {
 
     public GroqService(GroqConfig config, ObjectMapper objectMapper) {
         this.config = config;
-        this.restTemplate = new RestTemplate();
         this.objectMapper = objectMapper;
+
+        // Configure RestTemplate with timeouts to prevent thread starvation
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);  // 5s connect
+        factory.setReadTimeout(15000);    // 15s read
+        this.restTemplate = new RestTemplate(factory);
     }
 
     public boolean isConfigured() {

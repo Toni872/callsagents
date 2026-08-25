@@ -19,7 +19,7 @@ public record UserDto(
     @Schema(description = "Rol del usuario", example = "ADMIN", allowableValues = {"ADMIN", "SUPERVISOR", "AGENT"})
     String role,
 
-    @Schema(description = "Fin del trial de 14 días; null = plan completo", example = "2026-09-03T10:15:30Z")
+    @Schema(description = "Fin del trial de 7 días; null = plan completo", example = "2026-09-03T10:15:30Z")
     Instant trialEndsAt
 ) {
 }

@@ -9,9 +9,9 @@ import jakarta.validation.constraints.Size;
  * Request payload for POST /auth/register — public self-registration.
  *
  * No role field: public registration ALWAYS creates an AGENT account with a
- * 14-day trial. The email is normalized to lowercase before persisting.
+ * 7-day trial. The email is normalized to lowercase before persisting.
  */
-@Schema(description = "Solicitud de registro público (crea cuenta AGENT con trial de 14 días)")
+@Schema(description = "Solicitud de registro público (crea cuenta AGENT con trial de 7 días)")
 public record RegisterRequest(
     @Schema(description = "Email (se normaliza a minúsculas)", example = "agent@example.com")
     @NotBlank

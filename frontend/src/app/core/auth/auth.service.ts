@@ -18,7 +18,7 @@ export class AuthService {
   readonly isAuthenticated = computed(() => this._currentUser() !== null);
   readonly currentRole = computed(() => this._currentUser()?.role ?? null);
 
-  /** ISO date when the public 14-day trial ends, or null when there is no trial. */
+  /** ISO date when the public 7-day trial ends, or null when there is no trial. */
   readonly trialEndsAt = computed(() => this._currentUser()?.trialEndsAt ?? null);
 
   /** Whole days left in the trial (Math.ceil), or null when there is no trial. */
@@ -113,6 +113,24 @@ export class AuthService {
       this.errorService.info('Sesión cerrada');
     }
     this.router.navigateByUrl('/landing');
+  }
+
+  googleLogin(credential: string, redirect?: string): Observable<unknown> {
+    return new Observable((subscriber) => {
+      this.api.googleLogin(credential).subscribe({
+        next: (res) => {
+          this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
+          this.errorService.success(`Bienvenido, ${res.user.fullName}`);
+          const target = redirect && redirect !== '/login' ? redirect : '/dashboard';
+          this.router.navigateByUrl(target);
+          subscriber.next(res);
+          subscriber.complete();
+        },
+        error: (err) => {
+          subscriber.error(err);
+        }
+      });
+    });
   }
 
   private handleAuthSuccess(access: string, refresh: string, user: UserDto): void {

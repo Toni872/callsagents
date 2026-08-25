@@ -6,14 +6,16 @@ import com.callsagents.backend.leads.entity.LeadStatus;
 import com.callsagents.backend.leads.repository.LeadRepository;
 import com.callsagents.backend.whatsapp.domain.ConversationState;
 import com.callsagents.backend.whatsapp.domain.ConversationStep;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class WhatsAppService {
@@ -21,7 +23,11 @@ public class WhatsAppService {
     private static final Logger log = LoggerFactory.getLogger(WhatsAppService.class);
 
     private final LeadRepository leadRepository;
-    private final Map<String, ConversationState> conversations = new ConcurrentHashMap<>();
+    // Bounded cache: max 2000 conversations, evict after 30min inactivity
+    private final Cache<String, ConversationState> conversations = Caffeine.newBuilder()
+        .maximumSize(2_000)
+        .expireAfterWrite(Duration.ofMinutes(30))
+        .build();
 
     public WhatsAppService(LeadRepository leadRepository) {
         this.leadRepository = leadRepository;
@@ -29,15 +35,18 @@ public class WhatsAppService {
 
     public String processMessage(String phone, String body) {
         String text = body == null ? "" : body.trim().toLowerCase();
-        ConversationState state = conversations.getOrDefault(phone, ConversationState.initial(phone));
+        ConversationState state = conversations.getIfPresent(phone);
+        if (state == null) {
+            state = ConversationState.initial(phone);
+        }
 
         // Global commands — always handled regardless of step
         if (isReset(text)) {
-            conversations.remove(phone);
+            conversations.invalidate(phone);
             return "¡Hasta pronto! Si necesitas algo más, escríbeme.";
         }
         if (isCallRequest(text)) {
-            conversations.put(phone, state.withStep(ConversationStep.COMPLETED));
+        conversations.put(phone(state), state.withStep(ConversationStep.COMPLETED));
             return "Perfecto, te llamaremos pronto. ¿Cuál es tu email para que te confirmemos la llamada?";
         }
 
@@ -84,7 +93,7 @@ public class WhatsAppService {
 
     private String handleEmail(ConversationState state, String text) {
         // After email is provided, conversation is effectively complete
-        conversations.put(phone(state), state.withStep(ConversationStep.COMPLETED));
+        conversations.put(state.phone(), state.withStep(ConversationStep.COMPLETED));
         return "¿Hay algo más en lo que te pueda ayudar?";
     }
 

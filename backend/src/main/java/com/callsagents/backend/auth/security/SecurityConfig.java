@@ -57,7 +57,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
-                auth.requestMatchers("/auth/login", "/auth/refresh", "/auth/register").permitAll();
+                auth.requestMatchers("/auth/login", "/auth/refresh", "/auth/register", "/auth/google").permitAll();
                 auth.requestMatchers("/health").permitAll();
                 auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
                 // Webhooks de providers de voz (Vapi, Retell). Sin auth en la capa
@@ -72,6 +72,8 @@ public class SecurityConfig {
                 auth.requestMatchers("/webhooks/vonage/**").permitAll();
                 // Chat widget API: sin auth, el widget del sitio web llama directamente.
                 auth.requestMatchers("/chat/**").permitAll();
+                // Demo voice call: sin auth, el demo público crea web calls de Retell.
+                auth.requestMatchers("/voice/web-call").permitAll();
                 // Callback OAuth de calendario: Google redirige el navegador aquí
                 // SIN Authorization header (es una navegación de browser). Es seguro
                 // exponerlo: solo intercambia un code de un solo uso que solo quien

@@ -91,8 +91,8 @@ public class UserService {
     }
 
     /**
-     * Public self-registration. Always creates an AGENT account with a 14-day
-     * trial (trialEndsAt = now + 14 days). The email is normalized to
+     * Public self-registration. Always creates an AGENT account with a 7-day
+     * trial (trialEndsAt = now + 7 days). The email is normalized to
      * lowercase so uniqueness is case-insensitive.
      *
      * @throws BadRequestException if the email is already registered
@@ -112,11 +112,11 @@ public class UserService {
             .fullName(req.fullName())
             .role(UserRole.AGENT)
             .status(UserStatus.ACTIVE)
-            .trialEndsAt(Instant.now().plus(14, ChronoUnit.DAYS))
+            .trialEndsAt(Instant.now().plus(7, ChronoUnit.DAYS))
             .build();
 
         User saved = userRepository.save(user);
-        log.info("Registered user {} with 14-day trial ending {}", saved.getEmail(), saved.getTrialEndsAt());
+        log.info("Registered user {} with 7-day trial ending {}", saved.getEmail(), saved.getTrialEndsAt());
         return saved;
     }
 

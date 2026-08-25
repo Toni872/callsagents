@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   FormBuilder,
@@ -7,6 +7,9 @@ import {
 } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ErrorService } from '../../../core/errors/error.service';
+
+declare const google: any;
 
 @Component({
   selector: 'app-login',
@@ -25,6 +28,12 @@ import { AuthService } from '../../../core/auth/auth.service';
         <p class="login-card__subtitle muted">
           Inicia sesión para acceder al panel.
         </p>
+
+        <div #googleBtn class="google-btn-container"></div>
+
+        <div class="divider">
+          <span>o</span>
+        </div>
 
         <div class="login-card__field">
           <label for="email">Email</label>
@@ -109,13 +118,33 @@ import { AuthService } from '../../../core/auth/auth.service';
       .login-card__link:hover {
         text-decoration: underline;
       }
+      .google-btn-container {
+        display: flex;
+        justify-content: center;
+      }
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--color-text-muted, #6b7280);
+        font-size: 0.875rem;
+      }
+      .divider::before,
+      .divider::after {
+        content: '';
+        flex: 1;
+        border-bottom: 1px solid var(--color-border, #374151);
+      }
     `
   ]
 })
-export class LoginComponent {
+export class LoginComponent implements AfterViewInit {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly errorService = inject(ErrorService);
+
+  @ViewChild('googleBtn') googleBtn!: ElementRef;
 
   protected readonly loading = signal(false);
 
@@ -123,6 +152,40 @@ export class LoginComponent {
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(8)]]
   });
+
+  ngAfterViewInit(): void {
+    this.initGoogle();
+  }
+
+  private initGoogle(): void {
+    if (typeof google === 'undefined' || !google.accounts?.id) {
+      // Retry after script loads
+      setTimeout(() => this.initGoogle(), 200);
+      return;
+    }
+
+    google.accounts.id.initialize({
+      client_id: '557204149721-ounh5q7phakk0ln1auer314bi9rj839v.apps.googleusercontent.com',
+      callback: (response: any) => this.handleGoogleResponse(response)
+    });
+
+    google.accounts.id.renderButton(this.googleBtn.nativeElement, {
+      theme: 'outline',
+      size: 'large',
+      width: '100%',
+      text: 'continue_with',
+      locale: 'es'
+    });
+  }
+
+  private handleGoogleResponse(response: any): void {
+    this.loading.set(true);
+    const redirect = this.route.snapshot.queryParamMap.get('redirect') ?? undefined;
+    this.auth.googleLogin(response.credential, redirect).subscribe({
+      next: () => this.loading.set(false),
+      error: () => this.loading.set(false)
+    });
+  }
 
   protected onSubmit(): void {
     if (this.form.invalid) {
@@ -132,8 +195,6 @@ export class LoginComponent {
     this.loading.set(true);
     const redirect =
       this.route.snapshot.queryParamMap.get('redirect') ?? undefined;
-    // AuthService.login() does the navigation on success.
-    // errorInterceptor already shows a toast on failure — no need to duplicate.
     this.auth.login(this.form.getRawValue(), redirect).subscribe({
       next: () => this.loading.set(false),
       error: () => this.loading.set(false)

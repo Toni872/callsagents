@@ -60,6 +60,13 @@ export const routes: Routes = [
           import(
             './features/settings/calendar/calendar-settings.component'
           ).then((m) => m.CalendarSettingsComponent)
+      },
+      {
+        path: 'settings/profile',
+        loadComponent: () =>
+          import(
+            './features/settings/profile/profile-settings.component'
+          ).then((m) => m.ProfileSettingsComponent)
       }
     ]
   },
@@ -96,6 +103,14 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/landing/landing.component').then(
         (m) => m.LandingComponent
+      )
+  },
+  {
+    path: 'onboarding',
+    canActivate: [authGuard],
+    loadChildren: () =>
+      import('./features/onboarding/onboarding.routes').then(
+        (m) => m.ONBOARDING_ROUTES
       )
   },
   {

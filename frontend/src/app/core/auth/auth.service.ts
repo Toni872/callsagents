@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable } from 'rxjs';
+import { map, tap } from 'rxjs/operators';
 import { AuthApi } from '../api/auth.api';
 import { TokenStorageService } from './token-storage.service';
 import { ErrorService } from '../errors/error.service';
@@ -24,9 +25,7 @@ export class AuthService {
   /** Whole days left in the trial (Math.ceil), or null when there is no trial. */
   readonly trialDaysLeft = computed(() => {
     const ends = this.trialEndsAt();
-    if (!ends) {
-      return null;
-    }
+    if (!ends) return null;
     return Math.max(0, Math.ceil((new Date(ends).getTime() - Date.now()) / 86_400_000));
   });
 
@@ -36,101 +35,59 @@ export class AuthService {
     return ends !== null && new Date(ends).getTime() < Date.now();
   });
 
-  readonly isDemoUser = computed(
-    () => this._currentUser()?.email === 'demo@callsagents.com'
-  );
-
   /**
    * Initialize from localStorage on app boot. Returns a Promise so APP_INITIALIZER awaits
-   * the /auth/me call before the router activates. Without this, hard-refreshing on a
-   * protected route would briefly redirect to /login before /auth/me resolves.
+   * the /auth/me call before the router activates.
    */
   initFromStorage(): Promise<void> {
     const access = this.storage.getAccess();
-    if (!access) {
-      return Promise.resolve();
-    }
+    if (!access) return Promise.resolve();
     return new Promise<void>((resolve) => {
       this.api.me().subscribe({
-        next: (user) => {
-          this._currentUser.set(user);
-          resolve();
-        },
-        error: () => {
-          this.logout(false);
-          resolve();
-        }
+        next: (user) => { this._currentUser.set(user); resolve(); },
+        error: () => { this.logout(false); resolve(); }
       });
     });
   }
 
   login(req: LoginRequest, redirect?: string): Observable<unknown> {
-    return new Observable((subscriber) => {
-      this.api.login(req).subscribe({
-        next: (res) => {
-          this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
-          this.errorService.success(`Bienvenido, ${res.user.fullName}`);
-          const target = redirect && redirect !== '/login' ? redirect : '/dashboard';
-          this.router.navigateByUrl(target);
-          subscriber.next(res);
-          subscriber.complete();
-        },
-        error: (err) => {
-          // errorInterceptor ya muestra el toast. No duplicar.
-          subscriber.error(err);
-        }
-      });
-    });
+    return this.api.login(req).pipe(
+      tap((res) => {
+        this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
+        this.errorService.success(`Bienvenido, ${res.user.fullName}`);
+        this.router.navigateByUrl(redirect && redirect !== '/login' ? redirect : '/dashboard');
+      })
+    );
   }
 
-  register(req: RegisterRequest, redirect?: string): Observable<unknown> {
-    return new Observable((subscriber) => {
-      this.api.register(req).subscribe({
-        next: (res) => {
-          this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
-          this.errorService.success(`Bienvenido, ${res.user.fullName}`);
-          const target = redirect && redirect !== '/register' ? redirect : '/dashboard';
-          this.router.navigateByUrl(target);
-          subscriber.next(res);
-          subscriber.complete();
-        },
-        error: (err) => {
-          // errorInterceptor ya muestra el toast. No duplicar.
-          subscriber.error(err);
-        }
-      });
-    });
+  register(req: RegisterRequest): Observable<unknown> {
+    return this.api.register(req).pipe(
+      tap((res) => {
+        this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
+        this.errorService.success(`Bienvenido, ${res.user.fullName}`);
+        this.router.navigateByUrl('/dashboard');
+      })
+    );
   }
 
   logout(showToast = true): void {
-    const access = this.storage.getAccess();
-    if (access) {
+    if (this.storage.getAccess()) {
       this.api.logout().subscribe({ error: () => undefined });
     }
     this.storage.clear();
     this._currentUser.set(null);
-    if (showToast) {
-      this.errorService.info('Sesión cerrada');
-    }
+    if (showToast) this.errorService.info('Sesión cerrada');
     this.router.navigateByUrl('/landing');
   }
 
   googleLogin(credential: string, redirect?: string): Observable<unknown> {
-    return new Observable((subscriber) => {
-      this.api.googleLogin(credential).subscribe({
-        next: (res) => {
-          this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
-          this.errorService.success(`Bienvenido, ${res.user.fullName}`);
-          const target = redirect && redirect !== '/login' ? redirect : '/dashboard';
-          this.router.navigateByUrl(target);
-          subscriber.next(res);
-          subscriber.complete();
-        },
-        error: (err) => {
-          subscriber.error(err);
-        }
-      });
-    });
+    return this.api.googleLogin(credential).pipe(
+      tap((res) => {
+        this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
+        this.errorService.success(`Bienvenido, ${res.user.fullName}`);
+        this.router.navigateByUrl(redirect && redirect !== '/login' ? redirect : '/dashboard');
+      })
+    );
   }
 
   private handleAuthSuccess(access: string, refresh: string, user: UserDto): void {

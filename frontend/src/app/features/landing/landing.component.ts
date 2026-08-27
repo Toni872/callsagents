@@ -80,7 +80,7 @@ const ORB_GREEN = '0,168,107';
           </p>
 
           <div class="lnd-hero-ctas">
-            <a class="lnd-btn lnd-btn--primary lnd-btn--hero" routerLink="/demo">Probar demo</a>
+            <a class="lnd-btn lnd-btn--primary lnd-btn--hero" routerLink="/register">Crear cuenta gratis</a>
             <a class="lnd-btn lnd-btn--outline lnd-btn--hero" routerLink="/register">Crear cuenta gratis</a>
           </div>
 
@@ -139,11 +139,11 @@ const ORB_GREEN = '0,168,107';
       </div>
     </section>
 
-    <section class="lnd-cta" id="demo">
+    <section class="lnd-cta">
       <div class="lnd-container lnd-cta-inner">
         <h2 class="lnd-cta-title">¿Listo para que tu negocio responda en menos de un minuto?</h2>
         <p class="lnd-cta-sub">Empieza gratis. Sin tarjeta. Sin compromiso.</p>
-        <a class="lnd-btn lnd-btn--primary lnd-btn--lg lnd-btn--hero" routerLink="/demo">Probar demo</a>
+        <a class="lnd-btn lnd-btn--primary lnd-btn--lg lnd-btn--hero" routerLink="/register">Crear cuenta gratis</a>
       </div>
     </section>
 
@@ -400,13 +400,6 @@ const ORB_GREEN = '0,168,107';
         flex-wrap: wrap;
         gap: var(--spacing-4);
         margin-bottom: var(--spacing-8);
-      }
-
-      .lnd-demo-creds {
-        margin: calc(-1 * var(--spacing-4)) 0 var(--spacing-8);
-        color: var(--color-text-muted);
-        font-size: 0.8rem;
-        font-family: var(--font-mono, monospace);
       }
 
       .lnd-stats {

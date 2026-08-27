@@ -342,9 +342,4 @@ export class TourService {
     sessionStorage.setItem(SESSION_SHOWN_KEY, 'yes');
   }
 
-  /** Reset tour (for testing or "show tour again"). */
-  resetTour(): void {
-    localStorage.removeItem(TOUR_COMPLETED_KEY);
-    sessionStorage.removeItem(SESSION_SHOWN_KEY);
-  }
 }

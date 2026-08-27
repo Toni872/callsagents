@@ -4,6 +4,30 @@
   var config = (window.CallsagentsConfig && window.CallsagentsConfig.baseUrl) || window.location.origin;
   var widgetUrl = config.replace(/\/+$/, '') + '/widget';
 
+  // Read businessId from the embedding <script data-business-id="..."> tag (if any).
+  // window.CallsagentsConfig.businessId takes precedence when defined.
+  var scriptBusinessId = null;
+  if (document.currentScript && document.currentScript.dataset && document.currentScript.dataset.businessId) {
+    scriptBusinessId = document.currentScript.dataset.businessId;
+  }
+  if (!scriptBusinessId) {
+    var scripts = document.getElementsByTagName('script');
+    for (var i = 0; i < scripts.length; i++) {
+      if (scripts[i].src && scripts[i].src.indexOf('/widget.js') !== -1 && scripts[i].dataset && scripts[i].dataset.businessId) {
+        scriptBusinessId = scripts[i].dataset.businessId;
+        break;
+      }
+    }
+  }
+
+  // Prefer the global config, then fall back to the script attribute.
+  var businessId = (window.CallsagentsConfig && window.CallsagentsConfig.businessId) || scriptBusinessId || null;
+
+  // Pass businessId to the widget iframe as a query param.
+  if (businessId) {
+    widgetUrl += (widgetUrl.indexOf('?') !== -1 ? '&' : '?') + 'businessId=' + encodeURIComponent(businessId);
+  }
+
   var STYLE_ID = 'callsagents-widget-style';
   if (!document.getElementById(STYLE_ID)) {
     var style = document.createElement('style');

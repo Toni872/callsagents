@@ -1,15 +1,9 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import {
-  FormBuilder,
-  ReactiveFormsModule,
-  Validators
-} from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
-import { ErrorService } from '../../../core/errors/error.service';
-
-declare const google: any;
+import { GoogleAuthService } from '../../../core/auth/google-auth.service';
 
 @Component({
   selector: 'app-login',
@@ -18,32 +12,17 @@ declare const google: any;
   imports: [CommonModule, ReactiveFormsModule, RouterLink],
   template: `
     <div class="login-page">
-      <form
-        class="card login-card"
-        [formGroup]="form"
-        (ngSubmit)="onSubmit()"
-        novalidate
-      >
+      <form class="card login-card" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
         <h1 class="login-card__title">Callsagents</h1>
-        <p class="login-card__subtitle muted">
-          Inicia sesión para acceder al panel.
-        </p>
+        <p class="login-card__subtitle muted">Inicia sesión para acceder al panel.</p>
 
         <div #googleBtn class="google-btn-container"></div>
 
-        <div class="divider">
-          <span>o</span>
-        </div>
+        <div class="divider"><span>o</span></div>
 
         <div class="login-card__field">
           <label for="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            formControlName="email"
-            autocomplete="username"
-            placeholder="tu&#64;empresa.com"
-          />
+          <input id="email" type="email" formControlName="email" autocomplete="username" placeholder="tu&#64;empresa.com" />
           @if (form.controls.email.touched && form.controls.email.errors) {
             <p class="error-text">Email inválido.</p>
           }
@@ -51,17 +30,9 @@ declare const google: any;
 
         <div class="login-card__field">
           <label for="password">Contraseña</label>
-          <input
-            id="password"
-            type="password"
-            formControlName="password"
-            autocomplete="current-password"
-            placeholder="Mínimo 8 caracteres"
-          />
+          <input id="password" type="password" formControlName="password" autocomplete="current-password" placeholder="Mínimo 8 caracteres" />
           @if (form.controls.password.touched && form.controls.password.errors) {
-            <p class="error-text">
-              La contraseña debe tener al menos 8 caracteres.
-            </p>
+            <p class="error-text">La contraseña debe tener al menos 8 caracteres.</p>
           }
         </div>
 
@@ -76,73 +47,42 @@ declare const google: any;
       </form>
     </div>
   `,
-  styles: [
-    `
-      .login-page {
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        background: linear-gradient(135deg, #003d26 0%, #0f172a 100%);
-        padding: var(--spacing-4);
-      }
-      .login-card {
-        width: 100%;
-        max-width: 380px;
-        display: flex;
-        flex-direction: column;
-        gap: var(--spacing-4);
-      }
-      .login-card__title {
-        margin: 0;
-        font-size: 1.5rem;
-        text-align: center;
-      }
-      .login-card__subtitle {
-        margin: 0;
-        text-align: center;
-      }
-      .login-card__field {
-        display: flex;
-        flex-direction: column;
-      }
-      .login-card__footer {
-        margin: 0;
-        text-align: center;
-        font-size: 0.875rem;
-      }
-      .login-card__link {
-        color: var(--color-primary);
-        text-decoration: none;
-        font-weight: 600;
-      }
-      .login-card__link:hover {
-        text-decoration: underline;
-      }
-      .google-btn-container {
-        display: flex;
-        justify-content: center;
-      }
-      .divider {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        color: var(--color-text-muted, #6b7280);
-        font-size: 0.875rem;
-      }
-      .divider::before,
-      .divider::after {
-        content: '';
-        flex: 1;
-        border-bottom: 1px solid var(--color-border, #374151);
-      }
-    `
-  ]
+  styles: [`
+    .login-page {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #003d26 0%, #0f172a 100%);
+      padding: var(--spacing-4);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-4);
+    }
+    .login-card__title { margin: 0; font-size: 1.5rem; text-align: center; }
+    .login-card__subtitle { margin: 0; text-align: center; }
+    .login-card__field { display: flex; flex-direction: column; }
+    .login-card__footer { margin: 0; text-align: center; font-size: 0.875rem; }
+    .login-card__link { color: var(--color-primary); text-decoration: none; font-weight: 600; }
+    .login-card__link:hover { text-decoration: underline; }
+    .google-btn-container { display: flex; justify-content: center; }
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--color-text-muted, #6b7280); font-size: 0.875rem;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; border-bottom: 1px solid var(--color-border, #374151);
+    }
+  `]
 })
 export class LoginComponent implements AfterViewInit {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
+  private readonly googleAuth = inject(GoogleAuthService);
   private readonly route = inject(ActivatedRoute);
-  private readonly errorService = inject(ErrorService);
 
   @ViewChild('googleBtn') googleBtn!: ElementRef;
 
@@ -154,34 +94,14 @@ export class LoginComponent implements AfterViewInit {
   });
 
   ngAfterViewInit(): void {
-    this.initGoogle();
+    this.googleAuth.init((credential) => this.handleGoogleResponse(credential));
+    this.googleAuth.renderButton(this.googleBtn.nativeElement);
   }
 
-  private initGoogle(): void {
-    if (typeof google === 'undefined' || !google.accounts?.id) {
-      // Retry after script loads
-      setTimeout(() => this.initGoogle(), 200);
-      return;
-    }
-
-    google.accounts.id.initialize({
-      client_id: '557204149721-ounh5q7phakk0ln1auer314bi9rj839v.apps.googleusercontent.com',
-      callback: (response: any) => this.handleGoogleResponse(response)
-    });
-
-    google.accounts.id.renderButton(this.googleBtn.nativeElement, {
-      theme: 'outline',
-      size: 'large',
-      width: 380,
-      text: 'continue_with',
-      locale: 'es'
-    });
-  }
-
-  private handleGoogleResponse(response: any): void {
+  private handleGoogleResponse(credential: string): void {
     this.loading.set(true);
     const redirect = this.route.snapshot.queryParamMap.get('redirect') ?? undefined;
-    this.auth.googleLogin(response.credential, redirect).subscribe({
+    this.auth.googleLogin(credential, redirect).subscribe({
       next: () => this.loading.set(false),
       error: () => this.loading.set(false)
     });
@@ -193,8 +113,7 @@ export class LoginComponent implements AfterViewInit {
       return;
     }
     this.loading.set(true);
-    const redirect =
-      this.route.snapshot.queryParamMap.get('redirect') ?? undefined;
+    const redirect = this.route.snapshot.queryParamMap.get('redirect') ?? undefined;
     this.auth.login(this.form.getRawValue(), redirect).subscribe({
       next: () => this.loading.set(false),
       error: () => this.loading.set(false)

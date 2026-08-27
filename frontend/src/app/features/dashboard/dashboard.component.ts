@@ -7,6 +7,7 @@ import {
   signal
 } from '@angular/core';
 import { DashboardApi } from '../../core/api/dashboard.api';
+import { BusinessApi } from '../../core/api/business.api';
 import { AuthService } from '../../core/auth/auth.service';
 import { Router } from '@angular/router';
 import { DashboardSummary } from '../../shared/models/dashboard.model';
@@ -37,6 +38,28 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
           {{ loading() ? 'Actualizando…' : 'Actualizar' }}
         </button>
       </app-page-header>
+
+      @if (!chatbotConfigured() && !loadingProfile()) {
+        <div class="setup-banner">
+          <div class="setup-banner__content">
+            <div class="setup-banner__icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </div>
+            <div class="setup-banner__text">
+              <h3 class="setup-banner__title">Configura tu chatbot para empezar</h3>
+              <p class="setup-banner__desc">Personaliza el nombre, tono y color de tu asistente virtual para que responda a tus leads.</p>
+            </div>
+          </div>
+          <button class="btn btn--primary" type="button" (click)="goToSettings()">
+            Configurar ahora
+          </button>
+        </div>
+      }
 
       @if (loading() && summary() === null) {
         <div class="dashboard-page__grid" role="status" aria-label="Cargando métricas">
@@ -345,52 +368,51 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
         border-color: var(--color-border-strong);
       }
 
-      /* ---------- Demo assistant CTA ---------- */
-      .demo-cta {
-        margin-bottom: var(--spacing-4);
+      .empty-icon {
+        display: inline-block;
       }
-      :host ::ng-deep .demo-cta .app-card {
-        background: color-mix(in srgb, var(--color-primary), var(--color-bg) 93%);
-        border-color: color-mix(in srgb, var(--color-primary), var(--color-border) 30%);
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-      }
-      :host ::ng-deep .demo-cta:hover .app-card {
-        border-color: var(--color-primary);
-        box-shadow:
-          0 0 0 1px color-mix(in srgb, var(--color-primary), transparent 55%),
-          var(--shadow-sm);
-      }
-      .demo-cta__content {
+
+      /* ---------- Setup banner ---------- */
+      .setup-banner {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: var(--spacing-6);
-        flex-wrap: wrap;
+        gap: var(--spacing-4);
+        margin-bottom: var(--spacing-4);
+        padding: var(--spacing-4) var(--spacing-5);
+        background: color-mix(in srgb, var(--color-primary), var(--color-bg) 93%);
+        border: 1px solid color-mix(in srgb, var(--color-primary), var(--color-border) 30%);
+        border-radius: var(--radius-lg);
       }
-      .demo-cta__eyebrow {
-        display: inline-block;
-        margin-bottom: var(--spacing-2);
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--color-primary);
+      .setup-banner__content {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-4);
       }
-      .demo-cta__title {
-        margin: 0 0 var(--spacing-2);
-        font-size: 1.25rem;
-      }
-      .demo-cta__desc {
-        margin: 0;
-        max-width: 520px;
-        font-size: 0.875rem;
-        color: var(--color-text-muted);
-      }
-      .demo-cta__btn {
+      .setup-banner__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius);
+        background: var(--color-primary);
+        color: #fff;
         flex-shrink: 0;
       }
-      .empty-icon {
-        display: inline-block;
+      .setup-banner__title {
+        margin: 0 0 var(--spacing-1);
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-text-strong);
+      }
+      .setup-banner__desc {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--color-text-muted);
+      }
+      .setup-banner .btn {
+        flex-shrink: 0;
       }
 
       /* ---------- Responsive ---------- */
@@ -424,11 +446,14 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
 })
 export class DashboardComponent implements OnInit {
   private readonly dashboardApi = inject(DashboardApi);
+  private readonly businessApi = inject(BusinessApi);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
 
   protected readonly summary = signal<DashboardSummary | null>(null);
   protected readonly loading = signal(false);
+  protected readonly chatbotConfigured = signal(false);
+  protected readonly loadingProfile = signal(true);
 
   protected readonly connectionRatePercent = computed(() =>
     Math.round((this.summary()?.connectionRateToday ?? 0) * 100)
@@ -462,10 +487,29 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadSummary();
+    this.checkChatbotConfig();
   }
 
   protected refresh(): void {
     this.loadSummary();
+  }
+
+  protected goToSettings(): void {
+    this.router.navigateByUrl('/settings/profile');
+  }
+
+  private checkChatbotConfig(): void {
+    this.businessApi.getProfile().subscribe({
+      next: (res) => {
+        // Chatbot is configured if companyName exists
+        this.chatbotConfigured.set(!!res.data.companyName);
+        this.loadingProfile.set(false);
+      },
+      error: () => {
+        this.chatbotConfigured.set(false);
+        this.loadingProfile.set(false);
+      }
+    });
   }
 
   private loadSummary(): void {

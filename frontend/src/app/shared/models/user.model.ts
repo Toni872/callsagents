@@ -19,10 +19,6 @@ export interface CreateUserRequest {
   role: UserRole;
 }
 
-export interface UpdateUserStatusRequest {
-  status: UserStatus;
-}
-
 export interface UserListFilter {
   page?: number;
   size?: number;

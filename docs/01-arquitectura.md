@@ -1,97 +1,146 @@
-# Fase 1 — Arquitectura
+# Callsagents — Live Architecture
 
-## Proyecto
+> Source of truth for the current SaaS architecture. Distinguishes the **LIVE SaaS core** (the product) from the **LEGACY** outbound-campaign scaffolding that is retained in-tree but deprecated. Read `00-handoff.md` for onboarding, `02-modelo-de-datos.md` for the schema, and `03-adrs.md` for the decisions behind each choice.
 
-Callsagents — MVP de plataforma de outbound sales con IA.
-Stack: Angular SPA · Spring Boot · PostgreSQL · Redis · JWT · Swagger · Docker Compose · CI/CD.
+---
 
-## 1. Alcance y objetivo del producto
+## 1. Product
 
-Plataforma web para que un equipo comercial ejecute campañas outbound de manera sistemática. Permite cargar leads, lanzar campañas, registrar resultados de llamadas, hacer handoff a humano y agendar citas.
+Callsagents is a **multi-tenant SaaS** that captures and converts website leads through an instant **WhatsApp chatbot** and **web chat widget**, with an **AI voice call as a fallback escalation** when a lead goes silent. It is dogfooded on **Script9** (www.script-9.com); all user-facing copy says "Script9", never "Callsagents". Each client business owns a `BusinessProfile` that sets its own branding, WhatsApp number, widget, and prompt.
 
-El MVP **no** incluye motor propio de IA de voz. La IA es un **servicio auxiliar** integrable (provider externo tipo Vapi / Retell / Bland) que se enchufa cuando hay un caso de uso confirmado. El MVP valida **flujo de negocio**, no calidad máxima del modelo.
+### Core flow
 
-## 2. Módulos del backend y responsabilidad
+1. A visitor lands on a client site and either chats through the **web chat widget** or messages the business on **WhatsApp**.
+2. An AI assistant (Groq `openai/gpt-oss-20b`) qualifies the lead in-conversation.
+3. If the lead confirms a demo (`confirm_yes`), the lead is captured and — via the **Escalation Orchestrator** — a WhatsApp **follow-up** is sent.
+4. If the lead does **not** reply before a per-business timeout, a **Retell AI outbound voice call** is placed as a *fallback* (never a first contact).
+5. If the lead **replies** on WhatsApp, the escalation is cancelled (`RESOLVED` — no call).
 
-| Módulo | Responsabilidad |
+## 2. Two-tier module map
+
+### LIVE SaaS core (the product)
+
+| Module | Responsibility |
 |---|---|
-| **Auth** | Login, refresh, logout, roles. JWT + Redis para revocación. |
-| **Leads** | CRUD de leads, importación masiva, filtros, segmentación. |
-| **Campañas** | Crear, lanzar, pausar, monitorear campañas. |
-| **Llamadas** | Registro de llamadas, estados (contestada/buzón/no responde), duración, outcome, grabación (URL), notas. |
-| **Asignaciones** | Asignar leads a operadores, colas de trabajo. |
-| **Citas** | Agendar, confirmar, cancelar citas. |
-| **Integraciones** | Conector con provider de voz externo (Vapi/Retell) vía API + webhooks. |
-| **Reportes** | Métricas básicas por campaña y por operador. |
+| **auth** | JWT access/refresh rotation + Redis revocation, email + Google OAuth, roles. |
+| **leads** | Lead CRUD, CSV import, filters, sources incl. `WHATSAPP` / `WEB_CHAT`. |
+| **chat** | Web chat widget + per-tenant prompt (`BusinessPromptComposer`), ephemeral Caffeine history. |
+| **whatsapp** | Vonage messaging (sendText/sendButtons/sendList) + `WhatsAppAiChatbotService` + Groq, inbound webhook routing by tenant `to` number. |
+| **voice** | `VoiceCallService` + `VoiceProvider` abstraction (Retell/Vapi), WebRTC web-call, webhooks. |
+| **escalation** | Escalation Orchestrator (V17): WhatsApp follow-up → timeout → Retell outbound voice, per-business config. |
+| **business** | `BusinessProfile` (SaaS tenancy anchor, `@MapsId` 1:1 with User) + widget-config. |
 
-## 3. Entidades principales (nombradas, NO modeladas todavía — eso es Fase 2)
+### LEGACY (kept in-tree, deprecated — recording tables only)
 
-`User` · `Role` · `Lead` · `Campaign` · `CampaignLead` · `Call` · `CallOutcome` · `Appointment` · `IntegrationConfig` · `AuditLog`
+`campaigns`, `campaign_leads`, `calls` (Twilio-era), `appointments` (+ calendar hook), `calendar_integrations`, `integrations`, `users`, `dashboard`, `audit`. Reference for the SaaS design; **do not extend for product work** (ADR-010).
 
-## 4. Endpoints principales (esbozo de alto nivel)
+## 3. Request flow diagrams
 
-```
-POST   /api/auth/login
-POST   /api/auth/refresh
-POST   /api/auth/logout
+### 3.1 WhatsApp inbound flow (LIVE)
 
-GET    /api/leads               (filtros + paginación)
-POST   /api/leads               (carga individual)
-POST   /api/leads/import        (carga masiva CSV)
+```mermaid
+sequenceDiagram
+    participant Lead
+    participant Vonage
+    actor Bk as Callsagents backend
+    participant Groq
+    participant Retail as Lead store
 
-GET    /api/campaigns
-POST   /api/campaigns
-POST   /api/campaigns/{id}/launch
-POST   /api/campaigns/{id}/pause
-
-GET    /api/calls
-POST   /api/calls               (registrar resultado manual)
-GET    /api/calls/{id}
-
-POST   /api/appointments
-
-POST   /api/integrations/voice  (webhook entrante del provider)
+    Lead->>Vonage: WhatsApp message to the business number
+    Vonage->>Bk: POST /api/webhooks/vonage (inbound)
+    Note over Bk: resolve BusinessProfile by "to" number (V16 partial index)
+    Bk->>Groq: processMessage (vendor, business context)
+    Groq-->>Bk: qualifying reply (or null if greeting already sent)
+    Bk->>Vonage: sendText / sendButtons (202 ACCEPTED)
+    Vonage-->>Lead: reply delivered
+    Bk->>Retail: upsert Lead (source=WHATSAPP)
 ```
 
-## 5. Roles y permisos (alto nivel)
+### 3.2 Web chat widget flow (LIVE)
 
-| Rol | Permisos |
-|---|---|
-| **ADMIN** | Todo: usuarios, campañas, integraciones, reportes globales. |
-| **SUPERVISOR** | Ver todas las campañas y operadores de su equipo, reportes. |
-| **AGENT** | Ver SOLO sus leads asignados, registrar llamadas, agendar citas. |
+```mermaid
+sequenceDiagram
+    participant Visitor
+    participant Widget as Angular chat-widget
+    actor Bk as Callsagents backend
+    participant Groq
 
-## 6. Redis: dónde y por qué (justificación caso por caso)
-
-| Uso | Caso | TTL |
-|---|---|---|
-| **Revocación de refresh tokens** | F3 — confirmado | = expiración refresh token |
-| **Colas de campañas** (jobs pendientes de llamada) | Orquestación de lanzamiento | configurable |
-| **Rate limit / throttling de endpoints** | Protección básica | ventana móvil |
-| ~~Caché de consultas~~ | ~~NO todavía~~ | No hay caso confirmado en MVP |
-
-## 7. Estrategia de entorno local y despliegue
-
-- **Local**: Docker Compose con 4 servicios (`postgres`, `redis`, `backend`, `frontend`).
-- **Staging/Prod**: fuera del alcance del MVP — se decide cuando exista staging validado (Fase 10).
-- **CI/CD**: GitHub Actions (decisión por defecto, ajustable a GitLab CI si el repo lo requiere).
-- **Secretes**: variables de entorno, **nunca** en código ni en compose commiteado.
-
-## 8. Estructura de carpetas (acordada)
-
-```
-callsagents/
-├── backend/         # Spring Boot (Java)
-├── frontend/        # Angular
-├── docs/            # Documentación por fase
-├── PRD.md
-└── README.md
+    Visitor->>Widget: types a message
+    Widget->>Bk: POST /api/chat/message (tenant-context)
+    Bk->>Groq: processMessage (per-tenant prompt)
+    Groq-->>Bk: qualifying reply
+    Bk-->>Widget: reply (streamed/async)
+    Widget-->>Visitor: rendered in the chat bubble
 ```
 
-Monorepo simple. Sin Nx, sin Turborepo. Si crece (equipos separados), se separan después.
+### 3.3 Voice escalation flow (IMPLEMENTED + E2E-verified — Escalation Orchestrator)
 
-## Lo que NO definimos todavía (queda para su fase)
+```mermaid
+sequenceDiagram
+    participant Lead
+    participant Bot as WhatsApp chatbot
+    participant Orch as Escalation Orchestrator (built — V17)
+    participant V as VoiceCallService
+    participant Retell as RetellProvider
 
-- **Modelo de datos final** — Fase 2.
-- **Estructura de paquetes interna de Spring Boot** — sale de las convenciones estándar + Clean Architecture por módulo (se arma al escribir código).
-- **Provider de voz concreto** (Vapi / Retell / Bland) — se evalúa cuando integremos (Fase 4).
+    Bot->>Orch: lead unresponsive after per-business timeout
+    Orch->>V: placeCall (RETELL)
+    V->>Retell: outbound call (needs RETELL_FROM_NUMBER — gated)
+    Retell-->>V: webhook status updates (RINGING/IN_PROGRESS/ENDED/FAILED/NO_ANSWER)
+    V->>Orch: result
+    Orch->>Lead: re-engage or book appointment
+```
+
+Implemented and verified end-to-end (real Vonage sandbox + tunnel). A lead that **replies** on WhatsApp stops the escalation (`handleReply` → `RESOLVED`); only a qualified lead that never replies after a follow-up is escalated to voice (fallback-only, never first contact). See `17-escalation-runbook.md` for the verified matrix and the outbound-voice activation steps.
+
+## 4. Endpoints inventory (context path `/api` — global)
+
+| Endpoint | Method | Module | Auth |
+|---|---|---|---|
+| `/api/health` | GET | common | public |
+| `/api/auth/login` `/api/auth/refresh` `/api/auth/logout` `/api/auth/me` | POST/POST/POST/GET | auth | public / bearer |
+| `/api/auth/google` | POST | auth | public |
+| `/api/leads` | GET/POST | leads | bearer |
+| `/api/leads/import` | POST | leads | bearer |
+| `/api/leads/{id}` | GET/PUT/DELETE | leads | bearer |
+| `/api/chat/message` (+ history) | POST | chat | public (tenant) |
+| `/api/webhooks/vonage` | POST | whatsapp | signature |
+| `/api/webhooks/vonage/status` | POST | whatsapp | signature |
+| `/api/voice/web-call` | POST | voice | bearer |
+| `/api/voice/webhook/{provider}` | POST | voice | fail-closed signature |
+| `/api/voice/calls` | GET | voice | bearer |
+| `/api/escalation/config` | GET/PUT | escalation | ADMIN/SUPERVISOR |
+| `/api/escalation/leads/{leadId}` | GET | escalation | bearer |
+| `/api/escalation/{id}/cancel` | POST | escalation | ADMIN/SUPERVISOR |
+| `/api/business/profile` & `/api/business/widget-config` | GET/PUT | business | bearer |
+| `/api/appointments` `/api/campaigns` `/api/calls` `/api/users` `/api/dashboard/summary` `/api/integrations/voice` | — | LEGACY | (deprecated) |
+
+Response envelope for the SaaS core: `{ "success": true, "data": ... }`.
+
+## 5. Auth / security architecture
+
+- **JWT HS256** via nimbus-jose-jwt: **access 15 min**, **refresh 7 d** with **rotation**.
+- **Redis** revocation: `refresh:` / `revoked:` keys; **reuse detection revokes the whole session**.
+- Passwords hashed with BCrypt (`BCryptPasswordEncoder(10)`).
+- Google OAuth popup works via nginx **COOP/COEP: unsafe-none** (ADR-008).
+- Route-level `@PreAuthorize` on SaaS endpoints; voice webhooks use **fail-closed** signature validation.
+- `/auth/me` reads `Authentication.getName()` (principal is a String, not `UserDetails`).
+
+## 6. Data storage
+
+- **PostgreSQL 16** with native ENUMs + JSONB (`hypersistence-utils`); UUID PKs, `TIMESTAMPTZ`, hard delete + `AuditLog`.
+- **Redis 7** for auth revocation state.
+- **Caffeine** for ephemeral chat history (max 20 turns) — no chat table.
+- Flyway migrations V1–V16 (V13 missing by design; V2 dev-only under `db/migration/dev`), fully listed in `docs/02-modelo-de-datos.md`.
+- **Windows host note**: docker Postgres is on **5433:5432** (native PG owns 5432).
+
+## 7. Codebase conventions
+
+- **Backend (Java 21 / Spring Boot 3.5)**: standalone single-class files, Lombok entities, DTO records, microservices-style per-module packages under `com.callsagents.backend`. ORM ENUMs must use `@Enumerated(STRING) + @JdbcTypeCode(SqlTypes.NAMED_ENUM)`. Tests: Mockito + JUnit 5, `@ExtendWith(MockitoExtension.class)`, naming `{Method}_when{State}_then{Expected}` (214 tests / 22 classes).
+- **Frontend (Angular 18.2)**: standalone components, signals, `inject()`, `OnPush`, native `<dialog>`, lazy routes, CSS variables (no Material/Tailwind).
+- **Git**: conventional commits (`feat(scope):`, `fix(scope):`, `docs:`, `chore:`); one commit per logical change; RDD review gate before commit/push.
+- Migrations: never edit a shipped migration; add `V{n}__...sql`.
+
+## 8. Legacy vs live — a note to future readers
+
+The repo contains a complete outbound-campaigns MVP (leads/campaigns/calls/appointments/Twilio, ADMIN/SUPERVISOR/AGENT roles) that the product **pivoted away from**. It stays in-tree as reference (ADR-010) but is **not the product**. All new behavior builds on the SaaS core (auth, leads, chat, whatsapp, voice, business, escalation). When extending, prefer the SaaS path and update this document's module table and endpoints inventory.

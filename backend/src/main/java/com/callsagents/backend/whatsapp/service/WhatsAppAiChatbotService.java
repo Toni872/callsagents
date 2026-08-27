@@ -1,9 +1,16 @@
 package com.callsagents.backend.whatsapp.service;
 
+import com.callsagents.backend.business.entity.BusinessProfile;
+import com.callsagents.backend.business.service.BusinessPromptComposer;
+import com.callsagents.backend.business.service.BusinessService;
+import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.entity.LeadSource;
 import com.callsagents.backend.leads.entity.LeadStatus;
 import com.callsagents.backend.leads.repository.LeadRepository;
+import com.callsagents.backend.voice.domain.VoiceProviderType;
+import com.callsagents.backend.voice.service.VoiceCallService;
+import com.callsagents.backend.voice.service.VoiceProvider;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
@@ -21,6 +28,10 @@ public class WhatsAppAiChatbotService {
     private final GroqService groqService;
     private final LeadRepository leadRepository;
     private final VonageMessageService vonageMessageService;
+    private final BusinessService businessService;
+    private final BusinessPromptComposer promptComposer;
+    private final EscalationService escalationService;
+    private final VoiceCallService voiceCallService;
 
     // Bounded caches: max 2000 entries each, evict after 30min inactivity
     private final Cache<String, List<Map<String, String>>> conversationHistory = Caffeine.newBuilder()
@@ -39,46 +50,25 @@ public class WhatsAppAiChatbotService {
     private static final int MAX_HISTORY = 20;
 
     // System prompt for AI with interactive step awareness
-    private static final String SYSTEM_PROMPT = """
-        Eres Naiara, asistente de ventas de Script9 — empresa de software y automatización con IA.
-
-        PERSONALIDAD:
-        - Profesional, cálida, directa. Hablas como una asistente de ventas real, no como un bot.
-        - Usa el nombre del usuario de forma natural, NO en cada frase. Máximo 1 vez por intercambio de mensajes.
-        - Responde en español, máximo 2-3 oraciones por mensaje.
-        - Una sola pregunta por mensaje. NUNCA hagas dos preguntas juntas.
-
-        FLUJO DE CONVERSACIÓN:
-        1. Preséntate brevemente y pregunta en qué puede ayudar
-        2. Entiende la necesidad del usuario (qué automatizar, qué problema tiene)
-        3. Pregunta el nombre y email SOLO cuando el contexto lo justifique
-        4. Confirma los datos recibidos: "OK, tu email es X"
-        5. Pregunta sobre timing: "¿Cuándo te gustaría empezar?"
-        6. Ofrece agendar una demo cuando tengas suficiente información
-
-        REGLAS ESTRICTAS:
-        - NUNCA repitas el nombre del usuario en cada respuesta
-        - NUNCA hagas más de una pregunta por mensaje
-        - SIEMPRE confirma los datos cuando el usuario los proporcione
-        - Si el usuario pregunta por precios, di que depende del proyecto y ofrece una demo
-        - Si el usuario dice "hola" o "inicio", reinicia la conversación
-        - Si el usuario se despide, despídete de forma breve y natural
-
-        CUÁNDO GUARDAR EL LEAD:
-        Cuando tengas nombre Y email del usuario, añade al FINAL de tu respuesta:
-        [LEAD:name=NOMBRE|email=EMAIL|service=SERVICIO]
-
-        EJEMPLOS:
-        Usuario: "Hola" → "¡Hola! Soy Naiara de Script9. ¿En qué puedo ayudarte?"
-        Usuario: "Ventas" → "¿Cómo te llamas y tu email para enviarte info?"
-        Usuario: "Antonio, antonio@email.com" → "OK, tu email es antonio@email.com. ¿Cuándo te gustaría empezar?"
-        """;
+    private String resolveSystemPrompt(UUID userId) {
+        if (userId == null) {
+            return promptComposer.composeDefault();
+        }
+        BusinessProfile profile = businessService.getProfileEntityByUserId(userId);
+        return promptComposer.compose(profile);
+    }
 
     public WhatsAppAiChatbotService(GroqService groqService, LeadRepository leadRepository,
-                                     VonageMessageService vonageMessageService) {
+                                     VonageMessageService vonageMessageService,
+                                      BusinessService businessService, BusinessPromptComposer promptComposer,
+                                      EscalationService escalationService, VoiceCallService voiceCallService) {
         this.groqService = groqService;
         this.leadRepository = leadRepository;
         this.vonageMessageService = vonageMessageService;
+        this.businessService = businessService;
+        this.promptComposer = promptComposer;
+        this.escalationService = escalationService;
+        this.voiceCallService = voiceCallService;
     }
 
     /**
@@ -86,6 +76,20 @@ public class WhatsAppAiChatbotService {
      * Returns the text response, or null if Groq is not configured or buttons were sent.
      */
     public String processMessage(String phone, String message) {
+        return processMessage(phone, message, null);
+    }
+
+    /**
+     * Whether the Groq AI backend is configured. Lets callers distinguish
+     * "chatbot unavailable (fall back to the basic state machine)" from
+     * "chatbot handled the message and already sent buttons/greeting"
+     * (processMessage returns null in both cases).
+     */
+    public boolean isGroqConfigured() {
+        return groqService.isConfigured();
+    }
+
+    public String processMessage(String phone, String message, UUID businessId) {
         if (!groqService.isConfigured()) {
             return null;
         }
@@ -103,7 +107,7 @@ public class WhatsAppAiChatbotService {
         }
 
         // Handle button/list replies — returns [responseText, buttonsSent]
-        String[] result = handleButtonReply(phone, text, step);
+        String[] result = handleButtonReply(phone, text, step, businessId);
         if (result[0] != null) {
             return result[0]; // Text response from handler
         }
@@ -115,7 +119,7 @@ public class WhatsAppAiChatbotService {
         List<Map<String, String>> history = conversationHistory.get(phone, k -> new ArrayList<>());
 
         // Call Groq AI
-        String aiResponse = groqService.chat(SYSTEM_PROMPT, history, text);
+        String aiResponse = groqService.chat(resolveSystemPrompt(businessId), history, text);
 
         if (aiResponse == null) {
             log.warn("Groq returned null for phone={}", phone);
@@ -138,6 +142,16 @@ public class WhatsAppAiChatbotService {
         // Determine next interactive step
         advanceStep(phone, text, cleanResponse, step);
 
+        // Optional voice offer detector — offer to move to a voice call only when
+        // the chat conversation is not advancing toward a sale and the offer has
+        // not already been made in this conversation. Returns null to skip the AI
+        // text since the offer buttons were just sent.
+        if (shouldOfferVoiceCall(phone, businessId)) {
+            leadData.get(phone, k -> new HashMap<>()).put("voiceOfferSent", "true");
+            sendVoiceCallOfferButtons(phone);
+            return null;
+        }
+
         log.info("AI chatbot [{}]: step={} input='{}' response='{}'", phone, step, text, cleanResponse);
         return cleanResponse;
     }
@@ -146,7 +160,24 @@ public class WhatsAppAiChatbotService {
      * Send the initial greeting with interactive buttons.
      */
     public void sendInteractiveGreeting(String phone) {
-        String body = "Hola, soy Naiara de Script9.\n\n¿Qué te gustaría hacer?";
+        sendInteractiveGreeting(phone, null);
+    }
+
+    public void sendInteractiveGreeting(String phone, UUID businessId) {
+        String botName = "Naiara";
+        String companyName = "Script9";
+        if (businessId != null) {
+            BusinessProfile profile = businessService.getProfileEntityByUserId(businessId);
+            if (profile != null) {
+                if (profile.getBotName() != null && !profile.getBotName().isBlank()) {
+                    botName = profile.getBotName();
+                }
+                if (profile.getCompanyName() != null && !profile.getCompanyName().isBlank()) {
+                    companyName = profile.getCompanyName();
+                }
+            }
+        }
+        String body = String.format("Hola, soy %s de %s.\n\n¿Qué te gustaría hacer?", botName, companyName);
         List<String[]> buttons = List.of(
             new String[]{"intent_ventas", "Ventas"},
             new String[]{"intent_soporte", "Soporte"},
@@ -155,7 +186,7 @@ public class WhatsAppAiChatbotService {
         boolean sent = vonageMessageService.sendButtons(phone, body, buttons);
         if (!sent) {
             // Fallback to text
-            vonageMessageService.sendText(phone, "¡Hola! Soy Naiara de Script9. ¿En qué puedo ayudarte?");
+            vonageMessageService.sendText(phone, String.format("¡Hola! Soy %s de %s. ¿En qué puedo ayudarte?", botName, companyName));
         }
         conversationStep.put(phone, "awaiting_intent");
     }
@@ -167,7 +198,7 @@ public class WhatsAppAiChatbotService {
      * Both null/false means not handled, caller should run AI.
      */
     @SuppressWarnings("unchecked")
-    private String[] handleButtonReply(String phone, String text, String step) {
+    private String[] handleButtonReply(String phone, String text, String step, UUID businessId) {
         // Intent buttons are GLOBAL — handled at any step
         if (text.startsWith("intent_")) {
             return switch (text) {
@@ -212,12 +243,32 @@ public class WhatsAppAiChatbotService {
                 case "confirm_yes" -> {
                     conversationStep.invalidate(phone);
                     leadData.invalidate(phone);
+                    triggerEscalation(phone, businessId);
                     yield new String[]{"¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nTe envío un email con el link para agendar.\n\n¿Te parece bien esta semana?", "false"};
                 }
                 case "confirm_no" -> {
                     conversationStep.invalidate(phone);
                     leadData.invalidate(phone);
                     yield new String[]{"No te preocupes. Cuando quieras, aquí estoy.\n\n¡Hasta pronto!", "false"};
+                }
+                default -> new String[]{null, "false"};
+            };
+        }
+
+        // Voice call acceptance/decline
+        if ("awaiting_voice_decision".equals(step)) {
+            return switch (text) {
+                case "accept_voice_call" -> {
+                    conversationStep.invalidate(phone);
+                    boolean placed = acceptVoiceCall(phone, businessId);
+                    if (placed) {
+                        yield new String[]{"Perfecto, te estoy conectando con un asesor por teléfono...", "false"};
+                    }
+                    yield new String[]{"Estamos teniendo un problema para conectarte por teléfono. Un asesor te va a contactar por chat en breve.", "false"};
+                }
+                case "decline_voice_call" -> {
+                    conversationStep.invalidate(phone);
+                    yield new String[]{"No hay problema, seguimos por chat. ¿En qué más te ayudo?", "false"};
                 }
                 default -> new String[]{null, "false"};
             };
@@ -370,6 +421,116 @@ public class WhatsAppAiChatbotService {
             }
         } catch (Exception e) {
             log.error("Failed to save AI chatbot lead: phone={}", phone, e);
+        }
+    }
+
+    /**
+     * Trigger the escalation orchestrator after a lead confirms a demo.
+     * The lead is looked up by phone (E.164, with the "+" prefix as saved).
+     * Never propagates — this is fire-and-forget from the chatbot flow.
+     */
+    private void triggerEscalation(String phone, UUID businessId) {
+        if (businessId == null) {
+            log.debug("Escalation skipped: no business profile (businessId null) phone={}", phone);
+            return;
+        }
+        try {
+            String phoneE164 = phone.startsWith("+") ? phone : "+" + phone;
+            leadRepository.findByPhone(phoneE164).ifPresent(lead ->
+                escalationService.qualify(lead.getId(), businessId)
+            );
+        } catch (Exception e) {
+            log.error("Failed to trigger escalation: phone={} businessId={}", phone, businessId, e);
+        }
+    }
+
+    /**
+     * Conservative detector for a non-effective sales conversation. Returns true
+     * (offer a voice call) only when there is enough chatter, the conversation is
+     * NOT in a productive step, the offer has not been sent before, and a
+     * business is present.
+     */
+    private boolean shouldOfferVoiceCall(String phone, UUID businessId) {
+        if (businessId == null) {
+            return false;
+        }
+        List<Map<String, String>> history = conversationHistory.getIfPresent(phone);
+        if (history == null || history.size() < 8) {
+            return false;
+        }
+        String step = conversationStep.getIfPresent(phone);
+        if ("confirmation".equals(step) || "awaiting_timing".equals(step)
+                || "awaiting_voice_decision".equals(step) || "support".equals(step)) {
+            return false;
+        }
+        Map<String, String> data = leadData.getIfPresent(phone);
+        if (data != null && "true".equals(data.get("voiceOfferSent"))) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Send the optional voice call offer buttons. Never imposed on the lead.
+     */
+    private void sendVoiceCallOfferButtons(String phone) {
+        Map<String, String> cachedData = leadData.getIfPresent(phone);
+        String name = cachedData == null ? "" : cachedData.getOrDefault("name", "");
+        String greeting = name.isBlank() ? "" : name + ", ";
+        String body = String.format(
+            "%sLa conversación por chat no está avanzando y quiero ayudarte mejor.\n\n¿Preferís que te llame un asesor por voz?",
+            greeting
+        );
+        List<String[]> buttons = List.of(
+            new String[]{"accept_voice_call", "Sí, llámame"},
+            new String[]{"decline_voice_call", "No, sigo con chat"}
+        );
+        vonageMessageService.sendButtons(phone, body, buttons);
+        conversationStep.put(phone, "awaiting_voice_decision");
+    }
+
+    /**
+     * Fire-and-forget: place an outbound voice call to the lead via the Retell
+     * AI agent. Returns true when the provider accepted the call; false when it
+     * was skipped (missing profile/agent) or failed (provider not configured or
+     * from-number blank) so the caller can show an honest degraded message.
+     */
+    private boolean acceptVoiceCall(String phone, UUID businessId) {
+        if (businessId == null) {
+            log.debug("Voice call skipped: no business profile (businessId null) phone={}", phone);
+            return false;
+        }
+        try {
+            String phoneE164 = phone.startsWith("+") ? phone : "+" + phone;
+            BusinessProfile profile = businessService.getProfileEntityByUserId(businessId);
+            String agentId = profile != null ? profile.getVoiceAgentId() : null;
+            if (agentId == null || agentId.isBlank()) {
+                log.warn("Voice call skipped: no voice_agent_id for businessId={} phone={}", businessId, phoneE164);
+                return false;
+            }
+            Map<String, Object> metadata = Map.of("leadId", "", "acceptedByLead", "true");
+            Lead[] called = new Lead[1];
+            leadRepository.findByPhone(phoneE164).ifPresent(lead -> {
+                called[0] = lead;
+            });
+            if (called[0] == null) {
+                log.warn("Voice call skipped: no lead for phone={} businessId={}", phoneE164, businessId);
+                return false;
+            }
+            Map<String, Object> callMetadata = new HashMap<>(metadata);
+            callMetadata.put("leadId", called[0].getId().toString());
+            callMetadata.put("acceptedByLead", "true");
+            voiceCallService.placeCall(
+                VoiceProviderType.RETELL,
+                new VoiceProvider.StartCallRequest(phoneE164, agentId, callMetadata, null),
+                businessId,
+                null
+            );
+            log.info("Voice call placed for phone={} businessId={} leadId={}", phoneE164, businessId, called[0].getId());
+            return true;
+        } catch (Exception e) {
+            log.error("Failed to place voice call: phone={} businessId={}", phone, businessId, e);
+            return false;
         }
     }
 }

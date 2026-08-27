@@ -72,6 +72,8 @@ public class SecurityConfig {
                 auth.requestMatchers("/webhooks/vonage/**").permitAll();
                 // Chat widget API: sin auth, el widget del sitio web llama directamente.
                 auth.requestMatchers("/chat/**").permitAll();
+                // Widget config publico: sin auth, el widget embebido carga branding.
+                auth.requestMatchers("/business/profile/widget-config/**").permitAll();
                 // Demo voice call: sin auth, el demo público crea web calls de Retell.
                 auth.requestMatchers("/voice/web-call").permitAll();
                 // Callback OAuth de calendario: Google redirige el navegador aquí

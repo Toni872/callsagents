@@ -1,5 +1,8 @@
 package com.callsagents.backend.chat;
 
+import com.callsagents.backend.business.entity.BusinessProfile;
+import com.callsagents.backend.business.service.BusinessPromptComposer;
+import com.callsagents.backend.business.service.BusinessService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.entity.LeadSource;
 import com.callsagents.backend.leads.entity.LeadStatus;
@@ -21,6 +24,8 @@ public class ChatService {
 
     private final GroqService groqService;
     private final LeadRepository leadRepository;
+    private final BusinessService businessService;
+    private final BusinessPromptComposer promptComposer;
 
     // Bounded cache: max 1000 sessions, evict after 30min inactivity
     private final Cache<String, List<Map<String, String>>> conversationHistory = Caffeine.newBuilder()
@@ -30,40 +35,19 @@ public class ChatService {
 
     private static final int MAX_HISTORY = 20;
 
-    private static final String SYSTEM_PROMPT = """
-        Eres Naiara, asistente de ventas de Script9 — empresa de software y automatización con IA.
-
-        PERSONALIDAD:
-        - Profesional, cálida, directa. Hablas como una asistente de ventas real, no como un bot.
-        - Usa el nombre del usuario de forma natural, NO en cada frase. Máximo 1 vez por intercambio.
-        - Responde en español, máximo 2-3 oraciones por mensaje.
-        - Una sola pregunta por mensaje. NUNCA hagas dos preguntas juntas.
-
-        FLUJO DE CONVERSACIÓN:
-        1. Preséntate brevemente y pregunta en qué puede ayudar
-        2. Entiende la necesidad del usuario
-        3. Pregunta nombre y email cuando el contexto lo justifique
-        4. Confirma los datos recibidos
-        5. Pregunta sobre timing
-        6. Ofrece agendar una demo
-
-        REGLAS ESTRICTAS:
-        - NUNCA repitas el nombre del usuario en cada respuesta
-        - NUNCA hagas más de una pregunta por mensaje
-        - SIEMPRE confirma los datos cuando el usuario los proporcione
-        - Si pregunta por precios, di que depende del proyecto y ofrece una demo
-
-        CUÁNDO GUARDAR EL LEAD:
-        Cuando tengas nombre Y email, añade al FINAL:
-        [LEAD:name=NOMBRE|email=EMAIL|service=SERVICIO]
-        """;
-
-    public ChatService(GroqService groqService, LeadRepository leadRepository) {
+    public ChatService(GroqService groqService, LeadRepository leadRepository,
+                       BusinessService businessService, BusinessPromptComposer promptComposer) {
         this.groqService = groqService;
         this.leadRepository = leadRepository;
+        this.businessService = businessService;
+        this.promptComposer = promptComposer;
     }
 
     public ChatResponse processMessage(String sessionId, String message) {
+        return processMessage(sessionId, message, null);
+    }
+
+    public ChatResponse processMessage(String sessionId, String message, UUID businessId) {
         if (!groqService.isConfigured()) {
             return new ChatResponse(sessionId, "El chat no está disponible ahora mismo. Inténtalo más tarde.", false);
         }
@@ -75,7 +59,8 @@ public class ChatService {
 
         List<Map<String, String>> history = conversationHistory.get(sessionId, k -> new ArrayList<>());
 
-        String aiResponse = groqService.chat(SYSTEM_PROMPT, history, text);
+        String systemPrompt = resolveSystemPrompt(businessId);
+        String aiResponse = groqService.chat(systemPrompt, history, text);
         if (aiResponse == null) {
             return new ChatResponse(sessionId, "Disculpa, tuve un problema técnico. ¿Podrías repetir?", false);
         }
@@ -112,6 +97,14 @@ public class ChatService {
     }
 
     private static final int TRIAL_LEAD_LIMIT = 50;
+
+    private String resolveSystemPrompt(UUID businessId) {
+        if (businessId == null) {
+            return promptComposer.composeDefault();
+        }
+        BusinessProfile profile = businessService.getProfileEntityByUserId(businessId);
+        return promptComposer.compose(profile);
+    }
 
     private boolean saveLead(String sessionId, Map<String, String> data) {
         try {

@@ -21,11 +21,13 @@ public class ChatController {
 
     @PostMapping("/message")
     public ResponseEntity<ChatResponse> sendMessage(@RequestBody ChatRequest request) {
-        log.info("Chat message: sessionId={} message={}", request.sessionId(), request.message());
+        log.info("Chat message: sessionId={} message={} businessId={}", 
+                 request.sessionId(), request.message(), request.businessId());
 
         ChatResponse response = chatService.processMessage(
             request.sessionId() != null ? request.sessionId() : UUID.randomUUID().toString(),
-            request.message()
+            request.message(),
+            request.businessId()
         );
 
         return ResponseEntity.ok(response);

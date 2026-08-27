@@ -1,37 +1,68 @@
-# Producto — Callsagents
+# Producto — Callsagents (SaaS: WhatsApp + Voz, lead capture)
+
+> **Actualizado — el producto pivotó.** El documento original describía una plataforma de *outbound campaigns*. El producto real es un **SaaS multi-tenant que captura y convierte leads** mediante una respuesta instantánea por WhatsApp/web-chat, con **escalado a llamada de voz como fallback**. Se dogfoodea en **Script9**.
 
 ## Objetivo
 
-Plataforma web para que un equipo comercial ejecute **campañas outbound** de manera sistemática: cargar leads, lanzar campañas, registrar resultados de llamadas, hacer handoff a humano y agendar citas.
+Un SaaS multi-tenant que **captura y convierte leads** respondiendo al instante por **WhatsApp** y **widget web**, cualificando automáticamente, y **escalando a una llamada de voz IA (Retell)** como fallback cuando el lead no responde. Cada negocio cliente configura su propia marca, número de WhatsApp, widget y prompt vía su `BusinessProfile`. Se dogfoodea en **Script9** (www.script-9.com); toda la copia de cara al usuario dice "Script9".
 
-## Alcance del MVP
+## Flow del producto
 
-Incluye:
-- Gestión de leads (CRUD, importación masiva, filtros, segmentación).
-- Gestión de campañas (crear, lanzar, pausar, monitorear).
-- Registro de llamadas y resultados (manual; integración con provider de voz externo como servicio auxiliar).
-- Asignación de leads a operadores.
-- Agendamiento de citas.
-- Autenticación con JWT (access + refresh rotable) y tres roles: ADMIN, SUPERVISOR, AGENT.
-- Panel web en Angular con servicios de API tipados.
+```
+Lead entra al website del cliente
+  → chat widget captura el lead
+  → chatbot cualifica (prompt por tenant)
+  → WhatsApp chatbot escribe al lead
+      ├─ respuesta positiva → ofrecer servicio
+      └─ sin respuesta (timeout) → escalar a llamada de voz Retell (fallback)
+```
 
-No incluye (todavía):
-- Motor propio de IA de voz. El MVP valida flujo de negocio, no calidad máxima del modelo.
-- Marcación predictiva.
-- Analytics avanzados / dashboards ejecutivos.
-- Multi-tenant.
-- Facturación.
+## Alcance
+
+### ✅ Live (SaaS core)
+
+- **Auth**: registro/login, **Google OAuth**, JWT rotación (access 15 min / refresh 7 d) + revocación Redis con reuse detection.
+- **Business profiles**: multi-tenancy (`BusinessProfile` 1:1 `User`, `businessId == userId`), onboarding wizard, branding (bot name, greeting, color, prompt por negocio).
+- **Chat widget**: en el sitio del cliente, con mensaje inicial y prompt per-tenant.
+- **WhatsApp chatbot**: Vonage + Groq (`openai/gpt-oss-20b`); intents (ventas/soporte/demo) → timing → confirmación; upsert de lead por teléfono.
+- **Voz web-call** (WebRTC) + webhooks + abstracción de provider (Retell/Vapi), validación de firma fail-closed.
+- **Leads**: CRUD + import CSV + filtros; fuentes `MANUAL|IMPORT|API|WHATSAPP|WEB_CHAT`; estados estándar.
+- **Dashboard**: `/dashboard/summary` con métricas live.
+
+### 🔜 En alcance (próximo)
+
+- **Escalation Orchestrator** (ADR-009): WhatsApp follow-up → timeout (por negocio) → **llamada de voz saliente Retell**. Primer scheduler real del sistema.
+- **Voz telefónica saliente** (requiere `RETELL_FROM_NUMBER` + número Vonage pagado).
+
+### ⚠️ Parcial / bloqueado
+
+- **Calendar sync**: sólo Google (Outlook stub tira excepción).
+- **Trial real**: **7 días / 50 leads**, actualmente **GLOBAL** (no por tenant).
+
+## No-incluye (non-goals)
+
+- **Outbound / cold calling**: NO llamadas en frío (carga legal en España). La voz es **sólo fallback** para leads que ya contactaron / están en el funnel. Primera versión: sólo leads con consentimiento previo.
+- **Motor propio de IA de voz**: se integra vía provider externo (Retell). No se construye motor.
+- **Facturación (Stripe)**: hasta validar el producto con clientes reales.
+- **Enforcement de trial por tenant**: actualmente el cap (50 leads / 7 días) es global; per-tenant llega con Stripe.
+- **Diversificación de roles AGENT/SUPERVISOR/ADMIN**: vestigio del MVP outbound; cada tenant es admin de su profilo.
 
 ## Restricciones
 
-- **Stack cerrado**: Angular + Spring Boot + PostgreSQL + Redis + JWT + Swagger + Docker Compose + CI/CD. Definido en `docs/01-arquitectura.md`.
-- **IA como servicio auxiliar**: la IA de voz se integra vía provider externo (Vapi / Retell / Bland) cuando haya caso de uso confirmado, no se construye motor propio en el MVP.
-- **Sin sobreingeniería**: cada abstracción, clase o servicio debe tener una razón de existir hoy. No se generaliza sin un segundo caso de uso real.
-- **Fases secuenciales**: cada fase del playbook debe estar cerrada y verificada antes de avanzar a la siguiente.
+- **Agnóstico de nicho**: NO es sólo para academias. El nicho a definir, pero el producto no se limita.
+- **Cara de usuario "Script9"**: nunca "Callsagents" en textos de usuario.
+- **Stack congelado**: Angular 18.2 + Spring Boot 3.5 + PostgreSQL 16 (ENUMs nativos + JSONB) + Redis 7 + JWT + Swagger + Docker Compose/Railway. Definido en `docs/01-arquitectura.md`.
+- **IA como servicio auxiliar**: voz = provider externo; no construir motor propio.
+- **Sin sobreingeniería**: cada abstracción debe tener razón de existir hoy. No generalizar sin un segundo caso de uso real.
+- **Legacy no se extiende**: los módulos outbound (campaigns/calls/appointments/calendar/Twilio) están en el repo como **legacy deprecado**; el trabajo de producto va al SaaS core (auth, leads, chat, whatsapp, voice, business).
 
-## Métricas de éxito (placeholder)
+## Métricas de éxito
 
-A definir cuando el MVP esté operativo. Criterios preliminares:
-- Un operador puede autenticar, ver sus leads asignados y registrar resultados de llamadas sin fricción.
-- Una campaña se lanza, ejecuta y registra resultados de manera verificable.
-- Toda la API está documentada en Swagger y un dev externo puede probar el flujo completo desde ahí.
+- Un lead recibe respuesta en **<1 min** (evita ghosting).
+- Un lead que ghostea es **recuperado por voz** (escalation) y, si interesa, agenda cita sin intervención humana.
+- Un negocio cliente puede configurar marca/número/widget/prompt y captar leads en su propio canal.
+- Piloto dogfooded: **5 clientes** captados vía Script9 con metricas documentadas.
+
+## Documentos relacionados
+
+- `README.md` — índice + estado real · `docs/01-arquitectura.md` — arquitectura · `docs/02-modelo-de-datos.md` — schema · `docs/03-adrs.md` — decisiones · `ROADMAP.md` — fases · `STRATEGY.md` — go-to-market.

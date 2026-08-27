@@ -1,0 +1,40 @@
+schema: spec-driven
+
+context: |
+  Project: Callsagents — SaaS MVP for WhatsApp chatbot + Retell AI voice agent lead capture
+  Backend: Java 21, Spring Boot 3.5.16, Maven, PostgreSQL 16, Redis 7, Flyway, JWT auth, Lombok, Caffeine
+  Frontend: Angular 18, TypeScript 5.5, Karma/Jasmine, nginx
+  Infrastructure: Docker Compose (local), Railway (production)
+  Architecture: Feature-based monolith (auth, voice, whatsapp, leads, campaigns, users, dashboard, calendar, appointments, calls, chat)
+  Testing: JUnit 5 + Mockito (backend), Karma/Jasmine configured but minimal frontend tests
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Note affected domain modules (auth, voice, whatsapp, leads, campaigns, etc.)
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Reference domain modules by package path
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+    - Prefer feature-based module structure over layered packaging
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+    - Backend and frontend tasks in separate groups when applicable
+  apply:
+    guidelines:
+      - Follow existing code patterns (service/controller/entity per feature)
+      - Use Lombok annotations consistently (@Data, @Builder, etc.)
+      - Keep REST endpoints under /api/ prefix
+      - Use JPA Specifications for complex queries
+    tdd: true
+    test_command: "cd backend && mvn test"
+  verify:
+    test_command: "cd backend && mvn test"
+    build_command: "cd backend && mvn package -DskipTests && cd ../frontend && ng build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas

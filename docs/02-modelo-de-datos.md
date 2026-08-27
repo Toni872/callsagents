@@ -1,157 +1,278 @@
-# Fase 2 — Modelo de datos
+# Callsagents — Data Model (current schema V1–V16)
 
-## Decisiones de diseño
+> Live schema reference. Entities are marked **SaaS-core** (the product) or **LEGACY** (outbound-campaign scaffolding retained in-tree). `Chat` is **ephemeral** — no table. This describes the **real, current** schema as materialized by Flyway migrations V1–V16.
 
-| Decisión | Elección | Justificación |
+## Schema conventions
+
+| Convention | Rule |
+|---|---|
+| **PK** | UUID, `gen_random_uuid()` (via `pgcrypto`, no-op on PG13+) |
+| **Enums** | Postgres **native** ENUMs, added via `CREATE TYPE` / `ALTER TYPE ... ADD VALUE` |
+| **ORM mapping** | `@Enumerated(STRING)` + `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` — required or you get "expression is of type character varying" |
+| **Case** | `snake_case` tables/columns, `TIMESTAMPTZ` for timestamps |
+| **JSONB** | via `hypersistence-utils` (`@JdbcTypeCode(SqlTypes.JSON)` on `Map<String,Object>`) |
+| **Audit** | `created_at` (NOT NULL, `@PrePersist`) + `updated_at` (`@PreUpdate`) on every table |
+| **Soft delete** | NO — hard delete + `AuditLog` |
+| **Index naming** | `idx_<table>_<cols>` (e.g. `idx_leads_status`) |
+| **Migrations** | Never edit a shipped migration; add `V{n}__...sql`. `V13` is **missing**; `V2` is **dev-only** under `db/migration/dev` |
+
+**Migration inventory (V1–V16):**
+
+| Migration | Purpose |
+|---|---|
+| V1 | Initial schema (users, leads, campaigns, campaign_leads, calls, appointments, integration_configs, audit_logs + all base ENUMs) |
+| V2 (dev-only) | Seed admin (`db/migration/dev`) |
+| V3 | `campaign_leads` audit timestamps defaults |
+| V4 | `calendar_integrations` table + `calendar_sync_status` |
+| V5 | `appointments.external_provider/event_id/synced_at` |
+| V6 | `voice_calls` table + `voice_call_status` ENUM |
+| V7 | `campaigns` voice-agent config columns (company/website/industry/services/tone) |
+| V8 | Seed admin (production) |
+| V9 | `appointments.external_event_url` (Google htmlLink) |
+| V10 | `users.trial_ends_at` — comment wrongly says **14-day**; real trial is **7 days** |
+| V11 | `lead_source` + `WHATSAPP` |
+| V12 | Admin email → `contact@script-9.com`; `lead_source` + `WEB_CHAT` |
+| V13 | **MISSING** (gap — no such migration file) |
+| V14 | Update admin password (`Calls@gents2025!`) |
+| V15 | `business_profiles` table (SaaS tenancy) |
+| V16 | `business_profiles.whatsapp_number` + partial index for webhook routing |
+
+---
+
+## Entities
+
+### `users` — User (SaaS-core)
+
+| Column | Type | Notes |
 |---|---|---|
-| **PK** | UUID | Mejor para APIs, evita enumeration, distribuible. |
-| **Auditoría base** | `created_at` + `updated_at` en todas las entidades | Lo pide el playbook (Fase 2). |
-| **Auditoría de autor** | `created_by` en entidades donde importa (Campaign, Lead, Call, Appointment) | User no necesita `created_by`. |
-| **Soft delete** | NO. Hard delete + `AuditLog` registra la acción | Playbook: "soft delete solo si el negocio lo requiere". |
-| **Multi-tenant** | NO en MVP | PRD lo define fuera del alcance. |
-| **Compliance** | 3 campos mínimos en Lead: `consent_at`, `do_not_call`, `data_retention_until` | Toda app de llamadas salientes tiene regulación obligatoria. |
-| **`Role`** | ENUM dentro de `User` | Solo 3 roles, sin RBAC granular. Migrable si crece. |
-| **`CallOutcome`** | ENUM dentro de `Call` | Idem. |
-| **Custom fields en Lead** | JSONB | Flexibilidad sin migrar DB. |
-| **Hard delete vs soft** | Hard + AuditLog | Mínimo útil. |
-| **Índices** | En columnas de filtro/búsqueda: `email`, `phone`, `status`, `assigned_to`, FKs, `created_at` | Performance en listados. |
+| `id` | UUID PK | `gen_random_uuid()` |
+| `email` | VARCHAR(255) **UNIQUE NOT NULL** | login |
+| `password_hash` | VARCHAR(255) NOT NULL | BCrypt |
+| `full_name` | VARCHAR(255) NOT NULL | |
+| `role` | `user_role` ENUM NOT NULL | `ADMIN\|SUPERVISOR\|AGENT` |
+| `status` | `user_status` ENUM NOT NULL | default `ACTIVE` |
+| `last_login_at` | TIMESTAMPTZ | nullable |
+| `trial_ends_at` | TIMESTAMPTZ | nullable; **real trial 7 days** |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
 
-## Entidades
+Indexes: `idx_users_role`, `idx_users_status`, `UNIQUE(email)`.
 
-### 1. `User`
-- `id` UUID PK
-- `email` VARCHAR unique (login)
-- `password_hash` VARCHAR (bcrypt/argon2)
-- `full_name` VARCHAR
-- `role` ENUM: `ADMIN`, `SUPERVISOR`, `AGENT`
-- `status` ENUM: `ACTIVE`, `DISABLED`
-- `last_login_at` TIMESTAMP nullable
-- `created_at`, `updated_at`
+### `business_profiles` — BusinessProfile (SaaS-core, the tenancy anchor)
 
-### 2. `Role`
-❌ No es tabla. Es ENUM dentro de `User`.
+1:1 with `User` via `@MapsId` → **`id == user_id` (businessId == userId)**.
 
-### 3. `Lead`
-- `id` UUID PK
-- `first_name` VARCHAR, `last_name` VARCHAR
-- `email` VARCHAR nullable
-- `phone` VARCHAR nullable (formato E.164)
-- `company` VARCHAR nullable (B2B, opcional para flexibilidad B2C)
-- `status` ENUM: `NEW`, `ASSIGNED`, `IN_PROGRESS`, `QUALIFIED`, `NOT_QUALIFIED`, `CONVERTED`, `DISQUALIFIED`
-- `source` ENUM: `MANUAL`, `IMPORT`, `API`
-- `assigned_to` FK → User nullable
-- `notes` TEXT nullable
-- `custom_fields` JSONB nullable
-- **`consent_at` TIMESTAMP nullable** *(compliance)*
-- **`do_not_call` BOOLEAN default false** *(compliance)*
-- **`data_retention_until` DATE nullable** *(compliance)*
-- `created_at`, `updated_at`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | `gen_random_uuid()` |
+| `user_id` | UUID **UNIQUE NOT NULL** FK → users | `@MapsId` |
+| `company_name` | VARCHAR(255) NOT NULL | default `''` |
+| `website` | VARCHAR(500) | |
+| `industry` | VARCHAR(100) | |
+| `services` | TEXT | |
+| `tone` | VARCHAR(20) | default `professional` |
+| `bot_name` | VARCHAR(100) | default `Naiara` |
+| `greeting` | TEXT | |
+| `chat_color` | VARCHAR(7) | default `#25D366` |
+| `whatsapp_number` | VARCHAR(20) | tenant routing for webhooks (V16) |
+| `onboarding_complete` | BOOLEAN NOT NULL | default FALSE |
+| `created_at`/`updated_at` | TIMESTAMP NOT NULL | |
 
-**Constraints**:
-- Al menos UNO entre `email` y `phone` debe estar presente (CHECK constraint).
+Index: `idx_business_profiles_whatsapp_number` (partial, `WHERE whatsapp_number IS NOT NULL`).
+FK: `fk_business_user` → users ON DELETE CASCADE.
 
-### 4. `Campaign`
-- `id` UUID PK
-- `name` VARCHAR
-- `description` TEXT nullable
-- `status` ENUM: `DRAFT`, `SCHEDULED`, `RUNNING`, `PAUSED`, `FINISHED`, `CANCELLED`
-- `start_at`, `end_at` TIMESTAMP nullable (ventana de ejecución)
-- `script` TEXT nullable
-- `created_by` FK → User
-- `created_at`, `updated_at`
+### `leads` — Lead (SaaS-core)
 
-### 5. `CampaignLead` (tabla de unión con metadata)
-- `campaign_id` FK → Campaign (parte de PK compuesta)
-- `lead_id` FK → Lead (parte de PK compuesta)
-- `status` ENUM: `PENDING`, `IN_PROGRESS`, `COMPLETED`, `SKIPPED`
-- `attempts` INT default 0
-- `last_attempt_at` TIMESTAMP nullable
-- `assigned_to` FK → User nullable (override de Lead.assigned_to)
-- `next_attempt_at` TIMESTAMP nullable (para retries programados)
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `first_name` | VARCHAR(100) NOT NULL | |
+| `last_name` | VARCHAR(100) NOT NULL | |
+| `email` | VARCHAR(255) | nullable |
+| `phone` | VARCHAR(32) | nullable, E.164 |
+| `company` | VARCHAR(255) | nullable |
+| `status` | `lead_status` ENUM NOT NULL | default `NEW` |
+| `source` | `lead_source` ENUM NOT NULL | includes WHATSAPP / WEB_CHAT (V11/V12) |
+| `assigned_to` | UUID FK → users | nullable, ON DELETE SET NULL |
+| `notes` | TEXT | |
+| `custom_fields` | JSONB | flexible metadata |
+| `consent_at` | TIMESTAMPTZ | compliance |
+| `do_not_call` | BOOLEAN NOT NULL | default FALSE |
+| `data_retention_until` | DATE | |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
 
-### 6. `Call`
-- `id` UUID PK
-- `campaign_lead_id` FK → CampaignLead
-- `user_id` FK → User (agente que hizo/registró)
-- `started_at`, `ended_at` TIMESTAMP nullable
-- `duration_seconds` INT nullable (derivable)
-- `status` ENUM: `CONNECTED`, `VOICEMAIL`, `NO_ANSWER`, `BUSY`, `FAILED`
-- `outcome` ENUM: `INTERESTED`, `NOT_INTERESTED`, `CALLBACK`, `APPOINTMENT_SET`, `NOT_REACHED`
-- `recording_url` VARCHAR nullable
-- `provider_call_id` VARCHAR nullable (ID del provider externo)
-- `notes` TEXT nullable
-- `created_at`, `updated_at`
+Constraints: `chk_leads_contact` (email OR phone present). Indexes on email, phone, status, assigned_to, company, do_not_call.
 
-### 7. `CallOutcome`
-❌ No es tabla. Es ENUM dentro de `Call`.
+### `voice_calls` — VoiceCall (SaaS-core)
 
-### 8. `Appointment`
-- `id` UUID PK
-- `lead_id` FK → Lead
-- `user_id` FK → User (agente que agendó)
-- `scheduled_at` TIMESTAMP
-- `duration_minutes` INT default 30
-- `status` ENUM: `PENDING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `NO_SHOW`
-- `notes` TEXT nullable
-- `created_at`, `updated_at`
+Records voice call attempts through a `VoiceProvider` (Retell/Vapi) or manually logged.
 
-### 9. `IntegrationConfig`
-- `id` UUID PK
-- `provider` VARCHAR (libre: `VAPI`, `RETELL`, `BLAND`, etc.)
-- `api_key_encrypted` VARCHAR (nunca en plano)
-- `webhook_secret` VARCHAR (para validar webhooks entrantes)
-- `config_json` JSONB (config específica del provider)
-- `enabled` BOOLEAN (kill switch)
-- `created_at`, `updated_at`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `lead_id` | UUID FK → leads | nullable, SET NULL |
+| `appointment_id` | UUID FK → appointments | nullable, SET NULL |
+| `user_id` | UUID NOT NULL FK → users | owner/initiator |
+| `provider` | VARCHAR(32) | `VAPI`/`RETELL` / NULL (manual) |
+| `provider_call_id` | VARCHAR(255) | provider identifier |
+| `phone_number` | VARCHAR(32) NOT NULL | dialed |
+| `status` | `voice_call_status` ENUM NOT NULL | default `SCHEDULED` |
+| `direction` | VARCHAR(16) NOT NULL | default `OUTBOUND` |
+| `started_at`/`ended_at` | TIMESTAMPTZ | |
+| `duration_seconds` | INT | |
+| `cost_usd` | NUMERIC(10,4) | webhook-populated |
+| `transcript` | TEXT | on end |
+| `recording_url` | VARCHAR(512) | |
+| `error_message` | TEXT | |
+| `metadata` | JSONB | provider extras |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
 
-### 10. `AuditLog`
-- `id` UUID PK
-- `user_id` FK → User nullable (null = sistema)
-- `entity_type` VARCHAR
-- `entity_id` UUID
-- `action` ENUM: `CREATE`, `UPDATE`, `DELETE`, `STATUS_CHANGE`
-- `changes_json` JSONB nullable
-- `created_at` (solo este, no se actualiza)
+Indexes: `idx_vc_user_status`, `idx_vc_provider_call`, `idx_vc_lead`, `idx_vc_started_at`.
 
-## Cardinalidades
+### Chat (ephemeral — NO table)
 
-```
-User 1 ── * Lead        (assigned_to)
-User 1 ── * Campaign    (created_by)
-User 1 ── * CampaignLead (assigned_to)
-User 1 ── * Call
-User 1 ── * Appointment
-User 1 ── * AuditLog
+Web chat conversations are **not persisted**. `ChatService` keeps conversation history in a **Caffeine cache** (`MAX_HISTORY = 20`). There is also a **GLOBAL 50-lead trial cap** (see `ChatService`/`LeadService` `TRIAL_LEAD_LIMIT = 50`).
 
-Campaign 1 ── * CampaignLead * ── 1 Lead
-CampaignLead 1 ── * Call
-Lead 1 ── * Appointment
-```
+### `campaigns` — Campaign (LEGACY)
 
-## Índices planeados
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `name` | VARCHAR(255) NOT NULL | |
+| `description` | TEXT | |
+| `status` | `campaign_status` ENUM NOT NULL | default `DRAFT` |
+| `start_at`/`end_at` | TIMESTAMPTZ | |
+| `script` | TEXT | |
+| `company`/`website`/`industry`/`services`/`tone` | VARCHAR/TEXT | per-campaign voice config (V7) |
+| `created_by` | UUID NOT NULL FK → users | |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
 
-- `users(email)` UNIQUE
-- `users(role)`, `users(status)`
-- `leads(email)`, `leads(phone)`, `leads(status)`, `leads(assigned_to)`, `leads(company)`, `leads(do_not_call)`
-- `campaigns(status)`, `campaigns(start_at)`, `campaigns(end_at)`, `campaigns(created_by)`
-- `campaign_leads(campaign_id, status)`, `campaign_leads(lead_id)`, `campaign_leads(assigned_to)`
-- `calls(campaign_lead_id)`, `calls(user_id)`, `calls(status)`, `calls(outcome)`, `calls(created_at)`
-- `appointments(lead_id)`, `appointments(user_id)`, `appointments(scheduled_at)`, `appointments(status)`
-- `integration_configs(provider, enabled)`
-- `audit_logs(entity_type, entity_id)`, `audit_logs(user_id)`, `audit_logs(created_at)`
-- `audit_logs` GIN en `changes_json` (búsqueda por contenido)
+### `campaign_leads` — CampaignLead (LEGACY)
 
-## Lo que NO incluimos (fuera del MVP)
+Composite PK `(campaign_id, lead_id)`.
 
-- ❌ Tabla `Role` separada (ENUM alcanza)
-- ❌ Tabla `CallOutcome` separada (ENUM alcanza)
-- ❌ `Tag` / `Label` para Leads
-- ❌ `Comment` separado (notes en cada entidad alcanza)
-- ❌ `Team` o jerarquías (no confirmadas)
-- ❌ Calendar sync (mejora futura)
-- ❌ Multi-tenant
-- ❌ Provider de voz propio (IntegrationConfig es solo el conector, no el motor)
+| Column | Type | Notes |
+|---|---|---|
+| `campaign_id` | UUID NOT NULL FK → campaigns | cascade |
+| `lead_id` | UUID NOT NULL FK → leads | cascade |
+| `status` | `campaign_lead_status` ENUM NOT NULL | default `PENDING` |
+| `attempts` | INT NOT NULL | default 0 |
+| `last_attempt_at` | TIMESTAMPTZ | |
+| `assigned_to` | UUID FK → users | nullable |
+| `next_attempt_at` | TIMESTAMPTZ | **written by no service** — no scheduler |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | defaults via V3 |
 
-## Migración inicial
+### `calls` — Call (LEGACY, Twilio-era)
 
-Se materializará en `backend/src/main/resources/db/migration/V1__initial_schema.sql` cuando se cree el proyecto Spring Boot (próximo paso de Fase 2).
+FK to composite PK of `campaign_leads`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `campaign_id`/`lead_id` | UUID NOT NULL | composite FK → campaign_leads |
+| `user_id` | UUID NOT NULL FK → users | agent |
+| `started_at`/`ended_at` | TIMESTAMPTZ | |
+| `duration_seconds` | INT | |
+| `status` | `call_status` ENUM | |
+| `outcome` | `call_outcome` ENUM | |
+| `recording_url` | VARCHAR(512) | |
+| `provider_call_id` | VARCHAR(255) | |
+| `notes` | TEXT | |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
+
+### `appointments` — Appointment (LEGACY)
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `lead_id` | UUID NOT NULL FK → leads | |
+| `user_id` | UUID NOT NULL FK → users | |
+| `scheduled_at` | TIMESTAMPTZ NOT NULL | |
+| `duration_minutes` | INT NOT NULL | default 30 |
+| `status` | `appointment_status` ENUM NOT NULL | default `PENDING` |
+| `notes` | TEXT | |
+| `external_provider` | VARCHAR(32) | null/Gogle/Outlook (V5) |
+| `external_event_id` | VARCHAR(255) | (V5) |
+| `external_synced_at` | TIMESTAMPTZ | (V5) |
+| `external_event_url` | VARCHAR(1024) | Google htmlLink (V9) |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
+
+### `calendar_integrations` — CalendarIntegration (LEGACY / PARTIAL)
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `user_id` | UUID NOT NULL FK → users | cascade |
+| `provider` | VARCHAR(32) NOT NULL | `GOOGLE`/`OUTLOOK` |
+| `external_calendar_id` | VARCHAR(255) | |
+| `external_account_email` | VARCHAR(255) | |
+| `access_token_encrypted` | VARCHAR(2048) NOT NULL | AES-GCM (ENCRYPTION_KEY) |
+| `refresh_token_encrypted` | VARCHAR(2048) | |
+| `access_token_expires_at` | TIMESTAMPTZ | |
+| `scopes` | VARCHAR(1024) | |
+| `sync_enabled` | BOOLEAN NOT NULL | default TRUE |
+| `last_sync_at` / `last_sync_status` / `last_sync_error` | TIMESTAMPTZ / `calendar_sync_status` / TEXT | |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
+
+UNIQUE `(user_id, provider)`. Indexes `idx_cal_user`, `idx_cal_provider_enabled`.
+
+### `integration_configs` — IntegrationConfig (LEGACY)
+
+Generic provider connector (Vapi/Retell/Bland era).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `provider` | VARCHAR(50) NOT NULL | |
+| `api_key_encrypted` | VARCHAR(512) NOT NULL | |
+| `webhook_secret` | VARCHAR(255) NOT NULL | |
+| `config_json` | JSONB | |
+| `enabled` | BOOLEAN NOT NULL | default TRUE |
+| `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
+
+Index: `idx_intcfg_provider_enabled`.
+
+### `audit_logs` — AuditLog (common)
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `user_id` | UUID FK → users | null = system |
+| `entity_type` | VARCHAR(100) NOT NULL | |
+| `entity_id` | UUID NOT NULL | |
+| `action` | `audit_action` ENUM NOT NULL | CREATE/UPDATE/DELETE/STATUS_CHANGE |
+| `changes_json` | JSONB | |
+| `created_at` | TIMESTAMPTZ NOT NULL | no updated_at |
+
+Indexes: `idx_audit_entity`, `idx_audit_user`, `idx_audit_created_at`, `idx_audit_changes_gin` (GIN).
+
+---
+
+## Enum definitions (full)
+
+| Enum (PG type) | Values |
+|---|---|
+| `user_role` | `ADMIN`, `SUPERVISOR`, `AGENT` |
+| `user_status` | `ACTIVE`, `DISABLED` |
+| `lead_status` | `NEW`, `ASSIGNED`, `IN_PROGRESS`, `QUALIFIED`, `NOT_QUALIFIED`, `CONVERTED`, `DISQUALIFIED` |
+| `lead_source` | `MANUAL`, `IMPORT`, `API`, `WHATSAPP` (V11), `WEB_CHAT` (V12) |
+| `campaign_status` | `DRAFT`, `SCHEDULED`, `RUNNING`, `PAUSED`, `FINISHED`, `CANCELLED` |
+| `campaign_lead_status` | `PENDING`, `IN_PROGRESS`, `COMPLETED`, `SKIPPED` |
+| `call_status` | `CONNECTED`, `VOICEMAIL`, `NO_ANSWER`, `BUSY`, `FAILED` |
+| `call_outcome` | `INTERESTED`, `NOT_INTERESTED`, `CALLBACK`, `APPOINTMENT_SET`, `NOT_REACHED` |
+| `appointment_status` | `PENDING`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `NO_SHOW` |
+| `audit_action` | `CREATE`, `UPDATE`, `DELETE`, `STATUS_CHANGE` |
+| `voice_call_status` | `SCHEDULED`, `RINGING`, `IN_PROGRESS`, `FORWARDING`, `ENDED`, `FAILED`, `NO_ANSWER` |
+| `calendar_sync_status` | `PENDING`, `SYNCED`, `FAILED` |
+
+`VoiceProviderType` (`VAPI`/`RETELL`) and `CalendarProviderType` (`GOOGLE`/`OUTLOOK`) are **Java-only** enums mapped with `@Enumerated(STRING)` to the `provider` VARCHAR columns (not PG ENUM types).
+
+---
+
+## Planned (NOT implemented — Escalation Orchestrator, ADR-009)
+
+The following are **designed, not yet built**. Do not implement them in this doc's scope — this is the target data model for the escalation phase:
+
+- **New `escalations` table** — per-lead escalation lifecycle: `id`, `lead_id`, `business_id`, `stage` (e.g. `WAITING_WHATSAPP` → `ESCALATED_VOICE` → `RESOLVED`), `timeout_at`, `voice_call_id`, `status`, `created_at`/`updated_at`.
+- **4 new `business_profiles` columns** — per-tenant escalation config: `whatsapp_follow_up_delay_seconds`, `escalation_timeout_seconds`, `enable_voice_escalation` (BOOLEAN), `escalation_enabled` (kill switch) — exact names TBD at implementation.
+
+These are documented here so the schema direction is agreed *before* the migration is written; the actual DDL lives in a future `V{n}` migration.

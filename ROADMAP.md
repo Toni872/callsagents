@@ -1,144 +1,135 @@
 # Hoja de Ruta: Callsagents → Primeros Clientes
 
+> **Estado actualizado**: el pivot SaaS está implementado (chat WhatsApp + widget web + voz web-call). Esta hoja refleja lo que está **LIVE**, lo que está **bloqueado** y lo que sigue.
+
 ## Roles claros
 
 | Qué | Quién | Dónde |
 |-----|-------|-------|
-| **Script9** | Marca / empresa | www.script-9.com (ya live) |
+| **Script9** | Marca / empresa (customer #1 / dogfood) | www.script-9.com (live) |
 | **Callsagents** | Producto SaaS | callsagents-frontend-production.up.railway.app |
 
----
-
-## Los 3 canales que tienes (y cómo se conectan)
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   CLIENTE POTENCIAL                 │
-│                                                     │
-│  1. WhatsApp (Naiara)    ← canal CÁLIDO, boca a boca│
-│  2. Demo web (Callsagents) ← canal FRÍO, prospección│
-│  3. Voz (Retell)          ← ESCALADO, lead perdido  │
-└───────────┬─────────────────────┬───────────────────┘
-            │                     │
-            ▼                     ▼
-   ┌────────────────┐   ┌──────────────────────┐
-   │ WhatsApp chat  │   │ Demo interactiva     │
-   │ Vonage+Groq    │   │ callsagents/demo     │
-   │ (ya funciona)  │   │ (ya funciona)        │
-   └────────┬───────┘   └──────────┬───────────┘
-            │                      │
-            ▼                      ▼
-   ┌────────────────────────────────────────────┐
-   │        Callsagents Backend (Railway)       │
-   │  - Chat REST API (POST /chat/message)      │
-   │  - Lead capture                            │
-   │  - Conversation history                    │
-   └────────────────────────────────────────────┘
-```
+Toda la copia de cara al usuario dice **"Script9"**, nunca "Callsagents" (decisión de marca).
 
 ---
 
-## Fase 1: Dogfooding inmediato (esta semana)
+## Estado real del producto
 
-**Objetivo**: Usar Callsagents tú mismo para captar tus primeros 5 clientes.
+### ✅ LIVE (ya funciona, no tocar salvo para mantener)
 
-### Qué hacer
-1. **Usa tu propio WhatsApp chatbot** para responder leads reales
-   - Pon el número de Vonage en la web de Script9 (sección contacto)
-   - Cuando alguien escriba por WhatsApp, Naiara responde
-   - Tú supervisas y saltas cuando el lead esté cualificado
+- **Web chat widget** + captura de lead (`source = WEB_CHAT`) — prompt por tenant (`BusinessPromptComposer`).
+- **WhatsApp chatbot** (Vonage + Groq `openai/gpt-oss-20b`): intents `intent_ventas|soporte|demo` → timing → confirm; upsert de lead por teléfono (`source = WHATSAPP`).
+- **Onboarding wizard** + multi-tenancy `BusinessProfile` (1:1 con `User`, `businessId == userId`).
+- **Auth** (email + Google OAuth, JWT rotación + revocación Redis, reuse detection).
+- **Voz web-call** (WebRTC) + webhooks + abstracción de provider (`VoiceProvider` Retell/Vapi).
+- Backend en Railway (API) + frontend en Railway (SPA).
+- Dogfooding en Script9 (www.script-9.com).
 
-2. **La demo web como herramienta de ventas**
-   - Cuando hables con un prospecto, muéstrale la demo
-   - "Mira, esto es lo que tus leads verían"
-   - La demo es tu argumento de venta, no el producto final
+### ⚠️ BLOQUEADO / PARCIAL
 
-3. **Flujo de ventas simple**
-   ```
-   Prospección → WhatsApp/demo → Cualificación → Videollamada → Piloto
-   ```
+- **Llamada telefónica saliente Retell NO está live**: `RETELL_FROM_NUMBER` está **vacío** → sólo funciona web-call (WebRTC). Para habilitar teléfono hay que setear la variable (acción del usuario + número Vonage pagado).
+- **Calendar sync**: sólo Google (Outlook stub tira excepción).
+- **Trial real**: **7 días / 50 leads**, GLOBAL (no por tenant). La migración V10 dice "14 days" por error — el comportamiento real es 7 días.
 
-### Métricas a trackear
-- Leads contactados
-- Respuestas obtenidas
-- Demos mostradas
-- Pilotos acordados
+### ❌ ELIMINADO
+
+- La demo `callsagents/demo` **ya no existe** (fue quitada). No referenciarla.
+- El MVP original "outbound campaigns" está en el repo como **legacy deprecated** — no es el producto.
 
 ---
 
-## Fase 2: Voz (Retell AI) — La semana que viene
+## Roadmap por fases
 
-**Por qué importa**: La voz es tu DIFERENCIADOR. Nadie más ofrece chat + voz automática.
+### Fase 1 — Escalation Orchestrator (AHORA; build + test local con sandbox)
 
-### Estado actual
-- Agente Retell creado: `agent_9fda91a4d3ddaa0f8c8cbfa7c9`
-- Falta: integrar la llamada automática cuando el chat no funciona
+**Objetivo**: conectar el eslabón que falta: cuando un lead no responde al WhatsApp/chat, escalar automáticamente a una **llamada de voz Retell** (fallback sólo). Diseño aprobado en ADR-009.
 
-### Plan
-1. Conectar Retell con el backend (webhook de llamadas salientes)
-2. Cuando un lead no responda al chat → llamada automática
-3. El agente de voz cualifica por teléfono
-4. Si hay interés → agenda cita directamente
+1. Implementar el orquestador: WhatsApp follow-up → timeout (configurable por negocio) → Retell outbound.
+2. Persistir el estado de escalado (nueva tabla `escalations` + 4 columnas en `business_profiles` — ver `docs/02-modelo-de-datos.md`).
+3. **Primer scheduler real del código** (hoy NO existe `@Scheduled`/`@EnableScheduling`).
+4. Probar **localmente con sandbox de Vonage + web-call** (no requiere número pagado).
 
-### Resultado
-- Chat responde en <1 min
-- Si no responden → llamada automática
-- Cita agendada sin intervención humana
+**Salida**: lead que ghostea recibe follow-up y, si no responde, una llamada de voz que re-cualifica y (si hay interés) agenda.
 
----
+### Fase 2 — Producción de voz (necesita acción del usuario)
 
-## Fase 3: Primer piloto (2-3 semanas)
+**Objetivo**: habilitar llamadas telefónicas reales salientes.
+
+- Número **Vonage pagado** (el sandbox no puede contactar números reales).
+- Setear **`RETELL_FROM_NUMBER`** en Railway (actualmente vacío → bloquea teléfono).
+- Verificar end-to-end: lead → chat → timeout → llamada real → booking sin intervención humana.
+
+Simplemente activar esto es un **gating item**: hasta que no está, la voz es una demo web y no el diferenciador completo.
+
+### Fase 3 — Primer piloto / dogfood (concurren a la Fase 2)
 
 **Objetivo**: 1 cliente real usando Callsagents.
 
-### Cómo conseguirlo
-1. **Identifica 10 prospectos** en tu red (empresas que tengan leads)
-2. **Ofrece piloto gratis**: "Te configuro Callsagents 14 días. Si no te funciona, no pagas."
-3. **Tú haces el setup**: Configura el chatbot con su prompt, conecta su calendario
-4. **Mide resultados**: Leads capturados, tiempo de respuesta, citas agendadas
+1. Identifica ~10 prospectos con dolor de leads (no limitarse a academias — el producto es **agnóstico de nicho**).
+2. Ofrece piloto gratis: "Te configuro Callsagents 7 días / 50 leads. Si no te funciona, no pagas."
+3. Tú haces el setup: prompt, número, widget.
+4. **Mide**: leads capturados, tiempo de respuesta, citas agendadas, tasa de recuperación por voz.
 
-### El pitch
-> "Tus leads escriben por WhatsApp o web. Callsagents les responde en menos de 1 minuto, cualifica y agenda la cita. Si no responden, les llama automáticamente. ¿Quieres probarlo 14 días gratis?"
+El pitch: *"Tus leads escriben por WhatsApp o web. Callsagents les responde en <1 min, cualifica y agenda la cita. Si no responden, les llama."*
+
+### Fase 4 — Stripe billing + trial por tenant
+
+**Objetivo**: facturación y cortar el trial por tenant.
+
+- Hoy el trial (7 días / 50 leads) es **GLOBAL**, no por tenant → antes de vender a varios clientes hay que hacerlo **per-tenant** (ADR-007 caveat).
+- Integrar **Stripe** para cobrar clientes reales.
+
+### Fase 5 — Escalar
+
+1. Documenta el caso de éxito (métricas antes/después).
+2. Pide testimonio.
+3. Vende a 5 clientes más.
+4. Escala infraestructura (observabilidad, hardening, Secret Manager).
 
 ---
 
-## Fase 4: Escalar (mes 2-3)
+## Métricas a trackear (objetivo: captar 5 clientes)
 
-Una vez tengas 1 caso de éxito:
-1. Documenta el caso (métricas antes/después)
-2. Pide testimonio al cliente
-3. Usa eso para vender a 5 clientes más
-4. Implementa facturación (Stripe)
+| Métrica | Dónde |
+|---|---|
+| Leads contactados | Dashboard / leads |
+| Respuestas obtenidas (tasa de respuesta) | Dashboard |
+| Tiempo de primera respuesta | Chat |
+| Leads recuperados por voz (escalation) | `voice_calls` / escalations |
+| Citas agendadas | appointments |
+| Pilotos acordados | Manual (CRM) |
 
 ---
 
 ## Resumen visual
 
 ```
-SEMANA 1:  Dogfooding (WhatsApp + demo)
-SEMANA 2:  Integrar voz (Retell)
-SEMANA 3:  Primer piloto (1 cliente)
-MES 2:     5 clientes
-MES 3:     Facturación + escalar
+FASE 1:  Escalation Orchestrator (AHORA — test local con sandbox)
+FASE 2:  Producción de voz (número Vonage + RETELL_FROM_NUMBER)   ← gating
+FASE 3:  Primer piloto / dogfood (1 cliente real)
+FASE 4:  Stripe billing + trial por tenant
+FASE 5:  5 clientes y escalar
 ```
 
 ---
 
 ## Lo que YA funciona (no tocar)
 
-- ✅ WhatsApp chatbot (Naiara) — Vonage + Groq
-- ✅ Demo web — callsagents/demo
-- ✅ Backend — Railway (chat API, leads, auth)
-- ✅ Registro + trial 14 días
-- ✅ Script9 web — marca live
+- ✅ WhatsApp chatbot (Script9) — Vonage + Groq
+- ✅ Web chat widget + captura de leads
+- ✅ Onboarding + BusinessProfile multi-tenant
+- ✅ Auth + Google OAuth
+- ✅ Voz web-call (WebRTC)
+- ✅ Backend + Frontend en Railway
 
-## Lo que FALTA
+## Lo que FALTA / BLOQUEADO
 
-- 🔲 Integrar voz (Retell) con el chat
-- 🔲 Conectar WhatsApp de Vonage con la web de Script9
+- 🔲 Escalation Orchestrator (Fase 1 — próximo)
+- ⏸ Llamadas telefónicas Retell (`RETELL_FROM_NUMBER` vacío)
+- 🔲 Número Vonage pagado (necesario para voz telefónica real)
 - 🔲 1 caso de éxito documentado
-- 🔲 Sistema de facturación (Stripe)
+- 🔲 Stripe billing + trial por tenant
 
 ---
 
-*Última actualización: 24 agosto 2026*
+*Última actualización: 27 agosto 2026*

@@ -1,31 +1,37 @@
 # Handoff Guide — Callsagents
 
-> **Read this first if you're接手 this project.** It answers: what is this, how do I run it, where do I make changes, and what's already done vs. what's missing.
+> **Read this first if you're taking over this project.** It answers: what is this, how do I run it, where do I make changes, and what's already done vs. what's missing.
 
 ---
 
 ## 1. What is this
 
-Callsagents is an **outbound sales platform** (à la Calligence) built for one client as an MVP demo. The product helps a sales team run outbound calling campaigns: manage leads, run campaigns, log calls, schedule appointments, and (planned) integrate with voice AI providers for automated calls.
+Callsagents is a **multi-tenant SaaS** that captures and converts website leads through an instant **WhatsApp chatbot** and **web chat widget**, with an **AI voice call as a fallback escalation** when a lead doesn't respond. It is **dogfooded on Script9** (www.script-9.com); all user-facing copy says "Script9", never "Callsagents". Each client business sets up its own branding, WhatsApp number, widget, and prompt through its `BusinessProfile`.
 
-**This is NOT production-ready.** It's a working MVP that runs locally via Docker. Several features (calendar sync, voice AI, deploy, observability) are scaffolded but not production-hardened.
+> **Do NOT read the words "outbound sales platform"** — the product has **pivoted** away from that. The original outbound-campaigns MVP (leads/campaigns/calls/appointments with ADMIN/SUPERVISOR/AGENT roles + Twilio) is **legacy scaffolding kept in-tree but deprecated**. It is not the product.
+
+**This is a working SaaS, dogfooded.** It runs locally via Docker and on Railway in prod. Voice AI is **implemented** (Retell + web-call + webhooks); the **Escalation Orchestrator** is the NEXT phase.
 
 ## 2. Stack (frozen — don't change without team discussion)
 
 | Layer | Technology | Version |
 |---|---|---|
-| Frontend | Angular standalone components, signals, inject() | 18.2 |
-| Backend | Spring Boot, Java | 3.5.16, 21 |
-| DB | PostgreSQL with native ENUMs + JSONB | 16 |
-| Cache + Auth state | Redis | 7 |
+| Frontend | Angular standalone components, signals, inject(), native `<dialog>` | 18.2 |
+| Backend | Spring Boot, Java, Maven, `@ConfigurationPropertiesScan`, Flyway | 3.5.16, 21 |
+| DB | PostgreSQL with native ENUMs + JSONB (`hypersistence-utils`) | 16-alpine |
+| Cache + Auth state | Redis (refresh-token revocation: `refresh:`/`revoked:`) | 7-alpine |
 | Auth | JWT (HS256, access 15min / refresh 7d rotatable) + BCrypt | nimbus-jose-jwt 10.0.2 |
-| ORM | Hibernate with `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for Postgres ENUMs | 6.x |
-| Migrations | Flyway (V1–V7 so far) | 11.7.2 |
+| OAuth | Google (client id `557204149721-...`) | n/a |
+| Chatbot LLM | Groq (`openai/gpt-oss-20b`) | n/a |
+| WhatsApp | Vonage (sandbox dev / paid prod) | n/a |
+| Voice | Retell AI via `VoiceProvider` abstraction; Vapi present as alternative; `WebhookSignatureValidator` fail-closed | n/a |
+| ORM | Hibernate `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for Postgres ENUMs | 6.x |
+| Migrations | Flyway (V1–V16; V13 missing, V2 dev-only under `db/migration/dev`) | 11.7.2 |
 | Docs | springdoc-openapi (Swagger UI) | 2.9.0 |
-| Containerization | Docker Compose (4 services) | Docker 29+ |
-| CI | GitHub Actions (backend + frontend workflows) | n/a |
+| Containerization | Docker Compose (dev) + Railway (prod) | Docker 29+ |
+| Scheduling | `@Schedule`/`@EnableScheduling` — **none exists** | n/a |
 
-**Read the playbook if you haven't**: `C:\Users\Antonio\Desktop\Callsagents\RUNBOOK.md` covers operational how-to. This document is the developer onboarding complement.
+**Read the playbook-equivalent too**: `C:\Users\Antonio\Desktop\Callsagents\RUNBOOK.md` covers operational how-to (incl. the new Deploy-to-Railway section). This document is the developer-onboarding complement.
 
 ## 3. Prerequisites for your dev machine
 
@@ -48,10 +54,13 @@ cd callsagents
 # Copy and edit .env
 cp .env.example .env
 # Edit .env: set JWT_SECRET and ENCRYPTION_KEY (use openssl rand -base64 32 for both)
+# Also set RETELL_API_KEY / RETELL_AGENT_ID, VONAGE / GROQ keys if you need those paths.
 
 # Start the stack
 docker compose up -d
 ```
+
+> **Windows Port note:** `docker-compose.override.yml` maps Postgres to **5433:5432** (because native Windows Postgres owns 5432). See RUNBOOK § "Acceder a la DB" — on Windows use `5433`.
 
 Wait ~60s for the backend to apply Flyway migrations and start. Check health:
 
@@ -59,77 +68,67 @@ Wait ~60s for the backend to apply Flyway migrations and start. Check health:
 docker compose ps
 # All 4 should show 'healthy' (frontend may show 'Up' without healthcheck)
 
-# Smoke test
+# Smoke test — NOTE: the production admin is contact@script-9.com (V12)
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"email":"admin@callsagents.local","password":"admin123"}' \
+  -d '{"email":"contact@script-9.com","password":"Calls@gents2025!"}' \
   http://localhost:8080/api/auth/login
 ```
 
-Open in browser: `http://localhost/`. Login with `admin@callsagents.local` / `admin123`.
+Open in browser: `http://localhost/`. Login with `contact@script-9.com` / `Calls@gents2025!` (admin, prod seed V12).
 
 ## 5. Repository structure
 
 ```
 callsagents/
-├── RUNBOOK.md                          # Operational how-to (start/stop/troubleshoot)
-├── docs/                               # Architecture + per-phase notes
+├── RUNBOOK.md                          # Operational how-to (start/stop/troubleshoot/deploy)
+├── docs/                               # Architecture + decisions + handoff
 │   ├── 00-handoff.md                   # ← you are here
-│   ├── 01-arquitectura.md              # Phase 1 design
-│   ├── 02-modelo-de-datos.md           # Phase 2 design (entities)
-│   ├── rdd-workflow.md                 # How to use the gentle-ai RDD gate
-│   ├── ...                              # 12, 13, 14, 15 per phase
+│   ├── 01-arquitectura.md              # Live architecture (SaaS core vs legacy)
+│   ├── 02-modelo-de-datos.md           # Live schema V1–V16
+│   ├── 03-adrs.md                      # Architecture Decision Records (ADR-001..010)
+│   ├── 16-railway-deploy.md            # Railway deploy specifics
+│   ├── rdd-workflow.md                 # gentle-ai RDD gate
 ├── backend/                            # Spring Boot app
 │   ├── src/main/java/com/callsagents/backend/
-│   │   ├── auth/                       # JWT, security, login/refresh/logout
-│   │   ├── calendar/                   # Google/Outlook sync (Fase 14)
-│   │   ├── calls/                      # Call logging (Fase 4)
-│   │   ├── campaigns/                  # Campaigns + CampaignLead link table
-│   │   ├── leads/                      # Lead CRUD (Fase 4)
-│   │   ├── appointments/               # Appointments (Fase 4 + calendar sync hook)
-│   │   ├── users/                      # User management (Fase 12)
-│   │   ├── dashboard/                  # Executive dashboard (Fase 13)
-│   │   ├── common/                     # DTOs, exceptions, audit
+│   │   ├── auth/                       # JWT, security, login/refresh/logout, Google OAuth
+│   │   ├── leads/                      # Lead CRUD + CSV import + filters
+│   │   ├── chat/                       # ChatService (Caffeine) + /chat endpoints
+│   │   ├── whatsapp/                   # Vonage + WhatsAppAiChatbotService + GroqService (+ legacy Twilio)
+│   │   ├── voice/                      # VoiceCallService, VoiceProvider (Retell/Vapi), web-call, webhooks
+│   │   ├── business/                   # BusinessProfile + BusinessPromptComposer + widget-config
+│   │   ├── campaigns/                  # LEGACY outbound
+│   │   ├── calls/                      # LEGACY call logging
+│   │   ├── appointments/               # LEGACY appointments + calendar hook
+│   │   ├── calendar/                   # LEGACY/PARTIAL Google (Outlook stub throws)
+│   │   ├── users/                      # LEGACY user management
+│   │   ├── dashboard/                  # LEGACY /dashboard/summary
+│   │   ├── integrations/               # LEGACY IntegrationConfig entity
 │   │   ├── audit/                      # AuditLog entity
-│   │   ├── integrations/               # IntegrationConfig entity
-│   │   └── Application.java            # Spring Boot entrypoint
+│   │   ├── common/                     # GlobalExceptionHandler, ApiError, PaginationUtils, RateLimitFilter
+│   │   └── config/                     # @ConfigurationPropertiesScan + app.* beans
 │   ├── src/main/resources/
-│   │   ├── application.yml             # Common config
-│   │   ├── application-dev.yml         # Dev profile (uses local DB)
+│   │   ├── application.yml             # Common config (app.voice, app.vonage, app.groq)
+│   │   ├── application-dev.yml         # Dev profile
 │   │   ├── application-test.yml        # Test profile
-│   │   └── db/migration/               # Flyway migrations V1–V7
-│   │       ├── V1__initial_schema.sql
-│   │       ├── V2__seed_admin.sql
-│   │       ├── V3__campaign_leads_audit_timestamps.sql
-│   │       ├── V4__calendar_integrations.sql
-│   │       ├── V5__appointment_external_sync.sql
-│   │       ├── V6__...
-│   │       └── V7__...
-│   ├── src/test/                       # 100 unit tests
-│   └── Dockerfile                      # Multi-stage Maven → Temurin JRE
+│   │   └── db/migration/               # Flyway V1..V16 (V13 gap; V2 under db/migration/dev)
+│   ├── src/test/                       # 214 @Test methods across 22 test classes
+│   └── Dockerfile                      # Backend (Railway root constraint)
 ├── frontend/                           # Angular app
 │   ├── src/app/
-│   │   ├── core/
-│   │   │   ├── api/                    # HTTP services (Lead, Campaign, Auth, etc.)
-│   │   │   ├── auth/                   # Auth service, interceptors, guards
-│   │   │   ├── errors/                 # Error service, toast host
-│   │   │   ├── layout/                 # MainLayoutComponent (sidebar + header)
-│   │   │   └── loading/                # Loading service + interceptor
-│   │   ├── features/                   # Lazy-loaded feature modules
-│   │   │   ├── dashboard/
-│   │   │   ├── auth/login/
-│   │   │   ├── leads/{list,detail,form}/
-│   │   │   ├── campaigns/{list,detail,form}/
-│   │   │   ├── calls/{list,detail,form}/
-│   │   │   ├── appointments/{list,detail,form}/
-│   │   │   ├── users/                  # User management (Fase 12)
-│   │   │   └── settings/calendar/      # Calendar settings (Fase 14)
-│   │   ├── shared/models/              # TypeScript interfaces matching backend DTOs
-│   │   ├── app.config.ts               # Interceptors + APP_INITIALIZER
-│   │   ├── app.routes.ts               # Top-level routing (lazy loads)
-│   │   └── app.component.ts            # <router-outlet>
-│   ├── nginx.conf                      # Reverse proxy + SPA fallback
-│   └── Dockerfile                      # Multi-stage Node 22 → nginx
-├── docker-compose.yml                  # 4 services + volumes
+│   │   ├── core/                       # api, auth, errors, layout, loading
+│   │   ├── features/                   # dashboard, leads, campaigns, calls, voice-calls,
+│   │   │                               #   appointments, users, settings(profile+calendar),
+│   │   │                               #   auth login/register, onboarding wizard, chat-widget,
+│   │   │                               #   landing, terms, privacy, widget
+│   │   ├── shared/models/              # TS interfaces matching backend DTOs
+│   │   ├── app.config.ts / app.routes.ts / app.component.ts
+│   ├── nginx.conf                      # Reverse proxy /api/ + Origin-strip + COOP/COEP + SPA fallback
+│   └── Dockerfile                      # Node 22 → nginx (npm@12 upgrade workaround)
+├── docker-compose.yml                  # postgres16-alpine, redis7-alpine, backend, frontend
+├── docker-compose.override.yml         # dev: postgres 5433:5432 (Windows native PG owns 5432)
+├── Dockerfile                          # Root = backend only (Railway root constraint)
+├── INFRASTRUCTURE.md                   # Railway services, URLs, admin creds
+├── STRATEGY.md / PRD.md / ROADMAP.md   # Product & go-to-market
 └── .env.example                        # Template for .env
 ```
 
@@ -140,130 +139,114 @@ callsagents/
 - **Standalone, single-class-per-file** style throughout
 - **Lombok** for entities (`@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder`)
 - **Records** for DTOs (Java 16+)
-- **Lombok `@Builder` with `@AllArgsConstructor`** for entities
-- **ENUMs**: `@Enumerated(EnumType.STRING) @JdbcTypeCode(SqlTypes.NAMED_ENUM)` — this combo is REQUIRED because we use Postgres native ENUMs
-- **Audit fields**: every entity has `created_at` (not nullable, `@PrePersist`) and `updated_at` (`@PreUpdate`)
-- **Soft delete**: NO. We hard delete + AuditLog. If you need soft, add a `@Where(clause="deleted=false")` pattern.
-- **UUIDs as PKs** everywhere, generated by `@UuidGenerator`
-- **Controllers**: thin — only inject `Authentication` (not `@AuthenticationPrincipal UserDetails`) and call services
-- **Services**: contain all logic; controllers must NOT have business logic
-- **DTOs**: ALWAYS use DTOs at controller boundary. Never expose entities directly (e.g. `Lead` has internal `assignedTo UUID`; `LeadResponse` should hide it unless needed)
-- **Tests**: Mockito + JUnit 5. Test services with `@ExtendWith(MockitoExtension.class)` and pure mocks. Avoid `@SpringBootTest` (it needs a DB and is slow); use `@WebMvcTest` only if you need controller wiring.
+- **ENUMs**: `@Enumerated(EnumType.STRING) @JdbcTypeCode(SqlTypes.NAMED_ENUM)` — REQUIRED for Postgres native ENUMs
+- **Audit fields**: every entity has `created_at` (`@PrePersist`) + `updated_at` (`@PreUpdate`)
+- **Soft delete**: NO. Hard delete + AuditLog.
+- **UUIDs as PKs** everywhere via `@UuidGenerator`
+- **Controllers**: thin — inject `Authentication`, call services. Services hold all logic.
+- **DTOs**: always at the controller boundary; never expose entities directly.
+- **Tests**: Mockito + JUnit 5. `@ExtendWith(MockitoExtension.class)`. Avoid `@SpringBootTest`; `@WebMvcTest` only if needed. **214 @Test / 22 classes currently.**
 
 ### Frontend (Angular)
 
 - **Standalone components** (no NgModules)
 - **`ChangeDetectionStrategy.OnPush`** on every component
-- **Signals** for component state (`signal`, `computed`)
-- **`inject()`** for DI (not constructor injection)
-- **Templates use the new control flow**: `@if`, `@for`, `@switch` (no `*ngIf`, `*ngFor`)
-- **Native `<dialog>` HTML5** for modals (no Material/Angular CDK)
-- **Services in `core/api/`** one per backend module; never inject `HttpClient` directly in a component
-- **Models in `shared/models/`** as TypeScript interfaces matching backend DTOs
-- **Lazy load** feature modules: `loadComponent: () => import('...')`
-- **CSS**: use CSS variables from `src/styles.css` (`--color-primary`, `--spacing-4`, etc.). No Tailwind, no Material.
+- **Signals** (`signal`, `computed`); **`inject()`** for DI
+- **Templates**: `@if`, `@for`, `@switch` (no `*ngIf`/`*ngFor`)
+- **Native `<dialog>`** for modals (no Material/CDK)
+- **Services in `core/api/`** one per backend module; never inject `HttpClient` in a component
+- **Lazy load** routes: `loadComponent: () => import('...')`
+- **CSS**: CSS variables from `src/styles.css`. No Tailwind/Material.
 
 ### Git
 
-- **Conventional commits**: `feat(scope): description`, `fix(scope): description`, `docs:`, `chore:`
-- **One commit per logical change** — don't bundle 3 phases into one commit
-- **Commit messages** include a body explaining WHY (not just what)
-- **Branch from `main`**, PR into `main`. CI runs on every PR.
+- **Conventional commits**: `feat(scope):`, `fix(scope):`, `docs:`, `chore:`
+- One commit per logical change. Body explains WHY.
+- Branch from `main`, PR into `main`.
 
 ### Receipt-Driven Development (RDD)
 
-RDD is enabled on this repo. Workflow per commit:
-
 ```bash
-# 1. Edit files
-# 2. Start a review (freezes the candidate + generates a receipt)
 gentle-ai review start --projection workspace --cwd "C:\Users\Antonio\Desktop\Callsagents"
-# 3. Commit
-git add .
-git commit -m "..."
-# 4. Push (delivery gate validates the receipt)
-git push origin main
+git add . && git commit -m "..." && git push origin main
 ```
 
-Read `docs/rdd-workflow.md` for full details. If the push fails with "candidate has drifted", you modified files after `review start` — abort and re-start.
+Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drifted", you modified files after `review start` — abort and re-start.
 
 ## 7. Where to add what
 
 | You want to... | Touch this | Be careful |
 |---|---|---|
-| Add a new REST endpoint | `backend/.../{module}/controller/`, service, dto | Update `pom.xml` only if you need new deps. Add `@PreAuthorize` to controller. Add `@Schema` to DTO for Swagger. |
-| Add a field to an existing entity | `backend/.../{module}/entity/Entity.java` + new `V{n}__...sql` migration | DO NOT edit the V1–V7 migrations. Always add a new migration. If the field is NOT NULL, set a sensible DEFAULT in the SQL. |
-| Add a new ENUM value | New `V{n}__...sql`: `ALTER TYPE foo ADD VALUE 'BAR';` | Postgres ENUMs are immutable. `ALTER TYPE` is the only way. Restart the backend after. |
-| Add a new role beyond ADMIN/SUPERVISOR/AGENT | Entity `UserRole` + `SecurityConfig` + tests | High-impact change. The auth flow uses these roles in @PreAuthorize across the codebase. |
-| Add a new nav item in the sidebar | `core/layout/main-layout/main-layout.component.ts` (`navItems` array) | Add a corresponding route in `app.routes.ts`. |
-| Add a new page/feature | `features/{feature}/` with `*.routes.ts` and a component | Lazy-load the route. Follow the existing `users/` or `appointments/` layout. |
-| Add a new migration | `backend/src/main/resources/db/migration/V{n}__description.sql` | Follow the V{n}__snake_case.sql naming. The number must be sequential (V1 → V2 → ...). |
-| Change the JWT secret | `application.yml` (via `app.jwt.secret`) and `.env` (`JWT_SECRET`) | The secret must be ≥32 bytes / 256 bits. Generate with `openssl rand -base64 32`. |
-| Add OAuth provider (Google/Outlook) | `backend/.../calendar/service/{Provider}.java` | Implement the `CalendarProvider` interface. See `GoogleCalendarProvider` for reference. |
+| Add a new REST endpoint | `backend/.../{module}/controller/`, service, dto | `@PreAuthorize`, `@Schema`, add to the live-module table in `01-arquitectura.md` |
+| Add a field to an existing entity | `backend/.../entity/Entity.java` + new `V{n}__...sql` | NEVER edit V1–V16 migrations; add a new one. Set DEFAULT for NOT NULL. |
+| Add a new ENUM value | New `V{n}__...sql`: `ALTER TYPE foo ADD VALUE 'BAR';` | Postgres ENUMs immutable; restart backend after. |
+| Add a new native enum to an entity | `@Enumerated(STRING) + @JdbcTypeCode(NAMED_ENUM)` | The classic "expression is of type character varying" bug otherwise. |
+| Add a new nav item | `core/layout/main-layout/main-layout.component.ts` (`navItems`) | Add route in `app.routes.ts`. |
+| Add a new page/feature | `features/{feature}/` | Lazy-load route. Follow `users/` or `voice-calls/` layout. |
+| Add a new migration | `backend/src/main/resources/db/migration/V{n}__desc.sql` | Sequential V-number. Note **V13 is missing** — do not create a "V13" collision; numbering is by file name. |
+| Change the JWT secret | `application.yml` (`app.jwt.secret`) + `.env` (`JWT_SECRET`) | ≥32 bytes / 256 bits; `openssl rand -base64 32`. |
+| Add/provide a voice provider | `backend/.../voice/service/VoiceProvider.java` impl | Retell/Vapi abstraction; signature validation is fail-closed. |
+| Change WhatsApp provider | `backend/.../whatsapp/` | Vonage is the live path; Twilio `WhatsAppService` is legacy. |
 
 ## 8. Tests
 
-- **100 unit tests** currently passing. Run with `mvn test` from `backend/`.
-- Test naming: `{MethodName}_when{State}_then{Expected}` (e.g. `login_invalidCredentials_throwsBadCredentials`)
-- Always test: happy path, validation failure, edge cases (null/blank/empty), security (forbidden/forbidden role)
-- See `CalendarSyncServiceTest` for the most recent pattern: `@ExtendWith(MockitoExtension.class)` + mocks + `@MockitoSettings(strictness = Strictness.LENIENT)` for stubs that may not be invoked on every test path.
+- **214 @Test methods across 22 test classes** currently. Run with `mvn test` from `backend/`.
+- Naming: `{MethodName}_when{State}_then{Expected}`.
+- Always test: happy path, validation failure, edge cases (null/blank/empty), security (forbidden).
+- See recent services for the pattern: `@ExtendWith(MockitoExtension.class)` + mocks + `@MockitoSettings(strictness = Strictness.LENIENT)` where stubs may not run on every path.
 
-## 9. State of the project (what's done vs missing)
+## 9. State of the project (SaaS pivot)
 
-| Phase | What | Status |
-|---|---|---|
-| 1 | Architecture (modules, contracts) | ✅ done |
-| 2 | Data model (8 entities, 7 migrations) | ✅ done |
-| 3 | Auth backend (JWT + Spring Security) | ✅ done |
-| 4 | CRUD API (21 endpoints across 5 modules) | ✅ done |
-| 5 | Frontend base (Angular shell, layouts, API services) | ✅ done |
-| 6 | Auth frontend (interceptors, guards, login UI) | ✅ done |
-| 7 | Redis (token revocation) | ✅ done |
-| 8 | Swagger/OpenAPI | ✅ done |
-| 9 | Docker Compose + E2E smoke test verified | ✅ done |
-| 10 | CI/CD (GitHub Actions: backend + frontend) | ✅ done |
-| 11 | Unit tests (100 passing) | ✅ done |
-| 12 | User management (CRUD + frontend UI) | ✅ done |
-| 13 | Executive dashboard with real metrics | ✅ done |
-| 14 | Calendar sync backend (Google/Outlook) | ✅ done |
-| 15 | **Voice AI integration (Vapi/Retell)** | 🔄 next |
-| - | Calendar sync frontend UI | ✅ done in F14 |
-| - | Deploy to staging (Render/Fly.io) | ❌ not done — not in playbook, deferred until product is validated |
-| - | Testcontainers (Postgres+Redis real in CI) | ❌ not done — low priority |
-| - | Observability (logs centralization, metrics) | ❌ not done — deferred until traffic |
-| - | Production security hardening (secret manager, rate limit) | ❌ not done — deferred until deploy |
+| Area | Status |
+|---|---|
+| Auth (email + Google OAuth, JWT rotation, Redis revoked + reuse detection) | ✅ live |
+| Business profiles + onboarding wizard | ✅ live |
+| Chat widget (per-tenant prompt) | ✅ live |
+| WhatsApp chatbot (Vonage + Groq) — dogfooded on Script9 | ✅ live |
+| Voice web-call (WebRTC) + webhooks + provider abstraction | ✅ live |
+| Leads (CRUD + CSV + sources incl. WHATSAPP/WEB_CHAT) | ✅ live |
+| **Legacy outbound** (campaigns/calls/appointments/Twilio/calendar-partial) | ✅ done but **deprecated** |
+| Calendar sync (Google; Outlook stub throws) | ⚠️ partial |
+| **Escalation Orchestrator** (WhatsApp follow-up → timeout → Retell outbound voice) | 🔜 **next** (ADR-009 designed) |
+| Retell **phone** outbound live | ❌ blocked — `RETELL_FROM_NUMBER` empty; only web-call works |
+| Stripe billing | 🔜 planned |
+| Per-tenant trial enforcement | ❌ currently **global** (7 days / 50 leads) |
+| Testcontainers / observability / prod hardening | ❌ deferred until traffic |
 
 ## 10. Known issues and sharp edges
 
-1. **CampaignLead entity was missing `created_at`/`updated_at` initially** — fixed in F13 with V3 migration + entity update. Don't recreate that bug.
-2. **Hibernate + Postgres ENUMs**: ALWAYS use `@Enumerated(STRING) + @JdbcTypeCode(NAMED_ENUM)`. Without NAMED_ENUM, Hibernate sends VARCHAR for ENUM columns and Postgres rejects with "column X is of type Y but expression is of type character varying".
-3. **AuthController `/me` endpoint must use `Authentication.getName()`** — NOT `@AuthenticationPrincipal UserDetails`. The `JwtAuthenticationFilter` sets the principal as a String, not a UserDetails. Using `@AuthenticationPrincipal UserDetails` returns null.
-4. **EncryptionService is MVP-tolerant**: if `ENCRYPTION_KEY` is empty, the bean still instantiates with `ready=false` so the rest of the app boots. Encrypt/decrypt throw at runtime. Calendar endpoints return 503.
-5. **Console 401 noise**: `GET /api/auth/me` fires on `MainLayoutComponent` mount even when not logged in. This produces 401 errors in the browser console. Cosmetic only.
-6. **No soft delete**. Hard delete + AuditLog. If you need to undelete, restore from AuditLog.
-7. **Outbound sync to Google is one-way**. Calendar → Callsagents (webhook-based) is NOT implemented. The `external_event_id` is stored but never used for updates or deletes from external events.
+1. **Flyway V13 gap** — there is no `V13` migration file (jumps V12 → V14). Harmless to Flyway (it sorts by version), just note it so nobody "fills the gap" colliding with real numbers.
+2. **Hibernate + Postgres ENUMs**: ALWAYS `@Enumerated(STRING) + @JdbcTypeCode(NAMED_ENUM)`. Without NAMED_ENUM → "column X is of type Y but expression is of type character varying".
+3. **Trial cap is GLOBAL, not per-tenant**: 7 days / 50 leads (`TRIAL_LEAD_LIMIT = 50` in `ChatService`/`LeadService`) is a single global counter, not scoped per `BusinessProfile`. Must become per-tenant before multi-tenant rollout.
+4. **`V10` comment says "14-day"** but the real trial is **7 days**. Do not trust the migration comment; trust code/config.
+5. **`RETELL_FROM_NUMBER` is empty** → real outbound phone calls are **blocked**. Only the WebRTC **web-call** path works today. Set this env var to enable phone outbound.
+6. **VonageConfig key-prefix gotcha**: config is under `app.vonage.api.*` (not `vonage.*`) — check `application.yml` prefixes before wiring config. (Note `app.*` prefix applies to voice/vonage/groq blocks.)
+7. **Calendar redirect mismatch**: the Google calendar callback/redirect URL must exactly match the registered one, or OAuth fails. Validate before changing hosts.
+8. **AuthController `/me`** must use `Authentication.getName()` (principal is a String, not `UserDetails`).
+9. **EncryptionService MVP-tolerant**: if `ENCRYPTION_KEY` is empty the bean still boots with `ready=false`; calendar encrypt/decrypt return 503.
+10. **Console 401 noise**: `GET /api/auth/me` fires on `MainLayoutComponent` mount when logged out — cosmetic.
+11. **No scheduler**: `@Scheduled`/`@EnableScheduling` is absent; nothing auto-dials. Escalation Orchestrator will introduce the first background mechanism.
 
 ## 11. Glossary
 
-- **Fase/Phase**: A self-contained vertical slice of the product (F1–F15)
-- **Candidate**: The set of changes the developer is about to commit, frozen for review
-- **Receipt**: SHA-256 hash of the candidate. RDD validates the commit against this.
-- **Provider**: External SaaS integration (Google, Outlook, Vapi, Retell)
-- **Token storage**: localStorage in the Angular frontend
-- **Refresh rotation**: Each `/auth/refresh` issues a new refresh token AND revokes the old one (in Redis). Reuse detection revokes the entire session.
-- **Migrations**: Numbered SQL files in `db/migration/` that Flyway applies in order. NEVER edit a shipped migration; add a new one.
+- **SaaS core**: the live product modules (auth, leads, chat, whatsapp, voice, business).
+- **Legacy / LEGACY**: outbound-campaign scaffolding retained in-tree (campaigns, calls, appointments, calendar-partial, Twilio, users).
+- **Candidate**: set of changes frozen for review (RDD).
+- **Receipt**: SHA-256 of the candidate (RDD).
+- **VoiceProvider**: abstraction over Retell/Vapi for placing voice calls.
+- **Refresh rotation**: `/auth/refresh` issues a new refresh AND revokes the old (Redis); reuse detection revokes the session.
+- **Migrations**: numbered SQL in `db/migration/`, applied in order. NEVER edit a shipped migration; add a new one.
 
 ## 12. Roadmap (next)
 
-The user's priority order, in professional judgment:
+1. **Escalation Orchestrator** (ADR-009) — build + test locally with Vonage sandbox + web-call. First real scheduler in the codebase.
+2. **Production voice**: paid Vonage number + set `RETELL_FROM_NUMBER` (needs user action/credentials).
+3. **First pilot / dogfood** — Script9 captures 5 clients.
+4. **Stripe billing** + per-tenant trial enforcement.
+5. **Scale**.
 
-1. **Voice AI integration** (Fase 15) — Vapi or Retell. The differentiator vs Calligence.
-2. **Local validation end-to-end** — test the whole product with real credentials (Google calendar, voice AI) before thinking about deploy.
-3. **Deploy to staging** (Render / Fly.io) — only when the product is validated. Not in the original playbook.
-4. **Testcontainers** in CI — real Postgres + Redis in integration tests. After deploy.
-5. **Observability** — only with traffic.
-6. **Production security hardening** — only with deploy.
+See `ROADMAP.md` for the full phase detail and Script9 vs Callsagents role split.
 
 ---
 
-**If you get stuck**: read RUNBOOK.md (operational), this file (developer onboarding), and the per-phase docs in `docs/`. When in doubt, follow the existing patterns in nearby code (especially `users/` and `appointments/` — they're the cleanest examples).
+**If you get stuck**: read `RUNBOOK.md` (operational), this file (developer onboarding), then `docs/01-arquitectura.md` and `docs/03-adrs.md` for the real architecture and the reasoning behind it. When in doubt, extend the SaaS core (auth/leads/chat/whatsapp/voice/business) — do NOT extend the legacy outbound modules.

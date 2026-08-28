@@ -29,10 +29,13 @@ $backendUrl = 'http://localhost:8080'
 $prodBackend = 'https://callsagents-production.up.railway.app'
 $prodFrontend = 'https://callsagents-frontend-production.up.railway.app'
 
-# NOTE: V12 renamed the admin email to contact@script-9.com and V14 rotated its
-# password. These are the CURRENT seed credentials (see migrations V12/V14).
+# NOTE: V12 renamed the admin email to contact@script-9.com and V19 rotated its
+# password. These are the CURRENT seed credentials (see migrations V12/V14/V19).
 $adminEmail = 'contact@script-9.com'
-$adminPassword = 'Calls@gents2025!'
+$adminPassword = $env:CALLSAGENTS_ADMIN_PASSWORD
+if ([string]::IsNullOrWhiteSpace($adminPassword)) {
+    throw 'CALLSAGENTS_ADMIN_PASSWORD environment variable is required for the admin login smoke test (rotated by migration V19).'
+}
 
 # Variables REQUIRED on the Railway backend service.
 $requiredBackendVars = @(

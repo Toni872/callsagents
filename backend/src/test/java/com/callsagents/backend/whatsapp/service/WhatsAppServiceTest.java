@@ -7,8 +7,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -21,6 +24,7 @@ class WhatsAppServiceTest {
     private WhatsAppService service;
 
     private static final String PHONE = "whatsapp:+34687723287";
+    private static final UUID BUSINESS_ID = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -44,23 +48,35 @@ class WhatsAppServiceTest {
     @Test
     void fullFlow_greetingToQualification() {
         // Step 1: Initial message → greeting
-        String r1 = service.processMessage(PHONE, "");
+        String r1 = service.processMessage(PHONE, "", BUSINESS_ID);
         assertTrue(r1.contains("asistente"));
 
         // Step 2: Service interest → asks for name
-        String r2 = service.processMessage(PHONE, "Chatbot para mi negocio");
+        String r2 = service.processMessage(PHONE, "Chatbot para mi negocio", BUSINESS_ID);
         assertTrue(r2.contains("nombre"));
 
         // Step 3: Name → asks for email
-        String r3 = service.processMessage(PHONE, "Antonio García");
+        String r3 = service.processMessage(PHONE, "Antonio García", BUSINESS_ID);
         assertTrue(r3.contains("email"));
 
         // Step 4: Email → qualification complete
-        String r4 = service.processMessage(PHONE, "antonio@test.com");
+        String r4 = service.processMessage(PHONE, "antonio@test.com", BUSINESS_ID);
         assertTrue(r4.contains("registrado") || r4.contains("contactaremos"));
 
-        // Lead should have been saved
-        verify(leadRepository).save(any());
+        // Lead should have been saved with the resolved owner
+        verify(leadRepository).save(argThat(lead -> BUSINESS_ID.equals(((com.callsagents.backend.leads.entity.Lead) lead).getCreatedBy())));
+    }
+
+    @Test
+    void fullFlow_withoutOwner_skipsLeadSave() {
+        // When no business profile resolves (businessId null), the conversation
+        // still completes but no lead is persisted (created_by NOT NULL since V18).
+        String r1 = service.processMessage(PHONE, "");
+        String r2 = service.processMessage(PHONE, "Chatbot para mi negocio");
+        String r3 = service.processMessage(PHONE, "Antonio García");
+        String r4 = service.processMessage(PHONE, "antonio@test.com");
+        assertTrue(r4.contains("registrado") || r4.contains("contactaremos"));
+        verify(leadRepository, never()).save(any());
     }
 
     @Test

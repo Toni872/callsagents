@@ -15,6 +15,10 @@ import java.util.UUID;
 public interface AppointmentRepository extends JpaRepository<Appointment, UUID>, JpaSpecificationExecutor<Appointment> {
     long countByScheduledAtGreaterThanEqualAndStatusIn(Instant from, Collection<AppointmentStatus> statuses);
 
+    // Multi-tenant (per-user) scoping variant
+    long countByScheduledAtGreaterThanEqualAndStatusInAndUserId(
+        Instant from, Collection<AppointmentStatus> statuses, UUID userId);
+
     /** Backfill target: future, actionable appointments that never synced. */
     List<Appointment> findAllByExternalEventIdIsNullAndScheduledAtGreaterThanEqualAndStatusIn(
         Instant from, Collection<AppointmentStatus> statuses);

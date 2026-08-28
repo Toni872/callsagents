@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,6 +36,8 @@ class DashboardServiceTest {
 
     private DashboardService service;
 
+    private final UUID currentUserId = UUID.randomUUID();
+
     @BeforeEach
     void setUp() {
         service = new DashboardService(
@@ -42,23 +45,23 @@ class DashboardServiceTest {
     }
 
     @Test
-    @DisplayName("summary: aggregates repository counts and computes connection rate")
+    @DisplayName("summary: aggregates per-user repository counts and computes connection rate")
     void summary_happyPath() {
-        when(leadRepository.count()).thenReturn(120L);
-        when(leadRepository.countByAssignedToIsNotNull()).thenReturn(80L);
-        when(campaignRepository.countByStatus(CampaignStatus.RUNNING)).thenReturn(3L);
+        when(leadRepository.countByCreatedBy(currentUserId)).thenReturn(120L);
+        when(leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId)).thenReturn(80L);
+        when(campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId)).thenReturn(3L);
 
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endOfDay = startOfDay.plusSeconds(86_400);
-        when(callRepository.countByCreatedAtBetween(startOfDay, endOfDay)).thenReturn(45L);
-        when(callRepository.countByCreatedAtBetweenAndStatus(
-            startOfDay, endOfDay, CallStatus.CONNECTED)).thenReturn(18L);
+        when(callRepository.countByCreatedAtBetweenAndUserId(startOfDay, endOfDay, currentUserId)).thenReturn(45L);
+        when(callRepository.countByCreatedAtBetweenAndStatusAndUserId(
+            startOfDay, endOfDay, CallStatus.CONNECTED, currentUserId)).thenReturn(18L);
 
-        when(appointmentRepository.countByScheduledAtGreaterThanEqualAndStatusIn(
-            any(), eq(List.of(AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED))))
+        when(appointmentRepository.countByScheduledAtGreaterThanEqualAndStatusInAndUserId(
+            any(), eq(List.of(AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED)), eq(currentUserId)))
             .thenReturn(7L);
 
-        DashboardSummary s = service.getSummary();
+        DashboardSummary s = service.getSummary(currentUserId);
 
         assertThat(s.totalLeads()).isEqualTo(120L);
         assertThat(s.assignedLeads()).isEqualTo(80L);
@@ -74,19 +77,19 @@ class DashboardServiceTest {
     @Test
     @DisplayName("summary: 100% connection rate when everything today connected")
     void summary_fullConnectionRate() {
-        when(leadRepository.count()).thenReturn(10L);
-        when(leadRepository.countByAssignedToIsNotNull()).thenReturn(5L);
-        when(campaignRepository.countByStatus(CampaignStatus.RUNNING)).thenReturn(0L);
+        when(leadRepository.countByCreatedBy(currentUserId)).thenReturn(10L);
+        when(leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId)).thenReturn(5L);
+        when(campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId)).thenReturn(0L);
 
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endOfDay = startOfDay.plusSeconds(86_400);
-        when(callRepository.countByCreatedAtBetween(startOfDay, endOfDay)).thenReturn(7L);
-        when(callRepository.countByCreatedAtBetweenAndStatus(
-            startOfDay, endOfDay, CallStatus.CONNECTED)).thenReturn(7L);
-        when(appointmentRepository.countByScheduledAtGreaterThanEqualAndStatusIn(
-            any(), any())).thenReturn(0L);
+        when(callRepository.countByCreatedAtBetweenAndUserId(startOfDay, endOfDay, currentUserId)).thenReturn(7L);
+        when(callRepository.countByCreatedAtBetweenAndStatusAndUserId(
+            startOfDay, endOfDay, CallStatus.CONNECTED, currentUserId)).thenReturn(7L);
+        when(appointmentRepository.countByScheduledAtGreaterThanEqualAndStatusInAndUserId(
+            any(), any(), eq(currentUserId))).thenReturn(0L);
 
-        DashboardSummary s = service.getSummary();
+        DashboardSummary s = service.getSummary(currentUserId);
 
         assertThat(s.connectionRateToday()).isEqualTo(1.0);
     }
@@ -94,19 +97,19 @@ class DashboardServiceTest {
     @Test
     @DisplayName("summary: connection rate is 0 when no calls today (not divide by zero)")
     void summary_zeroCallsRate() {
-        when(leadRepository.count()).thenReturn(0L);
-        when(leadRepository.countByAssignedToIsNotNull()).thenReturn(0L);
-        when(campaignRepository.countByStatus(CampaignStatus.RUNNING)).thenReturn(0L);
+        when(leadRepository.countByCreatedBy(currentUserId)).thenReturn(0L);
+        when(leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId)).thenReturn(0L);
+        when(campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId)).thenReturn(0L);
 
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endOfDay = startOfDay.plusSeconds(86_400);
-        when(callRepository.countByCreatedAtBetween(startOfDay, endOfDay)).thenReturn(0L);
-        when(callRepository.countByCreatedAtBetweenAndStatus(
-            startOfDay, endOfDay, CallStatus.CONNECTED)).thenReturn(0L);
-        when(appointmentRepository.countByScheduledAtGreaterThanEqualAndStatusIn(
-            any(), any())).thenReturn(0L);
+        when(callRepository.countByCreatedAtBetweenAndUserId(startOfDay, endOfDay, currentUserId)).thenReturn(0L);
+        when(callRepository.countByCreatedAtBetweenAndStatusAndUserId(
+            startOfDay, endOfDay, CallStatus.CONNECTED, currentUserId)).thenReturn(0L);
+        when(appointmentRepository.countByScheduledAtGreaterThanEqualAndStatusInAndUserId(
+            any(), any(), eq(currentUserId))).thenReturn(0L);
 
-        DashboardSummary s = service.getSummary();
+        DashboardSummary s = service.getSummary(currentUserId);
 
         assertThat(s.connectionRateToday()).isEqualTo(0.0);
         assertThat(s.totalLeads()).isZero();

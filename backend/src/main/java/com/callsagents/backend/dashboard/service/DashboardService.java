@@ -15,12 +15,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Aggregate metrics for the executive dashboard.
  *
- * All counts are computed live against PostgreSQL with single-statement
- * COUNT queries (Spring Data JPA derived methods → SELECT COUNT(*)).
+ * <p>All counts are computed live against PostgreSQL with single-statement
+ * COUNT queries (Spring Data JPA derived methods → SELECT COUNT(*)) and are
+ * scoped to the authenticated user (per-user KPIs).
  * Cheap enough to be called on every dashboard mount.
  */
 @Service
@@ -42,25 +44,26 @@ public class DashboardService {
     }
 
     @Transactional(readOnly = true)
-    public DashboardSummary getSummary() {
+    public DashboardSummary getSummary(UUID currentUserId) {
         // Day window in UTC (start of day → start of next day)
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endOfDay = startOfDay.plusSeconds(86_400);
 
-        long totalLeads = leadRepository.count();
-        long assignedLeads = leadRepository.countByAssignedToIsNotNull();
-        long activeCampaigns = campaignRepository.countByStatus(CampaignStatus.RUNNING);
-        long callsToday = callRepository.countByCreatedAtBetween(startOfDay, endOfDay);
-        long callsTodayConnected = callRepository.countByCreatedAtBetweenAndStatus(
-            startOfDay, endOfDay, CallStatus.CONNECTED);
+        long totalLeads = leadRepository.countByCreatedBy(currentUserId);
+        long assignedLeads = leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId);
+        long activeCampaigns = campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId);
+        long callsToday = callRepository.countByCreatedAtBetweenAndUserId(startOfDay, endOfDay, currentUserId);
+        long callsTodayConnected = callRepository.countByCreatedAtBetweenAndStatusAndUserId(
+            startOfDay, endOfDay, CallStatus.CONNECTED, currentUserId);
         double connectionRate = callsToday == 0
             ? 0.0
             : (double) callsTodayConnected / (double) callsToday;
 
         long upcomingAppointments = appointmentRepository
-            .countByScheduledAtGreaterThanEqualAndStatusIn(
+            .countByScheduledAtGreaterThanEqualAndStatusInAndUserId(
                 Instant.now(),
-                List.of(AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED));
+                List.of(AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED),
+                currentUserId);
 
         return new DashboardSummary(
             totalLeads,

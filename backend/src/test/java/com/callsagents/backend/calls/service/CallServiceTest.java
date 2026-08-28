@@ -182,7 +182,7 @@ class CallServiceTest {
     void findByIdThrowsWhenMissing() {
         UUID id = UUID.randomUUID();
         when(callRepository.findById(id)).thenReturn(java.util.Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> callService.findById(id));
+        assertThrows(ResourceNotFoundException.class, () -> callService.findById(id, currentUserId));
     }
 
     @Test
@@ -192,7 +192,7 @@ class CallServiceTest {
         Page<Call> page = new PageImpl<>(List.of(c), pageable, 1);
         when(callRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
-        PageResponse<CallResponse> result = callService.findAll(new CallFilter(null, null, null, null, null), pageable);
+        PageResponse<CallResponse> result = callService.findAll(new CallFilter(null, null, null, null, null), pageable, currentUserId);
 
         assertEquals(1, result.totalElements());
         assertNotNull(result.content().get(0));

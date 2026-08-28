@@ -1,5 +1,7 @@
 package com.callsagents.backend.whatsapp.controller;
 
+import com.callsagents.backend.business.entity.BusinessProfile;
+import com.callsagents.backend.business.service.BusinessService;
 import com.callsagents.backend.whatsapp.service.TwilioWebhookValidator;
 import com.callsagents.backend.whatsapp.service.WhatsAppService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/webhooks/whatsapp")
@@ -24,11 +27,14 @@ public class WhatsAppWebhookController {
 
     private final WhatsAppService whatsAppService;
     private final TwilioWebhookValidator webhookValidator;
+    private final BusinessService businessService;
 
     public WhatsAppWebhookController(WhatsAppService whatsAppService,
-                                     TwilioWebhookValidator webhookValidator) {
+                                     TwilioWebhookValidator webhookValidator,
+                                     BusinessService businessService) {
         this.whatsAppService = whatsAppService;
         this.webhookValidator = webhookValidator;
+        this.businessService = businessService;
     }
 
     /**
@@ -51,6 +57,7 @@ public class WhatsAppWebhookController {
     @PostMapping(consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
     public ResponseEntity<String> handleIncoming(
             @RequestParam("From") String from,
+            @RequestParam(value = "To", defaultValue = "") String to,
             @RequestParam("Body") String body,
             @RequestParam(value = "NumMedia", defaultValue = "0") String numMedia,
             @RequestHeader(value = "X-Twilio-Signature", required = false) String xTwilioSignature,
@@ -64,7 +71,18 @@ public class WhatsAppWebhookController {
 
         log.info("WhatsApp incoming: from={} body='{}' media={}", from, body, numMedia);
 
-        String reply = whatsAppService.processMessage(from, body);
+        // Resolve business profile from the "to" number so leads get an owner
+        // (created_by is NOT NULL since V18). Allow Twilio's "whatsapp:" prefix.
+        UUID businessId = null;
+        if (!to.isBlank()) {
+            String normalized = to.startsWith("whatsapp:") ? to.substring("whatsapp:".length()) : to;
+            BusinessProfile profile = businessService.getProfileEntityByWhatsappNumber(normalized);
+            if (profile != null) {
+                businessId = profile.getUser().getId();
+            }
+        }
+
+        String reply = whatsAppService.processMessage(from, body, businessId);
 
         // Return TwiML XML
         String twiml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"

@@ -2,6 +2,8 @@ package com.callsagents.backend.escalation.service;
 
 import com.callsagents.backend.business.entity.BusinessProfile;
 import com.callsagents.backend.business.service.BusinessService;
+import com.callsagents.backend.auth.entity.UserRole;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.escalation.entity.Escalation;
 import com.callsagents.backend.escalation.entity.EscalationStage;
@@ -242,9 +244,12 @@ public class EscalationService {
      * Cancel an active escalation (API use).
      */
     @Transactional
-    public Escalation cancel(UUID escalationId) {
+    public Escalation cancel(UUID escalationId, UUID currentUserId, UserRole role) {
         Escalation escalation = repository.findById(escalationId)
             .orElseThrow(() -> new ResourceNotFoundException("Escalation not found: " + escalationId));
+        if (!isOwnerOrSupervisor(escalation, currentUserId, role)) {
+            throw new ForbiddenException("You can only cancel escalations related to your business");
+        }
         if (escalation.getStage() != EscalationStage.RESOLVED
             && escalation.getStage() != EscalationStage.ABANDONED
             && escalation.getStage() != EscalationStage.CANCELLED) {
@@ -256,8 +261,17 @@ public class EscalationService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<Escalation> getForLead(UUID leadId) {
+    public Optional<Escalation> getForLead(UUID leadId, UUID currentUserId) {
+        leadRepository.findById(leadId)
+            .filter(lead -> lead.getCreatedBy() != null && lead.getCreatedBy().equals(currentUserId))
+            .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + leadId));
         return repository.findFirstByLeadIdOrderByCreatedAtDesc(leadId);
+    }
+
+    private static boolean isOwnerOrSupervisor(Escalation escalation, UUID userId, UserRole role) {
+        return (escalation.getUserId() != null && escalation.getUserId().equals(userId))
+            || role == UserRole.ADMIN
+            || role == UserRole.SUPERVISOR;
     }
 
     /** Active (non-terminal) escalations for a user. */

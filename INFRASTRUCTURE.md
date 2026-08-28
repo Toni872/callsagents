@@ -50,7 +50,7 @@ curl -s -o /dev/null -w "%{http_code}" https://callsagents-frontend-production.u
 | Item | Value |
 |------|-------|
 | Admin email | contact@script-9.com |
-| Admin password | Calls@gents2025! |
+| Admin password | `<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>` |
 
 ## Railway Account
 

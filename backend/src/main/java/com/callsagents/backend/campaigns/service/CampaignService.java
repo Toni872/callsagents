@@ -3,6 +3,7 @@ package com.callsagents.backend.campaigns.service;
 import com.callsagents.backend.audit.entity.AuditAction;
 import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.campaigns.dto.CampaignFilter;
 import com.callsagents.backend.campaigns.dto.CampaignResponse;
@@ -17,11 +18,13 @@ import com.callsagents.backend.campaigns.repository.CampaignSpecifications;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.voice.domain.CampaignVoiceConfig;
 import com.callsagents.backend.voice.service.PromptComposer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,15 +49,20 @@ public class CampaignService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<CampaignResponse> findAll(CampaignFilter filter, Pageable pageable) {
-        Page<Campaign> page = campaignRepository.findAll(CampaignSpecifications.build(filter), pageable);
+    public PageResponse<CampaignResponse> findAll(CampaignFilter filter, Pageable pageable, UUID currentUserId) {
+        Specification<Campaign> spec = CampaignSpecifications.build(filter);
+        spec = (spec == null)
+            ? CampaignSpecifications.createdBy(currentUserId)
+            : spec.and(CampaignSpecifications.createdBy(currentUserId));
+        Page<Campaign> page = campaignRepository.findAll(spec, pageable);
         return PageResponse.from(page.map(this::toResponse));
     }
 
     @Transactional(readOnly = true)
-    public CampaignResponse findById(UUID id) {
+    public CampaignResponse findById(UUID id, UUID currentUserId, UserRole role) {
         Campaign campaign = campaignRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + id));
+        requireOwner(campaign, currentUserId, role);
         return toResponse(campaign);
     }
 
@@ -83,9 +91,10 @@ public class CampaignService {
     }
 
     @Transactional
-    public CampaignResponse update(UUID id, UpdateCampaignRequest req, UUID currentUserId) {
+    public CampaignResponse update(UUID id, UpdateCampaignRequest req, UUID currentUserId, UserRole role) {
         Campaign campaign = campaignRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + id));
+        requireOwner(campaign, currentUserId, role);
 
         if (req.name() != null) campaign.setName(normalize(req.name()));
         if (req.description() != null) campaign.setDescription(normalize(req.description()));
@@ -124,9 +133,10 @@ public class CampaignService {
     }
 
     @Transactional
-    public CampaignResponse launch(UUID id, UUID currentUserId) {
+    public CampaignResponse launch(UUID id, UUID currentUserId, UserRole role) {
         Campaign campaign = campaignRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + id));
+        requireOwner(campaign, currentUserId, role);
 
         CampaignStatus current = campaign.getStatus();
         if (current == CampaignStatus.DRAFT || current == CampaignStatus.SCHEDULED) {
@@ -143,9 +153,10 @@ public class CampaignService {
     }
 
     @Transactional
-    public CampaignResponse pause(UUID id, UUID currentUserId) {
+    public CampaignResponse pause(UUID id, UUID currentUserId, UserRole role) {
         Campaign campaign = campaignRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + id));
+        requireOwner(campaign, currentUserId, role);
 
         CampaignStatus current = campaign.getStatus();
         if (current != CampaignStatus.RUNNING) {
@@ -158,6 +169,13 @@ public class CampaignService {
         auditService.log(currentUserId, "Campaign", saved.getId(), AuditAction.STATUS_CHANGE,
             Map.<String, Object>of("from", CampaignStatus.RUNNING.name(), "to", CampaignStatus.PAUSED.name()));
         return toResponse(saved);
+    }
+
+    private static void requireOwner(Campaign campaign, UUID currentUserId, UserRole role) {
+        if ((campaign.getCreatedBy() == null || !campaign.getCreatedBy().equals(currentUserId))
+            && role != UserRole.ADMIN) {
+            throw new ForbiddenException("You can only manage your own campaigns");
+        }
     }
 
     private CampaignResponse toResponse(Campaign campaign) {

@@ -25,8 +25,8 @@ The real domain is `www.script-9.com`. Do not confuse them.
 
 | Environment | Email | Password |
 |---|---|---|
-| Local backend (`:8080`) | `admin@callsagents.local` | `admin123` |
-| Production backend | `admin@callsagents.com` | `admin123` |
+| Local backend (`:8080`) | `admin@callsagents.local` | `<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>` |
+| Production backend | `admin@callsagents.com` | `<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>` |
 | **Demo (local + prod)** | `demo@callsagents.com` | `demo12345` |
 
 The demo account (prod user id `3b29c60d-62d7-4bb7-9fa4-70196c318a2a`) is

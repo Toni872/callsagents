@@ -1,11 +1,14 @@
 package com.callsagents.backend.leads.service;
 
+import com.callsagents.backend.audit.entity.AuditAction;
 import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.leads.dto.CreateLeadRequest;
 import com.callsagents.backend.leads.dto.ImportResultDto;
@@ -17,11 +20,11 @@ import com.callsagents.backend.leads.entity.LeadSource;
 import com.callsagents.backend.leads.entity.LeadStatus;
 import com.callsagents.backend.leads.repository.LeadRepository;
 import com.callsagents.backend.leads.repository.LeadSpecifications;
-import com.callsagents.backend.audit.entity.AuditAction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -57,22 +60,29 @@ public class LeadService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<LeadResponse> findAll(LeadFilter filter, Pageable pageable) {
-        Page<Lead> page = leadRepository.findAll(LeadSpecifications.build(filter), pageable);
+    public PageResponse<LeadResponse> findAll(LeadFilter filter, Pageable pageable, UUID currentUserId) {
+        Specification<Lead> spec = LeadSpecifications.build(filter);
+        spec = (spec == null)
+            ? LeadSpecifications.ownedBy(currentUserId)
+            : spec.and(LeadSpecifications.ownedBy(currentUserId));
+        Page<Lead> page = leadRepository.findAll(spec, pageable);
         return PageResponse.from(page.map(this::toResponse));
     }
 
     @Transactional(readOnly = true)
-    public LeadResponse findById(UUID id) {
+    public LeadResponse findById(UUID id, UUID currentUserId) {
         Lead lead = leadRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + id));
+        if (lead.getCreatedBy() == null || !lead.getCreatedBy().equals(currentUserId)) {
+            throw new ResourceNotFoundException("Lead not found: " + id);
+        }
         return toResponse(lead);
     }
 
     @Transactional
     public LeadResponse create(CreateLeadRequest req, UUID currentUserId) {
-        // Trial lead limit check
-        long totalLeads = leadRepository.count();
+        // Trial lead limit check (per tenant)
+        long totalLeads = leadRepository.countByCreatedBy(currentUserId);
         if (totalLeads >= TRIAL_LEAD_LIMIT) {
             throw new BadRequestException(
                 "Límite de leads alcanzado (" + TRIAL_LEAD_LIMIT + "). " +
@@ -92,6 +102,7 @@ public class LeadService {
             .status(LeadStatus.NEW)
             .source(source)
             .assignedTo(null)
+            .createdBy(currentUserId)
             .notes(req.notes())
             .customFields(req.customFields())
             .doNotCall(Boolean.FALSE)
@@ -106,6 +117,10 @@ public class LeadService {
     public LeadResponse update(UUID id, UpdateLeadRequest req, UUID currentUserId) {
         Lead lead = leadRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + id));
+
+        if (lead.getCreatedBy() == null || !lead.getCreatedBy().equals(currentUserId)) {
+            throw new ForbiddenException("You can only update your own leads");
+        }
 
         if (req.firstName() != null) lead.setFirstName(req.firstName().trim());
         if (req.lastName() != null) lead.setLastName(req.lastName().trim());
@@ -130,9 +145,12 @@ public class LeadService {
     }
 
     @Transactional
-    public void delete(UUID id, UUID currentUserId) {
-        if (!leadRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Lead not found: " + id);
+    public void delete(UUID id, UUID currentUserId, UserRole role) {
+        Lead lead = leadRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + id));
+        if ((lead.getCreatedBy() == null || !lead.getCreatedBy().equals(currentUserId))
+            && role != UserRole.ADMIN) {
+            throw new ForbiddenException("You can only delete your own leads");
         }
         leadRepository.deleteById(id);
         auditService.log(currentUserId, "Lead", id, AuditAction.DELETE);
@@ -199,6 +217,7 @@ public class LeadService {
                         .source(parseSource(sourceRaw))
                         .status(LeadStatus.NEW)
                         .doNotCall(Boolean.FALSE)
+                        .createdBy(currentUserId)
                         .build();
                     toSave.add(lead);
                     successCount++;

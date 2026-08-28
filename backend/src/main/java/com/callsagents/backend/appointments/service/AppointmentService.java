@@ -19,6 +19,7 @@ import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.leads.repository.LeadRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,15 +46,22 @@ public class AppointmentService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<AppointmentResponse> findAll(AppointmentFilter filter, Pageable pageable) {
-        Page<Appointment> page = appointmentRepository.findAll(AppointmentSpecifications.build(filter), pageable);
+    public PageResponse<AppointmentResponse> findAll(AppointmentFilter filter, Pageable pageable, UUID currentUserId) {
+        Specification<Appointment> spec = AppointmentSpecifications.build(filter);
+        spec = (spec == null)
+            ? AppointmentSpecifications.ownedBy(currentUserId)
+            : spec.and(AppointmentSpecifications.ownedBy(currentUserId));
+        Page<Appointment> page = appointmentRepository.findAll(spec, pageable);
         return PageResponse.from(page.map(AppointmentResponse::fromEntity));
     }
 
     @Transactional(readOnly = true)
-    public AppointmentResponse findById(UUID id) {
+    public AppointmentResponse findById(UUID id, UUID currentUserId) {
         Appointment appointment = appointmentRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Appointment not found: " + id));
+        if (appointment.getUserId() == null || !appointment.getUserId().equals(currentUserId)) {
+            throw new ResourceNotFoundException("Appointment not found: " + id);
+        }
         return AppointmentResponse.fromEntity(appointment);
     }
 
@@ -65,7 +73,7 @@ public class AppointmentService {
 
         Appointment appointment = Appointment.builder()
             .leadId(req.leadId())
-            .userId(req.userId())
+            .userId(currentUserId)
             .scheduledAt(req.scheduledAt())
             .durationMinutes(req.durationMinutes())
             .status(parseStatusOrDefault(req.status(), AppointmentStatus.PENDING))

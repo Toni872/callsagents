@@ -88,7 +88,7 @@ public class ChatService {
                     String[] kv = part.split("=", 2);
                     if (kv.length == 2) data.put(kv[0].trim(), kv[1].trim());
                 }
-                leadCaptured = saveLead(sessionId, data);
+                leadCaptured = saveLead(sessionId, data, businessId);
             }
         }
 
@@ -106,10 +106,10 @@ public class ChatService {
         return promptComposer.compose(profile);
     }
 
-    private boolean saveLead(String sessionId, Map<String, String> data) {
+    private boolean saveLead(String sessionId, Map<String, String> data, UUID businessId) {
         try {
-            // Trial lead limit check
-            long totalLeads = leadRepository.count();
+            // Trial lead limit check (per business)
+            long totalLeads = leadRepository.countByCreatedBy(businessId);
             if (totalLeads >= TRIAL_LEAD_LIMIT) {
                 log.warn("Lead limit reached ({}) — skipping lead creation for session {}", TRIAL_LEAD_LIMIT, sessionId);
                 return false;
@@ -132,6 +132,7 @@ public class ChatService {
                 .source(LeadSource.WEB_CHAT)
                 .notes("Servicio de interés: " + service + " |来源: web chat |sessionId: " + sessionId)
                 .doNotCall(false)
+                .createdBy(businessId)
                 .build();
             leadRepository.save(lead);
             log.info("Chat lead created: sessionId={} name={}", sessionId, name);

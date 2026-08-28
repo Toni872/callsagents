@@ -15,4 +15,8 @@ public interface LeadRepository extends JpaRepository<Lead, UUID>, JpaSpecificat
 
     // Dashboard metrics — derived methods, no JPQL needed
     long countByAssignedToIsNotNull();
+
+    // Multi-tenant (per-user) scoping metrics
+    long countByCreatedBy(UUID createdBy);
+    long countByCreatedByAndAssignedToIsNotNull(UUID createdBy);
 }

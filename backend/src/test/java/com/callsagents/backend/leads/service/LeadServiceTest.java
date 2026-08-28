@@ -7,6 +7,7 @@ import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.leads.dto.CreateLeadRequest;
 import com.callsagents.backend.leads.dto.ImportResultDto;
@@ -86,11 +87,25 @@ class LeadServiceTest {
         Page<Lead> page = new PageImpl<>(List.of(lead), pageable, 1);
         when(leadRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
-        PageResponse<LeadResponse> result = leadService.findAll(new LeadFilter(null, null, null, null), pageable);
+        PageResponse<LeadResponse> result =
+            leadService.findAll(new LeadFilter(null, null, null, null), pageable, currentUserId);
 
         assertEquals(1, result.totalElements());
         assertEquals(1, result.content().size());
         assertEquals(lead.getId(), result.content().get(0).id());
+    }
+
+    @Test
+    void findAllWithNullFilterStillAppliesOwnerScope() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(leadRepository.findAll(any(Specification.class), eq(pageable)))
+            .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        leadService.findAll(null, pageable, currentUserId);
+
+        ArgumentCaptor<Specification<Lead>> captor = ArgumentCaptor.forClass(Specification.class);
+        verify(leadRepository).findAll(captor.capture(), eq(pageable));
+        assertNotNull(captor.getValue());
     }
 
     @Test
@@ -99,7 +114,7 @@ class LeadServiceTest {
         Lead lead = sampleLead(id);
         when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
 
-        LeadResponse response = leadService.findById(id);
+        LeadResponse response = leadService.findById(id, currentUserId);
 
         assertEquals(id, response.id());
         assertEquals(lead.getFirstName(), response.firstName());
@@ -110,7 +125,19 @@ class LeadServiceTest {
         UUID id = UUID.randomUUID();
         when(leadRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> leadService.findById(id));
+        assertThrows(ResourceNotFoundException.class,
+            () -> leadService.findById(id, currentUserId));
+    }
+
+    @Test
+    void findByIdThrowsNotFoundWhenNotOwner() {
+        UUID id = UUID.randomUUID();
+        Lead lead = sampleLead(id);
+        lead.setCreatedBy(UUID.randomUUID());
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
+
+        assertThrows(ResourceNotFoundException.class,
+            () -> leadService.findById(id, currentUserId));
     }
 
     @Test
@@ -143,12 +170,36 @@ class LeadServiceTest {
     }
 
     @Test
+    void createSetsCreatedByToCurrentUser() {
+        when(leadRepository.save(any(Lead.class))).thenAnswer(inv -> inv.getArgument(0));
+        CreateLeadRequest req = new CreateLeadRequest("Ana", "Lopez", "ana@x.com", null, null, "MANUAL", null, null);
+
+        leadService.create(req, currentUserId);
+
+        ArgumentCaptor<Lead> captor = ArgumentCaptor.forClass(Lead.class);
+        verify(leadRepository).save(captor.capture());
+        assertEquals(currentUserId, captor.getValue().getCreatedBy());
+    }
+
+    @Test
     void updateThrowsNotFoundWhenMissing() {
         UUID id = UUID.randomUUID();
         UpdateLeadRequest req = new UpdateLeadRequest("Other", null, null, null, null, null, null, null, null, null);
         when(leadRepository.findById(id)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> leadService.update(id, req, currentUserId));
+    }
+
+    @Test
+    void updateThrowsForbiddenWhenNotOwner() {
+        UUID id = UUID.randomUUID();
+        Lead existing = sampleLead(id);
+        existing.setCreatedBy(UUID.randomUUID());
+        when(leadRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        UpdateLeadRequest req = new UpdateLeadRequest("Other", null, null, null, null, null, null, null, null, null);
+
+        assertThrows(ForbiddenException.class, () -> leadService.update(id, req, currentUserId));
     }
 
     @Test
@@ -183,18 +234,32 @@ class LeadServiceTest {
     @Test
     void deleteThrowsNotFoundWhenMissing() {
         UUID id = UUID.randomUUID();
-        when(leadRepository.existsById(id)).thenReturn(false);
+        when(leadRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> leadService.delete(id, currentUserId));
+        assertThrows(ResourceNotFoundException.class,
+            () -> leadService.delete(id, currentUserId, UserRole.AGENT));
+        verify(leadRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteThrowsForbiddenWhenNotOwner() {
+        UUID id = UUID.randomUUID();
+        Lead existing = sampleLead(id);
+        existing.setCreatedBy(UUID.randomUUID());
+        when(leadRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        assertThrows(ForbiddenException.class,
+            () -> leadService.delete(id, currentUserId, UserRole.AGENT));
         verify(leadRepository, never()).deleteById(any());
     }
 
     @Test
     void deleteSucceedsAndAudits() {
         UUID id = UUID.randomUUID();
-        when(leadRepository.existsById(id)).thenReturn(true);
+        Lead lead = sampleLead(id);
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
 
-        leadService.delete(id, currentUserId);
+        leadService.delete(id, currentUserId, UserRole.ADMIN);
 
         verify(leadRepository).deleteById(id);
         verify(auditService).log(eq(currentUserId), eq("Lead"), eq(id), eq(com.callsagents.backend.audit.entity.AuditAction.DELETE));
@@ -232,6 +297,22 @@ class LeadServiceTest {
     }
 
     @Test
+    void importCsvSetsCreatedByToCurrentUser() throws IOException {
+        String content = "firstName,lastName,email,phone,company,source\n"
+            + "Ana,Lopez,ana@x.com,,Acme,MANUAL\n";
+        MockMultipartFile file = new MockMultipartFile("file", "leads.csv", "text/csv", content.getBytes());
+        when(leadRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        leadService.importCsv(file, currentUserId);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Lead>> captor = ArgumentCaptor.forClass(List.class);
+        verify(leadRepository).saveAll(captor.capture());
+        assertEquals(1, captor.getValue().size());
+        assertEquals(currentUserId, captor.getValue().get(0).getCreatedBy());
+    }
+
+    @Test
     void importCsvRejectsQuotedValues() {
         String content = "firstName,lastName,email,phone,company,source\n"
             + "\"A\",\"B\",\"a@x.com\",\"\",\"\",\"MANUAL\"\n";
@@ -247,7 +328,7 @@ class LeadServiceTest {
         when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
         when(userRepository.findById(assignee.getId())).thenReturn(Optional.of(assignee));
 
-        LeadResponse response = leadService.findById(id);
+        LeadResponse response = leadService.findById(id, currentUserId);
 
         assertNotNull(response.assignedTo());
         assertEquals(assignee.getEmail(), response.assignedTo().email());
@@ -260,7 +341,7 @@ class LeadServiceTest {
         lead.setAssignedTo(null);
         when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
 
-        LeadResponse response = leadService.findById(id);
+        LeadResponse response = leadService.findById(id, currentUserId);
 
         assertNull(response.assignedTo());
     }
@@ -268,9 +349,10 @@ class LeadServiceTest {
     @Test
     void deleteByIdIsCalledWithCorrectArgument() {
         UUID id = UUID.randomUUID();
-        when(leadRepository.existsById(id)).thenReturn(true);
+        Lead lead = sampleLead(id);
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
 
-        leadService.delete(id, currentUserId);
+        leadService.delete(id, currentUserId, UserRole.ADMIN);
 
         ArgumentCaptor<UUID> captor = ArgumentCaptor.forClass(UUID.class);
         verify(leadRepository).deleteById(captor.capture());
@@ -320,9 +402,10 @@ class LeadServiceTest {
         assertTrue(response.customFields() == null);
     }
 
-    private static Lead sampleLead(UUID id) {
+    private Lead sampleLead(UUID id) {
         return Lead.builder()
             .id(id)
+            .createdBy(currentUserId)
             .firstName("Test")
             .lastName("Lead")
             .email("test@x.com")

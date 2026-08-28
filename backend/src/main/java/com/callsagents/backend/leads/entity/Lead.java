@@ -66,6 +66,9 @@ public class Lead {
     @Column(name = "assigned_to")
     private UUID assignedTo;
 
+    @Column(name = "created_by")
+    private UUID createdBy;
+
     @Column(name = "notes", columnDefinition = "text")
     private String notes;
 

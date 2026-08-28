@@ -47,9 +47,13 @@ public class CampaignLeadController {
     public ResponseEntity<PageResponse<CampaignLeadResponse>> list(
         @PathVariable UUID campaignId,
         @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(defaultValue = "20") int size,
+        @AuthenticationPrincipal UserDetails user
     ) {
-        return ResponseEntity.ok(campaignLeadService.listLeads(campaignId, page, size));
+        User current = resolveUser(user);
+        return ResponseEntity.ok(
+            campaignLeadService.listLeads(campaignId, page, size, current.getId(), current.getRole())
+        );
     }
 
     @Operation(summary = "Añadir un lead a una campaña (ADMIN)")
@@ -60,8 +64,8 @@ public class CampaignLeadController {
         @Valid @RequestBody AddLeadRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        CampaignLeadResponse created = campaignLeadService.addLead(campaignId, req, userId);
+        User current = resolveUser(user);
+        CampaignLeadResponse created = campaignLeadService.addLead(campaignId, req, current.getId(), current.getRole());
         return ResponseEntity
             .created(URI.create("/api/campaigns/" + campaignId + "/leads/" + created.leadId()))
             .body(created);
@@ -75,17 +79,20 @@ public class CampaignLeadController {
         @PathVariable UUID leadId,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        campaignLeadService.removeLead(campaignId, leadId, userId);
+        User current = resolveUser(user);
+        campaignLeadService.removeLead(campaignId, leadId, current.getId(), current.getRole());
         return ResponseEntity.noContent().build();
     }
 
     private UUID resolveUserId(UserDetails user) {
+        return resolveUser(user).getId();
+    }
+
+    private User resolveUser(UserDetails user) {
         if (user == null) {
             throw new UnauthorizedException("Authentication required");
         }
-        User u = userRepository.findByEmail(user.getUsername())
+        return userRepository.findByEmail(user.getUsername())
             .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-        return u.getId();
     }
 }

@@ -28,6 +28,10 @@ public final class LeadSpecifications {
         return (root, query, cb) -> userId == null ? cb.conjunction() : cb.equal(root.get("assignedTo"), userId);
     }
 
+    public static Specification<Lead> ownedBy(UUID userId) {
+        return (root, query, cb) -> userId == null ? cb.conjunction() : cb.equal(root.get("createdBy"), userId);
+    }
+
     public static Specification<Lead> searchText(String q) {
         return (root, query, cb) -> {
             if (q == null || q.isBlank()) {

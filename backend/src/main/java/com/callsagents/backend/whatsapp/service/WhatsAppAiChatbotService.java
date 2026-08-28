@@ -137,7 +137,7 @@ public class WhatsAppAiChatbotService {
         }
 
         // Check if AI extracted lead data
-        String cleanResponse = extractAndSaveLead(phone, aiResponse);
+        String cleanResponse = extractAndSaveLead(phone, aiResponse, businessId);
 
         // Determine next interactive step
         advanceStep(phone, text, cleanResponse, step);
@@ -359,7 +359,7 @@ public class WhatsAppAiChatbotService {
     /**
      * Extract [LEAD:...] tag from AI response, save lead, and return clean response.
      */
-    private String extractAndSaveLead(String phone, String aiResponse) {
+    private String extractAndSaveLead(String phone, String aiResponse, UUID businessId) {
         String leadTag = "[LEAD:";
         int start = aiResponse.indexOf(leadTag);
         if (start == -1) return aiResponse;
@@ -382,11 +382,11 @@ public class WhatsAppAiChatbotService {
         leadData.get(phone, k -> new HashMap<>()).putAll(data);
 
         Map<String, String> leadForSave = leadData.getIfPresent(phone);
-        saveLead(phone, leadForSave != null ? leadForSave : Map.of());
+        saveLead(phone, leadForSave != null ? leadForSave : Map.of(), businessId);
         return cleanResponse;
     }
 
-    private void saveLead(String phone, Map<String, String> data) {
+    private void saveLead(String phone, Map<String, String> data, UUID businessId) {
         try {
             String name = data.getOrDefault("name", "Desconocido");
             String email = data.get("email");
@@ -402,9 +402,14 @@ public class WhatsAppAiChatbotService {
                 if (email != null) lead.setEmail(email);
                 if (!service.isEmpty()) lead.setNotes("Servicio de interés: " + service);
                 lead.setSource(LeadSource.WHATSAPP);
+                if (lead.getCreatedBy() == null && businessId != null) lead.setCreatedBy(businessId);
                 leadRepository.save(lead);
                 log.info("AI chatbot lead updated: phone={}", phoneE164);
             } else {
+                if (businessId == null) {
+                    log.warn("Skip WhatsApp lead creation for {}: no business profile resolved (created_by NOT NULL)", phoneE164);
+                    return;
+                }
                 Lead lead = Lead.builder()
                     .firstName(firstName)
                     .lastName(lastName)
@@ -415,6 +420,7 @@ public class WhatsAppAiChatbotService {
                     .source(LeadSource.WHATSAPP)
                     .notes("Servicio de interés: " + service)
                     .doNotCall(false)
+                    .createdBy(businessId)
                     .build();
                 leadRepository.save(lead);
                 log.info("AI chatbot lead created: phone={}", phoneE164);

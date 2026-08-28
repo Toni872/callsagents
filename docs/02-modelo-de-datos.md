@@ -33,9 +33,12 @@
 | V11 | `lead_source` + `WHATSAPP` |
 | V12 | Admin email → `contact@script-9.com`; `lead_source` + `WEB_CHAT` |
 | V13 | **MISSING** (gap — no such migration file) |
-| V14 | Update admin password (`Calls@gents2025!`) |
+| V14 | Update admin password (hash; previous rotation) |
 | V15 | `business_profiles` table (SaaS tenancy) |
 | V16 | `business_profiles.whatsapp_number` + partial index for webhook routing |
+| V17 | Call detail fields (duration/status/outcome/recording) |
+| V18 | `leads.created_by` + backfill + NOT NULL + index (per-user scoping) |
+| V19 | Rotate admin password (hash; plaintext only in secrets/env `CALLSAGENTS_ADMIN_PASSWORD`) |
 
 ---
 

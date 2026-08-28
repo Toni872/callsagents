@@ -120,7 +120,7 @@ class CampaignServiceTest {
         when(campaignRepository.findById(id)).thenReturn(Optional.of(c));
         when(campaignRepository.save(any(Campaign.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        CampaignResponse response = campaignService.launch(id, currentUserId);
+        CampaignResponse response = campaignService.launch(id, currentUserId, UserRole.ADMIN);
 
         assertEquals(CampaignStatus.RUNNING, response.status());
         verify(auditService).log(eq(currentUserId), eq("Campaign"), eq(id), eq(AuditAction.STATUS_CHANGE),
@@ -133,7 +133,7 @@ class CampaignServiceTest {
         Campaign c = sampleCampaign(id, CampaignStatus.RUNNING);
         when(campaignRepository.findById(id)).thenReturn(Optional.of(c));
 
-        assertThrows(BadRequestException.class, () -> campaignService.launch(id, currentUserId));
+        assertThrows(BadRequestException.class, () -> campaignService.launch(id, currentUserId, UserRole.ADMIN));
         verify(campaignRepository, never()).save(any());
     }
 
@@ -144,7 +144,7 @@ class CampaignServiceTest {
         when(campaignRepository.findById(id)).thenReturn(Optional.of(c));
         when(campaignRepository.save(any(Campaign.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        CampaignResponse response = campaignService.pause(id, currentUserId);
+        CampaignResponse response = campaignService.pause(id, currentUserId, UserRole.ADMIN);
 
         assertEquals(CampaignStatus.PAUSED, response.status());
         verify(auditService).log(eq(currentUserId), eq("Campaign"), eq(id),
@@ -157,7 +157,7 @@ class CampaignServiceTest {
         Campaign c = sampleCampaign(id, CampaignStatus.PAUSED);
         when(campaignRepository.findById(id)).thenReturn(Optional.of(c));
 
-        assertThrows(BadRequestException.class, () -> campaignService.pause(id, currentUserId));
+        assertThrows(BadRequestException.class, () -> campaignService.pause(id, currentUserId, UserRole.ADMIN));
         verify(campaignRepository, never()).save(any());
     }
 
@@ -170,7 +170,7 @@ class CampaignServiceTest {
         UpdateCampaignRequest req = new UpdateCampaignRequest(null, null, null, null, null, "FINISHED",
             null, null, null, null, null);
 
-        assertThrows(BadRequestException.class, () -> campaignService.update(id, req, currentUserId));
+        assertThrows(BadRequestException.class, () -> campaignService.update(id, req, currentUserId, UserRole.ADMIN));
     }
 
     @Test
@@ -183,7 +183,7 @@ class CampaignServiceTest {
         UpdateCampaignRequest req = new UpdateCampaignRequest(null, null, null, null, null, "SCHEDULED",
             null, null, null, null, null);
 
-        CampaignResponse response = campaignService.update(id, req, currentUserId);
+        CampaignResponse response = campaignService.update(id, req, currentUserId, UserRole.ADMIN);
 
         assertEquals(CampaignStatus.SCHEDULED, response.status());
     }
@@ -197,7 +197,7 @@ class CampaignServiceTest {
         UpdateCampaignRequest req = new UpdateCampaignRequest(null, null, null, null, null, "DRAFT",
             null, null, null, null, null);
 
-        assertThrows(BadRequestException.class, () -> campaignService.update(id, req, currentUserId));
+        assertThrows(BadRequestException.class, () -> campaignService.update(id, req, currentUserId, UserRole.ADMIN));
     }
 
     @Test
@@ -205,16 +205,16 @@ class CampaignServiceTest {
         UUID id = UUID.randomUUID();
         when(campaignRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> campaignService.findById(id));
+        assertThrows(ResourceNotFoundException.class, () -> campaignService.findById(id, currentUserId, UserRole.AGENT));
     }
 
     @Test
     void findByIdReturnsResponseWhenPresent() {
         UUID id = UUID.randomUUID();
-        Campaign c = sampleCampaign(id, CampaignStatus.RUNNING);
+        Campaign c = sampleCampaign(id, CampaignStatus.RUNNING, currentUserId);
         when(campaignRepository.findById(id)).thenReturn(Optional.of(c));
 
-        CampaignResponse response = campaignService.findById(id);
+        CampaignResponse response = campaignService.findById(id, currentUserId, UserRole.AGENT);
 
         assertEquals(id, response.id());
         assertEquals("Test campaign", response.name());
@@ -228,7 +228,7 @@ class CampaignServiceTest {
         Page<Campaign> page = new PageImpl<>(List.of(c), pageable, 1);
         when(campaignRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
-        PageResponse<CampaignResponse> result = campaignService.findAll(new CampaignFilter(null, null, null), pageable);
+        PageResponse<CampaignResponse> result = campaignService.findAll(new CampaignFilter(null, null, null), pageable, currentUserId);
 
         assertEquals(1, result.totalElements());
         assertEquals(1, result.content().size());
@@ -272,7 +272,7 @@ class CampaignServiceTest {
             null, null, null, null, null, null,
             "Acme", "https://acme.com", "SaaS", "CRM", "cercano");
 
-        CampaignResponse response = campaignService.update(id, req, currentUserId);
+        CampaignResponse response = campaignService.update(id, req, currentUserId, UserRole.ADMIN);
 
         assertThat(response.company()).isEqualTo("Acme");
         assertThat(response.website()).isEqualTo("https://acme.com");
@@ -307,7 +307,7 @@ class CampaignServiceTest {
         when(campaignRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
         PageResponse<CampaignResponse> result =
-            campaignService.findAll(new CampaignFilter(null, null, true), pageable);
+            campaignService.findAll(new CampaignFilter(null, null, true), pageable, currentUserId);
 
         assertEquals(1, result.totalElements());
         verify(campaignRepository).findAll(any(Specification.class), eq(pageable));
@@ -318,7 +318,7 @@ class CampaignServiceTest {
         UUID id = UUID.randomUUID();
         when(campaignRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> campaignService.launch(id, currentUserId));
+        assertThrows(ResourceNotFoundException.class, () -> campaignService.launch(id, currentUserId, UserRole.ADMIN));
     }
 
     @Test
@@ -328,7 +328,7 @@ class CampaignServiceTest {
         when(campaignRepository.findById(id)).thenReturn(Optional.of(c));
         when(campaignRepository.save(any(Campaign.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        CampaignResponse response = campaignService.launch(id, currentUserId);
+        CampaignResponse response = campaignService.launch(id, currentUserId, UserRole.ADMIN);
 
         assertEquals(CampaignStatus.RUNNING, response.status());
     }

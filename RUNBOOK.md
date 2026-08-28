@@ -93,14 +93,14 @@ callsagents-frontend   Up X minutes              0.0.0.0:80->80/tcp
 # 1) Health-like check (Swagger UI debe devolver 200)
 curl -i http://localhost:8080/api/swagger-ui/index.html | head -1
 
-# 2) Login (debe devolver 200 + accessToken) — admin de producción (V12/V14)
+# 2) Login (debe devolver 200 + accessToken) — admin de producción (V12/V19)
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"email":"contact@script-9.com","password":"Calls@gents2025!"}' \
+  -d '{"email":"contact@script-9.com","password":"<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>"}' \
   http://localhost:8080/api/auth/login
 
 # 3) Usar el accessToken para /auth/me (debe devolver 200 con tu perfil)
 ACCESS=$(curl -s -X POST -H "Content-Type: application/json" \
-  -d '{"email":"contact@script-9.com","password":"Calls@gents2025!"}' \
+  -d '{"email":"contact@script-9.com","password":"<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>"}' \
   http://localhost:8080/api/auth/login | jq -r .accessToken)
 
 curl -H "Authorization: Bearer $ACCESS" http://localhost:8080/api/auth/me
@@ -125,9 +125,9 @@ Si los 3 devuelven `HTTP 200`, el sistema está 100% operativo.
 | Campo | Valor | Origen |
 |---|---|---|
 | Email | `contact@script-9.com` | V12 (admin de producción) |
-| Password | `Calls@gents2025!` | V14 |
+| Password | `<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>` | V19 |
 
-> ⚠️ **Estas credenciales son del seed de producción** (migraciones V12/V14). El usuario seed dev (`V2__seed_admin.sql`) vive bajo `db/migration/dev` y sólo para desarrollo local. En producción NO se usa el seed dev.
+> ⚠️ **Estas credenciales son del seed de producción** (migraciones V12/V19). La contraseña rotada en V19 sólo vive fuera del repo (secrets/env `CALLSAGENTS_ADMIN_PASSWORD`). El usuario seed dev (`V2__seed_admin.sql`) vive bajo `db/migration/dev` y sólo para desarrollo local. En producción NO se usa el seed dev.
 
 ---
 

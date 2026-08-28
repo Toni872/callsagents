@@ -34,6 +34,10 @@ public class WhatsAppService {
     }
 
     public String processMessage(String phone, String body) {
+        return processMessage(phone, body, null);
+    }
+
+    public String processMessage(String phone, String body, UUID businessId) {
         String text = body == null ? "" : body.trim().toLowerCase();
         ConversationState state = conversations.getIfPresent(phone);
         if (state == null) {
@@ -54,7 +58,7 @@ public class WhatsAppService {
         String reply = switch (state.step()) {
             case INITIAL -> handleInitial(state, text);
             case SERVICE_RECEIVED -> handleService(state, text);
-            case NAME_RECEIVED -> handleName(state, text);
+            case NAME_RECEIVED -> handleName(state, text, businessId);
             case EMAIL_RECEIVED -> handleEmail(state, text);
             case COMPLETED -> "¿Hay algo más en lo que te pueda ayudar? Si quieres empezar de nuevo, escríbeme 'hola'.";
         };
@@ -81,12 +85,12 @@ public class WhatsAppService {
         return "¡Encantado, " + text.split("\\s+")[0] + "! ¿Cuál es tu email de contacto?";
     }
 
-    private String handleName(ConversationState state, String text) {
+    private String handleName(ConversationState state, String text, UUID businessId) {
         if (text.isEmpty() || !text.contains("@")) {
             return "Necesito un email válido, por ejemplo: tu@email.com";
         }
         conversations.put(phone(state), state.withEmail(text));
-        saveLead(state.withEmail(text));
+        saveLead(state.withEmail(text), businessId);
         return "¡Listo! Tu interés en " + state.serviceInterest() + " ha quedado registrado. "
             + "Te contactaremos pronto. ¿Hay algo más en lo que te pueda ayudar?";
     }
@@ -97,7 +101,7 @@ public class WhatsAppService {
         return "¿Hay algo más en lo que te pueda ayudar?";
     }
 
-    private void saveLead(ConversationState state) {
+    private void saveLead(ConversationState state, UUID businessId) {
         try {
             String firstName = extractFirstName(state.name());
             String lastName = extractLastName(state.name());
@@ -109,9 +113,14 @@ public class WhatsAppService {
                 if (state.email() != null) lead.setEmail(state.email());
                 if (state.serviceInterest() != null) lead.setNotes(state.serviceInterest());
                 lead.setSource(LeadSource.WHATSAPP);
+                if (lead.getCreatedBy() == null && businessId != null) lead.setCreatedBy(businessId);
                 leadRepository.save(lead);
                 log.info("WhatsApp lead updated: phone={} email={}", phoneE164, state.email());
             } else {
+                if (businessId == null) {
+                    log.warn("Skip WhatsApp lead creation for {}: no business profile resolved (created_by NOT NULL)", phoneE164);
+                    return;
+                }
                 Lead lead = Lead.builder()
                     .firstName(firstName)
                     .lastName(lastName)
@@ -122,6 +131,7 @@ public class WhatsAppService {
                     .source(LeadSource.WHATSAPP)
                     .notes("Servicio de interés: " + state.serviceInterest())
                     .doNotCall(false)
+                    .createdBy(businessId)
                     .build();
                 leadRepository.save(lead);
                 log.info("WhatsApp lead created: phone={} email={}", phoneE164, state.email());

@@ -62,17 +62,23 @@ public class CallController {
         @RequestParam(required = false) CallOutcome outcome,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
-        @RequestParam(defaultValue = "createdAt,desc") String sort
+        @RequestParam(defaultValue = "createdAt,desc") String sort,
+        @AuthenticationPrincipal UserDetails user
     ) {
+        User current = resolveUser(user);
         Pageable pageable = buildPageable(page, size, sort);
         CallFilter filter = new CallFilter(campaignId, userId, leadId, status, outcome);
-        return ResponseEntity.ok(callService.findAll(filter, pageable));
+        return ResponseEntity.ok(callService.findAll(filter, pageable, current.getId()));
     }
 
     @Operation(summary = "Obtener llamada por ID")
     @GetMapping("/{id}")
-    public ResponseEntity<CallResponse> findById(@PathVariable UUID id) {
-        return ResponseEntity.ok(callService.findById(id));
+    public ResponseEntity<CallResponse> findById(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserDetails user
+    ) {
+        User current = resolveUser(user);
+        return ResponseEntity.ok(callService.findById(id, current.getId()));
     }
 
     @Operation(summary = "Registrar nueva llamada")

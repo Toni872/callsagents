@@ -106,7 +106,7 @@ public class VonageWebhookController {
         // already sent interactive buttons/greeting — falling through here
         // caused a duplicate (and failing) second send. Do NOT re-send.
         if (reply == null && !aiChatbotService.isGroqConfigured()) {
-            reply = whatsAppService.processMessage(from, text);
+            reply = whatsAppService.processMessage(from, text, businessId);
         }
 
         // Send reply via Vonage API (only when there is actually text to send)

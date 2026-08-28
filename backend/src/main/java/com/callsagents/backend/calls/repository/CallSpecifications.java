@@ -23,6 +23,10 @@ public final class CallSpecifications {
         return (root, query, cb) -> userId == null ? cb.conjunction() : cb.equal(root.get("userId"), userId);
     }
 
+    public static Specification<Call> ownedBy(UUID userId) {
+        return hasUser(userId);
+    }
+
     public static Specification<Call> hasLead(UUID leadId) {
         return (root, query, cb) -> leadId == null ? cb.conjunction() : cb.equal(root.get("leadId"), leadId);
     }

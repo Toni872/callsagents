@@ -13,4 +13,8 @@ import java.util.UUID;
 public interface CallRepository extends JpaRepository<Call, UUID>, JpaSpecificationExecutor<Call> {
     long countByCreatedAtBetween(Instant from, Instant to);
     long countByCreatedAtBetweenAndStatus(Instant from, Instant to, CallStatus status);
+
+    // Multi-tenant (per-user) scoping variants
+    long countByCreatedAtBetweenAndUserId(Instant from, Instant to, UUID userId);
+    long countByCreatedAtBetweenAndStatusAndUserId(Instant from, Instant to, CallStatus status, UUID userId);
 }

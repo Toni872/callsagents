@@ -17,7 +17,12 @@ try {
 # 2. Login
 Write-Host "`n[2] Login..." -ForegroundColor Yellow
 try {
-    $r = Invoke-RestMethod -Uri "$BASE/auth/login" -Method Post -ContentType "application/json" -Body '{"email":"contact@script-9.com","password":"Calls@gents2025!"}'
+    $adminPassword = $env:CALLSAGENTS_ADMIN_PASSWORD
+    if ([string]::IsNullOrWhiteSpace($adminPassword)) {
+        throw 'CALLSAGENTS_ADMIN_PASSWORD environment variable is required (rotated by migration V19).'
+    }
+    $body = @{ email = "contact@script-9.com"; password = $adminPassword } | ConvertTo-Json
+    $r = Invoke-RestMethod -Uri "$BASE/auth/login" -Method Post -ContentType "application/json" -Body $body
     $tok = $r.accessToken
     Write-Host "  OK: Token obtenido" -ForegroundColor Green
 } catch {

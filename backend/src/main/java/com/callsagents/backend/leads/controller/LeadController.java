@@ -64,17 +64,23 @@ public class LeadController {
         @RequestParam(required = false) String search,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
-        @RequestParam(defaultValue = "createdAt,desc") String sort
+        @RequestParam(defaultValue = "createdAt,desc") String sort,
+        @AuthenticationPrincipal UserDetails user
     ) {
+        User current = resolveUser(user);
         Pageable pageable = buildPageable(page, size, sort);
         LeadFilter filter = new LeadFilter(status, source, assignedToId, search);
-        return ResponseEntity.ok(leadService.findAll(filter, pageable));
+        return ResponseEntity.ok(leadService.findAll(filter, pageable, current.getId()));
     }
 
     @Operation(summary = "Obtener lead por ID")
     @GetMapping("/{id}")
-    public ResponseEntity<LeadResponse> findById(@PathVariable UUID id) {
-        return ResponseEntity.ok(leadService.findById(id));
+    public ResponseEntity<LeadResponse> findById(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserDetails user
+    ) {
+        User current = resolveUser(user);
+        return ResponseEntity.ok(leadService.findById(id, current.getId()));
     }
 
     @Operation(summary = "Crear lead manualmente")
@@ -83,7 +89,7 @@ public class LeadController {
         @Valid @RequestBody CreateLeadRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
+        UUID userId = resolveUser(user).getId();
         LeadResponse created = leadService.create(req, userId);
         return ResponseEntity.created(URI.create("/api/leads/" + created.id())).body(created);
     }
@@ -95,7 +101,7 @@ public class LeadController {
         @Valid @RequestBody UpdateLeadRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
+        UUID userId = resolveUser(user).getId();
         return ResponseEntity.ok(leadService.update(id, req, userId));
     }
 
@@ -106,8 +112,8 @@ public class LeadController {
         @PathVariable UUID id,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        leadService.delete(id, userId);
+        User current = resolveUser(user);
+        leadService.delete(id, current.getId(), current.getRole());
         return ResponseEntity.noContent().build();
     }
 
@@ -118,7 +124,7 @@ public class LeadController {
         @RequestParam("file") MultipartFile file,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
+        UUID userId = resolveUser(user).getId();
         return ResponseEntity.status(HttpStatus.CREATED).body(leadService.importCsv(file, userId));
     }
 
@@ -130,12 +136,11 @@ public class LeadController {
         return PaginationUtils.buildPageable(page, size, sort, "createdAt", Sort.Direction.DESC, ALLOWED_SORT_FIELDS);
     }
 
-    private UUID resolveUserId(UserDetails user) {
+    private User resolveUser(UserDetails user) {
         if (user == null) {
             throw new UnauthorizedException("Authentication required");
         }
-        User u = userRepository.findByEmail(user.getUsername())
+        return userRepository.findByEmail(user.getUsername())
             .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-        return u.getId();
     }
 }

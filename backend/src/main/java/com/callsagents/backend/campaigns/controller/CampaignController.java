@@ -63,17 +63,23 @@ public class CampaignController {
         @RequestParam(required = false) Boolean hasVoiceConfig,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
-        @RequestParam(defaultValue = "createdAt,desc") String sort
+        @RequestParam(defaultValue = "createdAt,desc") String sort,
+        @AuthenticationPrincipal UserDetails user
     ) {
+        User current = resolveUser(user);
         Pageable pageable = buildPageable(page, size, sort);
         CampaignFilter filter = new CampaignFilter(status, createdById, hasVoiceConfig);
-        return ResponseEntity.ok(campaignService.findAll(filter, pageable));
+        return ResponseEntity.ok(campaignService.findAll(filter, pageable, current.getId()));
     }
 
     @Operation(summary = "Obtener campaña por ID")
     @GetMapping("/{id}")
-    public ResponseEntity<CampaignResponse> findById(@PathVariable UUID id) {
-        return ResponseEntity.ok(campaignService.findById(id));
+    public ResponseEntity<CampaignResponse> findById(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserDetails user
+    ) {
+        User current = resolveUser(user);
+        return ResponseEntity.ok(campaignService.findById(id, current.getId(), current.getRole()));
     }
 
     @Operation(summary = "Crear campaña (solo ADMIN)")
@@ -96,8 +102,8 @@ public class CampaignController {
         @Valid @RequestBody UpdateCampaignRequest req,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        return ResponseEntity.ok(campaignService.update(id, req, userId));
+        User current = resolveUser(user);
+        return ResponseEntity.ok(campaignService.update(id, req, current.getId(), current.getRole()));
     }
 
     @Operation(summary = "Previsualizar el prompt de voz de la campaña (solo ADMIN)")
@@ -116,8 +122,8 @@ public class CampaignController {
         @PathVariable UUID id,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        return ResponseEntity.ok(campaignService.launch(id, userId));
+        User current = resolveUser(user);
+        return ResponseEntity.ok(campaignService.launch(id, current.getId(), current.getRole()));
     }
 
     @Operation(summary = "Pausar campaña en curso (solo ADMIN)")
@@ -127,8 +133,8 @@ public class CampaignController {
         @PathVariable UUID id,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        return ResponseEntity.ok(campaignService.pause(id, userId));
+        User current = resolveUser(user);
+        return ResponseEntity.ok(campaignService.pause(id, current.getId(), current.getRole()));
     }
 
     private Pageable buildPageable(int page, int size, String sort) {
@@ -136,11 +142,14 @@ public class CampaignController {
     }
 
     private UUID resolveUserId(UserDetails user) {
+        return resolveUser(user).getId();
+    }
+
+    private User resolveUser(UserDetails user) {
         if (user == null) {
             throw new UnauthorizedException("Authentication required");
         }
-        User u = userRepository.findByEmail(user.getUsername())
+        return userRepository.findByEmail(user.getUsername())
             .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-        return u.getId();
     }
 }

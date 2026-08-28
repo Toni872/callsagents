@@ -20,6 +20,7 @@ import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,15 +48,22 @@ public class CallService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<CallResponse> findAll(CallFilter filter, Pageable pageable) {
-        Page<Call> page = callRepository.findAll(CallSpecifications.build(filter), pageable);
+    public PageResponse<CallResponse> findAll(CallFilter filter, Pageable pageable, UUID currentUserId) {
+        Specification<Call> spec = CallSpecifications.build(filter);
+        spec = (spec == null)
+            ? CallSpecifications.ownedBy(currentUserId)
+            : spec.and(CallSpecifications.ownedBy(currentUserId));
+        Page<Call> page = callRepository.findAll(spec, pageable);
         return PageResponse.from(page.map(CallResponse::fromEntity));
     }
 
     @Transactional(readOnly = true)
-    public CallResponse findById(UUID id) {
+    public CallResponse findById(UUID id, UUID currentUserId) {
         Call call = callRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Call not found: " + id));
+        if (call.getUserId() == null || !call.getUserId().equals(currentUserId)) {
+            throw new ResourceNotFoundException("Call not found: " + id);
+        }
         return CallResponse.fromEntity(call);
     }
 
@@ -72,7 +80,7 @@ public class CallService {
         Call call = Call.builder()
             .campaignId(req.campaignId())
             .leadId(req.leadId())
-            .userId(req.userId())
+            .userId(currentUserId)
             .startedAt(req.startedAt())
             .endedAt(req.endedAt())
             .durationSeconds(req.durationSeconds())

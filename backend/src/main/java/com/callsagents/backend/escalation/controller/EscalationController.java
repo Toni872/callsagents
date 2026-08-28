@@ -53,8 +53,8 @@ public class EscalationController {
         @PathVariable UUID leadId,
         @AuthenticationPrincipal UserDetails user
     ) {
-        resolveUserId(user);
-        return escalationService.getForLead(leadId)
+        UUID currentUserId = resolveUserId(user);
+        return escalationService.getForLead(leadId, currentUserId)
             .map(e -> ResponseEntity.ok(Map.of("success", true, "data", EscalationResponse.from(e))))
             .orElseGet(() -> {
                 Map<String, Object> body = new LinkedHashMap<>();
@@ -71,8 +71,8 @@ public class EscalationController {
         @PathVariable UUID id,
         @AuthenticationPrincipal UserDetails user
     ) {
-        resolveUserId(user);
-        Escalation escalation = escalationService.cancel(id);
+        User current = resolveUser(user);
+        Escalation escalation = escalationService.cancel(id, current.getId(), current.getRole());
         return ResponseEntity.ok(Map.of("success", true, "data", EscalationResponse.from(escalation)));
     }
 
@@ -114,11 +114,14 @@ public class EscalationController {
     }
 
     private UUID resolveUserId(UserDetails user) {
+        return resolveUser(user).getId();
+    }
+
+    private User resolveUser(UserDetails user) {
         if (user == null) {
             throw new UnauthorizedException("Authentication required");
         }
-        User u = userRepository.findByEmail(user.getUsername())
+        return userRepository.findByEmail(user.getUsername())
             .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-        return u.getId();
     }
 }

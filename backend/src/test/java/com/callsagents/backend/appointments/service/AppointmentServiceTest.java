@@ -193,7 +193,7 @@ class AppointmentServiceTest {
     void findByIdThrowsWhenMissing() {
         UUID id = UUID.randomUUID();
         when(appointmentRepository.findById(id)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> appointmentService.findById(id));
+        assertThrows(ResourceNotFoundException.class, () -> appointmentService.findById(id, currentUserId));
     }
 
     @Test
@@ -203,7 +203,7 @@ class AppointmentServiceTest {
         Page<Appointment> page = new PageImpl<>(List.of(a), pageable, 1);
         when(appointmentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
-        PageResponse<AppointmentResponse> result = appointmentService.findAll(new AppointmentFilter(null, null, null), pageable);
+        PageResponse<AppointmentResponse> result = appointmentService.findAll(new AppointmentFilter(null, null, null), pageable, currentUserId);
 
         assertEquals(1, result.totalElements());
         assertNotNull(result.content().get(0));

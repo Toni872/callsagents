@@ -64,17 +64,23 @@ public class AppointmentController {
         @RequestParam(required = false) AppointmentStatus status,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
-        @RequestParam(defaultValue = "scheduledAt,asc") String sort
+        @RequestParam(defaultValue = "scheduledAt,asc") String sort,
+        @AuthenticationPrincipal UserDetails user
     ) {
+        User current = resolveUser(user);
         Pageable pageable = buildPageable(page, size, sort);
         AppointmentFilter filter = new AppointmentFilter(leadId, userId, status);
-        return ResponseEntity.ok(appointmentService.findAll(filter, pageable));
+        return ResponseEntity.ok(appointmentService.findAll(filter, pageable, current.getId()));
     }
 
     @Operation(summary = "Obtener cita por ID")
     @GetMapping("/{id}")
-    public ResponseEntity<AppointmentResponse> findById(@PathVariable UUID id) {
-        return ResponseEntity.ok(appointmentService.findById(id));
+    public ResponseEntity<AppointmentResponse> findById(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserDetails user
+    ) {
+        User current = resolveUser(user);
+        return ResponseEntity.ok(appointmentService.findById(id, current.getId()));
     }
 
     @Operation(summary = "Crear cita")

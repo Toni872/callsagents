@@ -11,4 +11,7 @@ import java.util.UUID;
 @Repository
 public interface CampaignRepository extends JpaRepository<Campaign, UUID>, JpaSpecificationExecutor<Campaign> {
     long countByStatus(CampaignStatus status);
+
+    // Multi-tenant (per-user) scoping variant
+    long countByStatusAndCreatedBy(CampaignStatus status, UUID createdBy);
 }

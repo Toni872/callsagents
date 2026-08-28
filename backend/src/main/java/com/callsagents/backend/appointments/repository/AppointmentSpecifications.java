@@ -22,6 +22,10 @@ public final class AppointmentSpecifications {
         return (root, query, cb) -> userId == null ? cb.conjunction() : cb.equal(root.get("userId"), userId);
     }
 
+    public static Specification<Appointment> ownedBy(UUID userId) {
+        return hasUser(userId);
+    }
+
     public static Specification<Appointment> hasStatus(AppointmentStatus status) {
         return (root, query, cb) -> status == null ? cb.conjunction() : cb.equal(root.get("status"), status);
     }

@@ -68,13 +68,13 @@ Wait ~60s for the backend to apply Flyway migrations and start. Check health:
 docker compose ps
 # All 4 should show 'healthy' (frontend may show 'Up' without healthcheck)
 
-# Smoke test — NOTE: the production admin is contact@script-9.com (V12)
+# Smoke test — NOTE: the production admin is contact@script-9.com (V12/V19)
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"email":"contact@script-9.com","password":"Calls@gents2025!"}' \
+  -d '{"email":"contact@script-9.com","password":"<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>"}' \
   http://localhost:8080/api/auth/login
 ```
 
-Open in browser: `http://localhost/`. Login with `contact@script-9.com` / `Calls@gents2025!` (admin, prod seed V12).
+Open in browser: `http://localhost/`. Login with `contact@script-9.com` / `<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>` (admin, prod seed V12/V19).
 
 ## 5. Repository structure
 

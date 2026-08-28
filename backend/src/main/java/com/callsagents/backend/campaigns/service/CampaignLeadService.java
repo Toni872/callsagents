@@ -2,6 +2,7 @@ package com.callsagents.backend.campaigns.service;
 
 import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.campaigns.dto.AddLeadRequest;
 import com.callsagents.backend.campaigns.dto.CampaignLeadResponse;
@@ -11,6 +12,7 @@ import com.callsagents.backend.campaigns.entity.CampaignLeadStatus;
 import com.callsagents.backend.campaigns.repository.CampaignLeadRepository;
 import com.callsagents.backend.campaigns.repository.CampaignRepository;
 import com.callsagents.backend.common.dto.PageResponse;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
@@ -53,8 +55,10 @@ public class CampaignLeadService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<CampaignLeadResponse> listLeads(UUID campaignId, int page, int size) {
-        if (!campaignRepository.existsById(campaignId)) {
+    public PageResponse<CampaignLeadResponse> listLeads(UUID campaignId, int page, int size,
+                                                        UUID currentUserId, UserRole role) {
+        Campaign campaign = getCampaign(campaignId);
+        if (!isOwnerOrAdmin(campaign, currentUserId, role)) {
             throw new ResourceNotFoundException("Campaign not found: " + campaignId);
         }
         int safePage = Math.max(0, page);
@@ -65,9 +69,10 @@ public class CampaignLeadService {
     }
 
     @Transactional
-    public CampaignLeadResponse addLead(UUID campaignId, AddLeadRequest req, UUID currentUserId) {
-        Campaign campaign = campaignRepository.findById(campaignId)
-            .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + campaignId));
+    public CampaignLeadResponse addLead(UUID campaignId, AddLeadRequest req,
+                                        UUID currentUserId, UserRole role) {
+        Campaign campaign = getCampaign(campaignId);
+        requireOwner(campaign, currentUserId, role);
 
         Lead lead = leadRepository.findById(req.leadId())
             .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + req.leadId()));
@@ -95,12 +100,31 @@ public class CampaignLeadService {
     }
 
     @Transactional
-    public void removeLead(UUID campaignId, UUID leadId, UUID currentUserId) {
+    public void removeLead(UUID campaignId, UUID leadId, UUID currentUserId, UserRole role) {
+        Campaign campaign = getCampaign(campaignId);
+        requireOwner(campaign, currentUserId, role);
+
         long removed = campaignLeadRepository.deleteByCampaignIdAndLeadId(campaignId, leadId);
         if (removed == 0) {
             throw new ResourceNotFoundException(
                 "Lead " + leadId + " is not assigned to campaign " + campaignId
             );
+        }
+    }
+
+    private Campaign getCampaign(UUID campaignId) {
+        return campaignRepository.findById(campaignId)
+            .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + campaignId));
+    }
+
+    private static boolean isOwnerOrAdmin(Campaign campaign, UUID userId, UserRole role) {
+        return (campaign.getCreatedBy() != null && campaign.getCreatedBy().equals(userId))
+            || role == UserRole.ADMIN;
+    }
+
+    private static void requireOwner(Campaign campaign, UUID userId, UserRole role) {
+        if (!isOwnerOrAdmin(campaign, userId, role)) {
+            throw new ForbiddenException("You can only manage your own campaigns");
         }
     }
 

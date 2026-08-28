@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -59,8 +58,11 @@ class BusinessPromptComposerTest {
 
         String prompt = composer.compose(profile);
 
-        assertTrue(prompt.contains("Roberto"));
-        assertFalse(prompt.contains("Naiara"));
+        // La cabecera dinamica usa el botName/companyName del negocio...
+        assertTrue(prompt.contains("Eres Roberto"));
+        assertTrue(prompt.contains("Acme Corp"));
+        // ...y la base de conocimiento comercial rica compartida se mantiene (SCRIPT9).
+        assertTrue(prompt.contains("SCRIPT9"));
     }
 
     @Test

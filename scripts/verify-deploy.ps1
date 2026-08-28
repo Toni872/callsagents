@@ -29,8 +29,10 @@ $backendUrl = 'http://localhost:8080'
 $prodBackend = 'https://callsagents-production.up.railway.app'
 $prodFrontend = 'https://callsagents-frontend-production.up.railway.app'
 
-$adminEmail = 'admin@callsagents.com'
-$adminPassword = 'admin123'
+# NOTE: V12 renamed the admin email to contact@script-9.com and V14 rotated its
+# password. These are the CURRENT seed credentials (see migrations V12/V14).
+$adminEmail = 'contact@script-9.com'
+$adminPassword = 'Calls@gents2025!'
 
 # Variables REQUIRED on the Railway backend service.
 $requiredBackendVars = @(
@@ -81,7 +83,7 @@ Push-Location "$root\backend"
 try {
     mvn -q clean test 2>&1 | Out-Null
     Assert-ExitOk 'mvn clean test'
-    Write-Ok '178+ backend tests passed'
+    Write-Ok 'Backend tests passed'
 } finally { Pop-Location }
 
 # ---------------------------------------------------------------- 2. Frontend build

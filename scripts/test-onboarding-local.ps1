@@ -6,7 +6,7 @@ Write-Host "=== Test Onboarding Wizard ===" -ForegroundColor Cyan
 # 1. Health check
 Write-Host "`n[1] Health check..." -ForegroundColor Yellow
 try {
-    $h = Invoke-RestMethod -Uri "http://localhost:8080/health" -Method Get
+    $h = Invoke-RestMethod -Uri "http://localhost:8080/api/health" -Method Get
     Write-Host "  OK: $h" -ForegroundColor Green
 } catch {
     Write-Host "  FALLO: Backend no responde en localhost:8080" -ForegroundColor Red
@@ -18,7 +18,7 @@ try {
 Write-Host "`n[2] Login..." -ForegroundColor Yellow
 try {
     $r = Invoke-RestMethod -Uri "$BASE/auth/login" -Method Post -ContentType "application/json" -Body '{"email":"contact@script-9.com","password":"Calls@gents2025!"}'
-    $tok = $r.token
+    $tok = $r.accessToken
     Write-Host "  OK: Token obtenido" -ForegroundColor Green
 } catch {
     Write-Host "  FALLO: Login" -ForegroundColor Red
@@ -56,7 +56,7 @@ try {
 Write-Host "`n[4] Chat con businessId..." -ForegroundColor Yellow
 $body = @{ sessionId = "test-$(Get-Random)"; message = "Hola"; businessId = $uid } | ConvertTo-Json
 try {
-    $c = Invoke-RestMethod -Uri "http://localhost:8080/chat/message" -Method Post -ContentType "application/json" -Body $body
+    $c = Invoke-RestMethod -Uri "http://localhost:8080/api/chat/message" -Method Post -ContentType "application/json" -Body $body
     Write-Host "  OK: $($c.response)" -ForegroundColor Green
 } catch {
     Write-Host "  FALLO: $_" -ForegroundColor Red

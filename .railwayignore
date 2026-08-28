@@ -5,3 +5,7 @@ frontend/dist/
 backend/target/
 *.log
 .DS_Store
+# Never upload local secrets/env files to Railway
+.env
+.env.*
+!.env.example

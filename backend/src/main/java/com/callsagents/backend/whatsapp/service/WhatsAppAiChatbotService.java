@@ -19,6 +19,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class WhatsAppAiChatbotService {
@@ -48,6 +50,9 @@ public class WhatsAppAiChatbotService {
         .build();
 
     private static final int MAX_HISTORY = 20;
+
+    private static final Pattern EMAIL_PATTERN =
+        Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
 
     // System prompt for AI with interactive step awareness
     private String resolveSystemPrompt(UUID userId) {
@@ -138,6 +143,15 @@ public class WhatsAppAiChatbotService {
 
         // Check if AI extracted lead data
         String cleanResponse = extractAndSaveLead(phone, aiResponse, businessId);
+
+        // Deterministic fallback: some models (observed: gpt-oss-20b) reply
+        // conversationally and never emit the [LEAD:...] tag even when the system
+        // prompt instructs it. When we are in the data-collection step and the
+        // user message carries an email, parse name/email directly from the
+        // message and persist the lead instead of silently dropping it.
+        if (businessId != null && "collecting_info".equals(step) && containsEmail(text)) {
+            saveLeadFromMessage(phone, text, businessId);
+        }
 
         // Determine next interactive step
         advanceStep(phone, text, cleanResponse, step);
@@ -428,6 +442,87 @@ public class WhatsAppAiChatbotService {
         } catch (Exception e) {
             log.error("Failed to save AI chatbot lead: phone={}", phone, e);
         }
+    }
+
+    /**
+     * Deterministic fallback that saves a lead directly from the user message
+     * when the AI model failed to emit the machine-readable [LEAD:...] tag.
+     * Only called when a business profile is resolved and the flow is in
+     * collecting_info (name/email collection). Fills the leadData cache too so
+     * follow-up confirmation buttons show the captured values.
+     */
+    private void saveLeadFromMessage(String phone, String message, UUID businessId) {
+        try {
+            String text = message.trim();
+            Matcher emailMatcher = EMAIL_PATTERN.matcher(text);
+            if (!emailMatcher.find()) {
+                return;
+            }
+            String email = emailMatcher.group();
+
+            Map<String, String> cached = leadData.getIfPresent(phone);
+            Map<String, String> data = cached == null ? new HashMap<>() : new HashMap<>(cached);
+
+            // The AI tag parser already captured this lead -> nothing to add.
+            if (data.containsKey("email")) {
+                return;
+            }
+
+            // Do not overwrite data the tag parser might have added for name only
+            String name = extractNameFromMessage(text);
+            if (name != null && !data.containsKey("name")) {
+                data.put("name", name);
+            }
+            data.put("email", email);
+            leadData.put(phone, data);
+            saveLead(phone, data, businessId);
+            log.info("AI chatbot lead fallback saved: phone={} email={}", phone, email);
+        } catch (Exception e) {
+            log.error("Failed to save AI chatbot lead from message: phone={}", phone, e);
+        }
+    }
+
+    /**
+     * Best-effort name extraction from a free-form message such as
+     * "Me llamo Antonio, antonio@test.com" or "Soy María García maria@mail.com".
+     * Strips common Spanish intro words and returns up to two tokens.
+     */
+    private String extractNameFromMessage(String message) {
+        String text = message.trim();
+        String lower = text.toLowerCase();
+
+        String[] intro = {"me llamo ", "mi nombre es ", "soy ", "es "};
+        String afterIntro = null;
+        for (String marker : intro) {
+            int idx = lower.indexOf(marker);
+            if (idx >= 0) {
+                afterIntro = text.substring(idx + marker.length()).trim();
+                break;
+            }
+        }
+        String nameCandidate = afterIntro != null ? afterIntro : text;
+
+        // Cut at email or punctuation: "Antonio, antonio@test.com" -> "Antonio"
+        Matcher email = EMAIL_PATTERN.matcher(nameCandidate);
+        if (email.find()) {
+            nameCandidate = nameCandidate.substring(0, email.start()).trim();
+        }
+        int comma = nameCandidate.indexOf(',');
+        if (comma >= 0) {
+            nameCandidate = nameCandidate.substring(0, comma).trim();
+        }
+
+        if (nameCandidate.isEmpty()) {
+            return null;
+        }
+        // Keep up to two words ("Antonio" or "María García")
+        String[] tokens = nameCandidate.split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(2, tokens.length); i++) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(tokens[i]);
+        }
+        return sb.toString();
     }
 
     /**

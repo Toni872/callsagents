@@ -5,10 +5,13 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,6 +28,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Component
 public class RateLimitFilter implements Filter {
+
+    private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
 
     // Sliding window counters per IP+path prefix
     private final Cache<String, AtomicInteger> requestCounts = Caffeine.newBuilder()
@@ -93,8 +98,34 @@ public class RateLimitFilter implements Filter {
     private String getClientIp(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
+            String first = xForwardedFor.split(",")[0].trim();
+            if (isValidIp(first)) {
+                return first;
+            }
+            log.warn("Ignoring invalid X-Forwarded-For value '{}', falling back to remote addr", first);
         }
         return request.getRemoteAddr();
+    }
+
+    /**
+     * Returns true only when the value parses as a legitimate IPv4/IPv6 address.
+     * Used to avoid trusting a spoofed X-Forwarded-For header for rate limiting.
+     */
+    private boolean isValidIp(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        try {
+            InetAddress addr = InetAddress.getByName(value);
+            String ip = addr.getHostAddress();
+            // InetAddress.getByName normalizes some inputs; reject anything that
+            // is not a plain IPv4 or IPv6 literal (e.g. hostnames, encodings).
+            return ip != null
+                && (ip.contains(".") || ip.contains(":"))
+                && !ip.startsWith("0")
+                && !ip.equals("0.0.0.0");
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

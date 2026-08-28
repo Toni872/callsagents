@@ -90,7 +90,7 @@ public class GlobalExceptionHandler {
         log.error("Unhandled exception on {} {}", req.getMethod(), req.getRequestURI(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(new ApiError(Instant.now(), 500, "internal_error",
-                ex.getMessage() == null ? "Unexpected error" : ex.getMessage(),
+                "Internal server error",
                 req.getRequestURI()));
     }
 }

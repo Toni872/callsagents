@@ -6,8 +6,11 @@ import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
 import com.callsagents.backend.whatsapp.service.VonageMessageService;
+import com.callsagents.backend.whatsapp.service.VonageWebhookValidator;
 import com.callsagents.backend.whatsapp.service.WhatsAppAiChatbotService;
 import com.callsagents.backend.whatsapp.service.WhatsAppService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -29,27 +32,43 @@ public class VonageWebhookController {
     private final BusinessService businessService;
     private final EscalationService escalationService;
     private final LeadRepository leadRepository;
+    private final VonageWebhookValidator webhookValidator;
+    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
     public VonageWebhookController(WhatsAppService whatsAppService,
                                     WhatsAppAiChatbotService aiChatbotService,
                                     VonageMessageService vonageMessageService,
                                     BusinessService businessService,
                                     EscalationService escalationService,
-                                    LeadRepository leadRepository) {
+                                    LeadRepository leadRepository,
+                                    VonageWebhookValidator webhookValidator) {
         this.whatsAppService = whatsAppService;
         this.aiChatbotService = aiChatbotService;
         this.vonageMessageService = vonageMessageService;
         this.businessService = businessService;
         this.escalationService = escalationService;
         this.leadRepository = leadRepository;
+        this.webhookValidator = webhookValidator;
     }
 
     /**
      * Vonage inbound webhook. Handles text messages, button replies, and list replies.
+     * The raw body is verified against X-Vonage-Signature (HMAC-SHA256) before
+     * processing. Invalid signatures are rejected with 401 and never processed.
      */
     @SuppressWarnings("unchecked")
     @PostMapping
-    public ResponseEntity<Void> handleInbound(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<Void> handleInbound(
+            @RequestHeader(value = "X-Vonage-Signature", required = false) String xVonageSignature,
+            HttpServletRequest request) throws java.io.IOException {
+        byte[] rawBody = request.getInputStream().readAllBytes();
+
+        if (!webhookValidator.verify(rawBody, xVonageSignature)) {
+            log.warn("Vonage webhook rejected: invalid X-Vonage-Signature");
+            return ResponseEntity.status(401).build();
+        }
+
+        Map<String, Object> payload = mapper.readValue(rawBody, Map.class);
         String from = (String) payload.getOrDefault("from", "");
         String to = (String) payload.getOrDefault("to", "");
         String channel = (String) payload.getOrDefault("channel", "");

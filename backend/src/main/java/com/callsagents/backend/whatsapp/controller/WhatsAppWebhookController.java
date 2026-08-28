@@ -1,5 +1,6 @@
 package com.callsagents.backend.whatsapp.controller;
 
+import com.callsagents.backend.whatsapp.service.TwilioWebhookValidator;
 import com.callsagents.backend.whatsapp.service.WhatsAppService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -8,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,9 +23,12 @@ public class WhatsAppWebhookController {
     private static final Logger log = LoggerFactory.getLogger(WhatsAppWebhookController.class);
 
     private final WhatsAppService whatsAppService;
+    private final TwilioWebhookValidator webhookValidator;
 
-    public WhatsAppWebhookController(WhatsAppService whatsAppService) {
+    public WhatsAppWebhookController(WhatsAppService whatsAppService,
+                                     TwilioWebhookValidator webhookValidator) {
         this.whatsAppService = whatsAppService;
+        this.webhookValidator = webhookValidator;
     }
 
     /**
@@ -40,13 +45,22 @@ public class WhatsAppWebhookController {
      * Incoming WhatsApp messages from Twilio.
      * Twilio sends form-encoded data: Body, From, To, NumMedia, etc.
      * We respond with TwiML XML.
+     * The X-Twilio-Signature header is verified before processing; invalid
+     * signatures are rejected with 401 and never processed.
      */
     @PostMapping(consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
     public ResponseEntity<String> handleIncoming(
             @RequestParam("From") String from,
             @RequestParam("Body") String body,
             @RequestParam(value = "NumMedia", defaultValue = "0") String numMedia,
+            @RequestHeader(value = "X-Twilio-Signature", required = false) String xTwilioSignature,
+            @RequestParam Map<String, String> allParams,
             HttpServletRequest request) {
+
+        if (!webhookValidator.verify(xTwilioSignature, request, allParams)) {
+            log.warn("Twilio webhook rejected: invalid X-Twilio-Signature from={}", from);
+            return ResponseEntity.status(401).build();
+        }
 
         log.info("WhatsApp incoming: from={} body='{}' media={}", from, body, numMedia);
 

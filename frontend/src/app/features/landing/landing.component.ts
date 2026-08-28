@@ -81,7 +81,6 @@ const ORB_GREEN = '0,168,107';
 
           <div class="lnd-hero-ctas">
             <a class="lnd-btn lnd-btn--primary lnd-btn--hero" routerLink="/register">Crear cuenta gratis</a>
-            <a class="lnd-btn lnd-btn--outline lnd-btn--hero" routerLink="/register">Crear cuenta gratis</a>
           </div>
 
           <div class="lnd-stats">

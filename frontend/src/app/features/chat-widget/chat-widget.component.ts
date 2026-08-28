@@ -9,6 +9,7 @@ import {
   viewChild
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { apiUrl } from '../../core/api/api-base';
 import { VoiceWebApi } from '../../core/api/voice-web.api';
 import { WidgetConfigResponse } from '../../shared/models/business-profile.model';
@@ -30,7 +31,7 @@ interface ChatMessage {
         <div class="chat__brand">
           <span class="chat__brand-name">{{ widgetConfig()?.companyName || 'CALLSAGENTS' }}</span>
           <span class="chat__online-dot"></span>
-          <span class="chat__online-label">En linea</span>
+          <span class="chat__online-label">En línea</span>
         </div>
         <button
           class="chat__voice"
@@ -444,7 +445,7 @@ export class ChatWidgetComponent implements OnDestroy {
     this.voiceError.set(null);
 
     try {
-      const res = await this.voiceWebApi.createWebCall().toPromise();
+      const res = await firstValueFrom(this.voiceWebApi.createWebCall());
       if (!res?.access_token) {
         throw new Error('No se recibió un token de acceso del servidor.');
       }

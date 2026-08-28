@@ -48,9 +48,9 @@ import { CardComponent } from '../../../shared/components/card.component';
             <label class="field__label" for="industry">Industria</label>
             <select id="industry" class="field__input" [ngModel]="industry()" (ngModelChange)="industry.set($event)">
               <option value="">Selecciona una industria</option>
-              <option value="Tecnologia">Tecnologia</option>
+              <option value="Tecnologia">Tecnología</option>
               <option value="Salud">Salud</option>
-              <option value="Educacion">Educacion</option>
+              <option value="Educacion">Educación</option>
               <option value="Finanzas">Finanzas</option>
               <option value="Retail">Retail</option>
               <option value="Servicios Profesionales">Servicios Profesionales</option>
@@ -65,7 +65,7 @@ import { CardComponent } from '../../../shared/components/card.component';
             <textarea id="services" class="field__input field__textarea" rows="3" [ngModel]="services()" (ngModelChange)="services.set($event)"></textarea>
           </div>
 
-          <h3 class="settings-form__section">Configuracion del chatbot</h3>
+          <h3 class="settings-form__section">Configuración del chatbot</h3>
 
           <div class="field">
             <label class="field__label" for="botName">Nombre del chatbot</label>

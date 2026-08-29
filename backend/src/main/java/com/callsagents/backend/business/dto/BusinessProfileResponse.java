@@ -20,6 +20,7 @@ public record BusinessProfileResponse(
     Integer replyTimeoutMinutes,
     String followupMessage,
     String voiceAgentId,
+    String whatsappNumber,
     Boolean onboardingComplete,
     Instant createdAt,
     Instant updatedAt
@@ -40,6 +41,7 @@ public record BusinessProfileResponse(
             profile.getReplyTimeoutMinutes(),
             profile.getFollowupMessage(),
             profile.getVoiceAgentId(),
+            profile.getWhatsappNumber(),
             profile.getOnboardingComplete(),
             profile.getCreatedAt(),
             profile.getUpdatedAt()

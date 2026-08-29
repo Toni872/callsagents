@@ -28,6 +28,8 @@ public record BusinessProfileRequest(
 
     @Size(max = 2000) String followupMessage,
 
-    @Size(max = 100) String voiceAgentId
+    @Size(max = 20) String voiceAgentId,
+
+    @Size(max = 20) String whatsappNumber
 ) {
 }

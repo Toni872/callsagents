@@ -99,6 +99,7 @@ public class BusinessService {
         if (request.replyTimeoutMinutes() != null) profile.setReplyTimeoutMinutes(request.replyTimeoutMinutes());
         if (request.followupMessage() != null) profile.setFollowupMessage(request.followupMessage());
         if (request.voiceAgentId() != null) profile.setVoiceAgentId(request.voiceAgentId());
+        if (request.whatsappNumber() != null) profile.setWhatsappNumber(request.whatsappNumber());
 
         profile.setOnboardingComplete(true);
 

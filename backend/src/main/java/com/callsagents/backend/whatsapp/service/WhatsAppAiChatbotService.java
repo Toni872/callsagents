@@ -469,8 +469,13 @@ public class WhatsAppAiChatbotService {
                 return;
             }
 
-            // Do not overwrite data the tag parser might have added for name only
+            // Do not overwrite data the tag parser might have added for name only.
+            // Prefer the name from THIS message; fall back to an earlier user
+            // message ("Me llamo Juan" followed by "mi email es juan@x.com").
             String name = extractNameFromMessage(text);
+            if (name == null) {
+                name = extractNameFromHistory(phone);
+            }
             if (name != null && !data.containsKey("name")) {
                 data.put("name", name);
             }
@@ -481,6 +486,41 @@ public class WhatsAppAiChatbotService {
         } catch (Exception e) {
             log.error("Failed to save AI chatbot lead from message: phone={}", phone, e);
         }
+    }
+
+    /**
+     * Best-effort name lookup across recent user turns when the current
+     * message only carries an email. Only unambiguous self-introduction
+     * phrases ("me llamo X", "mi nombre es X") are accepted to avoid picking
+     * up button labels or generic words from earlier turns. The most recent
+     * match wins.
+     */
+    private String extractNameFromHistory(String phone) {
+        List<Map<String, String>> history = conversationHistory.getIfPresent(phone);
+        if (history == null) {
+            return null;
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Map<String, String> turn = history.get(i);
+            if (!"user".equals(turn.get("role"))) {
+                continue;
+            }
+            String content = turn.get("content");
+            if (content == null || content.isBlank()) {
+                continue;
+            }
+            String lower = content.toLowerCase();
+            // Conservative: skip turns without an explicit intro phrase so a
+            // bare "Ventas" or "demo" earlier in the chat is never a name.
+            if (!lower.contains("me llamo ") && !lower.contains("mi nombre es ")) {
+                continue;
+            }
+            String name = extractNameFromMessage(content);
+            if (name != null) {
+                return name;
+            }
+        }
+        return null;
     }
 
     /**

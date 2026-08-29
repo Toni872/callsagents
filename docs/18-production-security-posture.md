@@ -1,4 +1,4 @@
-# 18 — Production Security Posture (verified 2026-08-28)
+# 18 — Production Security Posture (verified 2026-08-29)
 
 Status of the Callsagents production environment on Railway (`renewed-reverence`,
 environment `production`), verified live against deployment
@@ -41,31 +41,30 @@ environment `production`), verified live against deployment
 - Real WhatsApp flow: inbound `from=34687723287 to=14157386102` -> `step=initial`
   -> buttons -> timing -> confirmation buttons -> escalation path invoked.
 
-## 4. Defect found: `[LEAD:...]` tag not emitted by the real model
+## 4. Lead capture: `[LEAD:...]` tag is best-effort; deterministic fallback covers it (resolved 2026-08-29)
 
-The system prompt (`BusinessPromptComposer`) explicitly instructs the model to append
-`[LEAD:name=...|email=...|service=...]` once name + email are captured. In the live test,
-the lead was NOT saved (leads table still has 8 rows; the test contact never appeared),
-and the confirmation buttons showed empty Name/Email — the model replied "Hola Antonio,
-soy Nai…" without ever emitting the tag.
+The system prompt (`BusinessPromptComposer`) instructs the model to append
+`[LEAD:name=...|email=...|service=...]` once name + email are captured. The live test exposed
+that `openai/gpt-oss-20b` is **unreliable at emitting the machine tag** — the conversation
+succeeded but the lead was not persisted because persistence depended on the tag.
 
-Root cause is not yet confirmed. Hypotheses:
+Mitigation chosen: **deterministic fallback** (the AI tag remains best-effort, never the only
+path):
 
-1. `openai/gpt-oss-20b` is unreliable at emitting a trailing machine tag, especially
-   when also instructed to answer in 2–3 sentences with one question.
-2. The tag instruction sits inside the persona block; the model may prioritize natural
-   conversational text.
+- `WhatsAppAiChatbotService.saveLeadFromMessage` saves a lead directly whenever a user message
+  contains an email and a business profile is resolved — regardless of the chat step or whether
+  the AI emitted a tag (verified in production; T1 real-flow WhatsApp lead lands in CRM with
+  correct `created_by`).
+- Name recovery (2026-08-29): if the current message has the email but no name, the fallback
+  scans recent user turns for an unambiguous introduction ("me llamo X", "mi nombre es X") so
+  "Me llamo Juan" + "mi email es juan@x.com" in **separate messages** saves the lead as **Juan**
+  instead of "Desconocido". Button labels / generic words ("Ventas") are never mistaken for a name.
+- The `[LEAD:...]` parser still runs first; when present it wins and the fallback does not
+  double-save. Test coverage: `WhatsAppAiChatbotServiceTest` (229 tests, 0 failures).
 
-Impact: WhatsApp leads are not persisted in production; the escalation path is wired to
-`leadRepository.findByPhone` and will not fire for new contacts.
-
-Mitigation options (not yet applied — requires a decision):
-
-- Post-process the conversation: when `collecting_info` step has an email and the AI did
-  not emit a tag, parse name/email from the conversation and save the lead directly.
-- Stronger tag-only instruction (e.g. "end your reply with exactly one line starting
-  `[LEAD:`") plus a validator that warns when the tag is missing.
-- Use a larger/higher-reasoning model for the extraction path.
+Remaining model-side hardening (optional, not blocking): strengthen the tag instruction to
+"end your reply with exactly one line starting `[LEAD:`" + validator warning, or move to a
+larger/higher-reasoning model for the extraction step.
 
 ## 5. Known gaps before "production permanent"
 
@@ -74,8 +73,9 @@ Mitigation options (not yet applied — requires a decision):
    **Validator aligned 2026-08-29** (JWT HS256 + `iss` + `payload_hash`). Remaining action:
    copy the Dashboard signature secret into `VONAGE_SIGNATURE_SECRET` and redeploy — then
    the webhook path flips from fail-open to fail-closed.
-2. **Lead capture fix** (see §4) so every qualified WhatsApp contact becomes a real lead
-   with `created_by` set.
+2. ~~**Lead capture fix** (see §4) so every qualified WhatsApp contact becomes a real lead
+   with `created_by` set.~~ **Resolved 2026-08-29** — deterministic email-triggered fallback
+   + name recovery from earlier messages; verified in production.
 3. **Retell number**: buy a number, set `RETELL_FROM_NUMBER`, then outbound voice works.
 4. **Sleep on Hobby plan**: Postgres/Redis sleep when idle; the backend then crashes on
    startup until the DB is woken. Upgrade the plan or add keep-alive ping for 24/7.

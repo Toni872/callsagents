@@ -134,4 +134,48 @@ class WhatsAppAiChatbotServiceTest {
                 && "Desconocido".equals(((Lead) lead).getFirstName())
                 && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
     }
+
+    @Test
+    void nameInEarlierMessage_emailLater_leadSavedWithThatName() {
+        // User introduces themselves in one message ("Me llamo Juan") and only
+        // gives the email in a later one. The deterministic fallback must
+        // recover the name from the conversation history instead of saving
+        // "Desconocido".
+        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+
+        when(groqService.chat(any(), any(), any()))
+            .thenReturn("Perfecto, ¿cómo te llamas?");
+        service.processMessage(PHONE, "Me llamo Juan", BUSINESS_ID);
+
+        expectNoExistingLead();
+        when(groqService.chat(any(), any(), any()))
+            .thenReturn("Gracias Juan. ¿Cuál es tu email?");
+        service.processMessage(PHONE, "mi email es juan@test.com", BUSINESS_ID);
+
+        verify(leadRepository).save(argThat(lead ->
+            ((Lead) lead).getEmail().equals("juan@test.com")
+                && "Juan".equals(((Lead) lead).getFirstName())
+                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
+    }
+
+    @Test
+    void onlyGenericWordEarlier_noFalseNameTaken() {
+        // A prior button reply or generic word ("Ventas") must never be
+        // mistaken for a name when the email arrives in a later message.
+        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+
+        when(groqService.chat(any(), any(), any()))
+            .thenReturn("Perfecto, ¿en qué te ayudo?");
+        service.processMessage(PHONE, "Ventas", BUSINESS_ID);
+
+        expectNoExistingLead();
+        when(groqService.chat(any(), any(), any()))
+            .thenReturn("Gracias. ¿Cuál es tu email?");
+        service.processMessage(PHONE, "antonio@test.com", BUSINESS_ID);
+
+        verify(leadRepository).save(argThat(lead ->
+            ((Lead) lead).getEmail().equals("antonio@test.com")
+                && "Desconocido".equals(((Lead) lead).getFirstName())
+                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
+    }
 }

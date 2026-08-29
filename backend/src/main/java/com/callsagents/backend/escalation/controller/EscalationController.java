@@ -88,7 +88,8 @@ public class EscalationController {
             request.escalationEnabled(),
             request.replyTimeoutMinutes(),
             request.followupMessage(),
-            request.voiceAgentId()
+            request.voiceAgentId(),
+            null
         );
         BusinessProfileResponse profile = businessService.update(userId, profileRequest);
         // Map.of rejects null values; build a null-safe response object instead.

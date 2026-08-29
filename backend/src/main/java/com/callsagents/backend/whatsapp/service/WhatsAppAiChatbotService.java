@@ -556,10 +556,16 @@ public class WhatsAppAiChatbotService {
         if (nameCandidate.isEmpty()) {
             return null;
         }
+        // Stop words that mark the end of a name phrase:
+        // "Me llamo Juan y mi email es juan@test.com" -> "Juan" (never "Juan y").
+        Set<String> stopTokens = Set.of("y", "mi", "mis", "email", "correo", "telefono", "telf", "es", "el", "la", "del");
         // Keep up to two words ("Antonio" or "María García")
         String[] tokens = nameCandidate.split("\\s+");
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < Math.min(2, tokens.length); i++) {
+            if (stopTokens.contains(tokens[i].toLowerCase())) {
+                break;
+            }
             if (sb.length() > 0) sb.append(' ');
             sb.append(tokens[i]);
         }

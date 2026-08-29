@@ -178,4 +178,21 @@ class WhatsAppAiChatbotServiceTest {
                 && "Desconocido".equals(((Lead) lead).getFirstName())
                 && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
     }
+
+    @Test
+    void nameAndEmailSameMessage_withConnectorWord_savesCleanName() {
+        // Real case from the sandbox transcript: "Me llamo Juan y mi email es
+        // juan@test.com" must save the lead as "Juan", never as "Juan y".
+        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+        expectNoExistingLead();
+        when(groqService.chat(any(), any(), any()))
+            .thenReturn("Perfecto, te ayudo con eso");
+
+        service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+
+        verify(leadRepository).save(argThat(lead ->
+            ((Lead) lead).getEmail().equals("juan@test.com")
+                && "Juan".equals(((Lead) lead).getFirstName())
+                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
+    }
 }

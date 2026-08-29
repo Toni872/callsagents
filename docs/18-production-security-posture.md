@@ -20,7 +20,7 @@ environment `production`), verified live against deployment
 | `VONAGE_API_KEY` | ✅ | ✅ | — | `75800ef5` (Master); balance check OK |
 | `VONAGE_API_SECRET` | ✅ | ✅ | — | Rotated 2026-08-28 (previous value was invalid); sandbox send returned a message UUID |
 | `VONAGE_SANDBOX_NUMBER` | ✅ | ✅ | — | `14157386102` |
-| `VONAGE_SIGNATURE_SECRET` | ❌ | — | **fail-open** | NOT set. Inbound webhooks are not cryptographically verified. Attacker can POST forged webhooks (fake leads, abuse). Scheme mismatch: Vonage sandbox dashboard signs a **JWT in the `Authorization` header**; backend `VonageWebhookValidator` expects `X-Vonage-Signature` HMAC-SHA256 hex. Setting the secret today would fail-closed and break webhooks until the validator is aligned to the JWT scheme. |
+| `VONAGE_SIGNATURE_SECRET` | ❌ | — | **fail-open** | NOT set. Inbound webhooks are not cryptographically verified. Attacker can POST forged webhooks (fake leads, abuse). Backend `VonageWebhookValidator` now verifies Vonage's **JWT-in-Authorization** scheme (HS256, `iss=Vonage`, `payload_hash` vs raw-body SHA-256) — aligned 2026-08-29. **Set the secret from the Dashboard (Settings → Signed webhooks → Signature secret) and redeploy.** The secret used must be the same one associated with the `api_key` claim of the inbound JWT. Until set, webhooks are accepted without verification (fail-open). |
 | `RETELL_API_KEY` | ✅ | — | — | Present. |
 | `RETELL_AGENT_ID` | ✅ | — | — | `agent_9fda91a4d3ddaa0f8c8cbfa7c9` (Script9 profile). |
 | `RETELL_FROM_NUMBER` | ❌ | — | voice blocked | Empty. Outbound voice calls are skipped until a number is configured. |
@@ -69,8 +69,11 @@ Mitigation options (not yet applied — requires a decision):
 
 ## 5. Known gaps before "production permanent"
 
-1. **Webhook signature verification (security)**: align `VonageWebhookValidator` to
-   Vonage's JWT-in-Authorization scheme, then set `VONAGE_SIGNATURE_SECRET`.
+1. ~~**Webhook signature verification (security)**: align `VonageWebhookValidator` to
+   Vonage's JWT-in-Authorization scheme, then set `VONAGE_SIGNATURE_SECRET`.~~
+   **Validator aligned 2026-08-29** (JWT HS256 + `iss` + `payload_hash`). Remaining action:
+   copy the Dashboard signature secret into `VONAGE_SIGNATURE_SECRET` and redeploy — then
+   the webhook path flips from fail-open to fail-closed.
 2. **Lead capture fix** (see §4) so every qualified WhatsApp contact becomes a real lead
    with `created_by` set.
 3. **Retell number**: buy a number, set `RETELL_FROM_NUMBER`, then outbound voice works.

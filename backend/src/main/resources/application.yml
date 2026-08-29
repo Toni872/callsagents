@@ -84,9 +84,9 @@ app:
     sandbox:
       number: ${VONAGE_SANDBOX_NUMBER:}
       url: ${VONAGE_SANDBOX_URL:https://messages-sandbox.nexmo.com/v1/messages}
-    # Signature secret Vonage uses to sign inbound webhooks (X-Vonage-Signature,
-    # HMAC-SHA256). REQUIRED for fail-closed verification; until set, webhooks
-    # are accepted with a WARN (fail open).
+    # Signature secret Vonage uses to sign inbound webhooks (JWT in the
+    # Authorization header, HS256). REQUIRED for fail-closed verification; until
+    # set, webhooks are accepted with a WARN (fail open).
     signature-secret: ${VONAGE_SIGNATURE_SECRET:}
   groq:
     api:

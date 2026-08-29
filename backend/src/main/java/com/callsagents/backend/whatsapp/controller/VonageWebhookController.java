@@ -49,18 +49,19 @@ public class VonageWebhookController {
 
     /**
      * Vonage inbound webhook. Handles text messages, button replies, and list replies.
-     * The raw body is verified against X-Vonage-Signature (HMAC-SHA256) before
-     * processing. Invalid signatures are rejected with 401 and never processed.
+     * The raw body is verified against the Vonage webhook JWT (HS256, carried in
+     * {@code Authorization: Bearer <token>}) before processing. Invalid signatures
+     * are rejected with 401 and never processed.
      */
     @SuppressWarnings("unchecked")
     @PostMapping
     public ResponseEntity<Void> handleInbound(
-            @RequestHeader(value = "X-Vonage-Signature", required = false) String xVonageSignature,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
             HttpServletRequest request) throws java.io.IOException {
         byte[] rawBody = request.getInputStream().readAllBytes();
 
-        if (!webhookValidator.verify(rawBody, xVonageSignature)) {
-            log.warn("Vonage webhook rejected: invalid X-Vonage-Signature");
+        if (!webhookValidator.verify(rawBody, authorization)) {
+            log.warn("Vonage webhook rejected: invalid Authorization JWT");
             return ResponseEntity.status(401).build();
         }
 

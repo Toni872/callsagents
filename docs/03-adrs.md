@@ -10,7 +10,7 @@ Each ADR records a real decision made during the lifecycle of the product, in `C
 
 **Context:** The product needs programmatic WhatsApp messaging to write to leads that come in through the web chat widget and to handle inbound WhatsApp conversations. Twilio was the incumbent in the original MVP (`WhatsAppService`), but the team needed a provider well-suited to interactive WhatsApp message flows (text, buttons, lists) with a viable dev sandbox.
 
-**Decision:** Use **Vonage** for WhatsApp messaging. Vonage is used for both dev (sandbox number) and production flows. The legacy Twilio `WhatsAppService` is retained in-tree but **deprecated**. Production outbound uses a paid Vonage number; the Retell voice path covers the outbound-call escalation.
+**Decision:** Use **Vonage** for WhatsApp messaging. Vonage is used for both dev (sandbox number) and production flows. The legacy Twilio `WhatsAppService` was retained in-tree as deprecated reference at the time; it was **fully removed on 2026-08-29** (see ADR-011). Production outbound uses a paid Vonage number; the Retell voice path covers the outbound-call escalation.
 
 **Consequences:**
 - Interactive message types (buttons/lists) via `VonageMessageService` (sendText/sendButtons/sendList).
@@ -153,10 +153,26 @@ Each ADR records a real decision made during the lifecycle of the product, in `C
 
 **Context:** The original MVP was an outbound-campaigns product (leads/campaigns/calls/appointments, ADMIN/SUPERVISOR/AGENT roles, Twilio). The product **pivoted** to the SaaS chat + voice lead-capture model. Removing everything would lose reference and risk breaking the repo; keeping everything unmarked would confuse contributors.
 
-**Decision:** Keep the outbound **campaigns/calls/appointments/calendar/Twilio** modules **in-tree as deprecated LEGACY scaffolding**, clearly marked in every doc, and declare the **SaaS core** (auth, leads, chat, whatsapp, voice, business) as the product. Do not extend the legacy modules for product work; build new behavior on the SaaS core.
+**Decision:** Keep the outbound **campaigns/calls/appointments/calendar** modules **in-tree as deprecated LEGACY scaffolding**, clearly marked in every doc, and declare the **SaaS core** (auth, leads, chat, whatsapp, voice, business) as the product. Do not extend the legacy modules for product work; build new behavior on the SaaS core. **Twilio code was fully removed on 2026-08-29 (see ADR-011).**
 
 **Consequences:**
 - Lower risk than a hard delete, but ongoing maintenance surface for code that is not the product.
 - Contributors must resist the temptation to "fix up" legacy modules instead of extending the SaaS path.
 - The legacy code now primarily serves as reference for the Escalation Orchestrator design.
 - `dashboard/summary` and `users`/`calendar` remain partly useful but are not the growth path.
+
+---
+
+## ADR-011 — Twilio fully removed (WhatsApp is Vonage-only)
+
+**Status:** Accepted (2026-08-29)
+
+**Context:** The original MVP implemented WhatsApp via Twilio (`TwilioWebhookValidator`, `WhatsAppWebhookController`, `WhatsAppConfig`, `WhatsAppService` legacy state machine, `com.twilio.sdk:twilio` dependency, `twilio:` config block, `/webhooks/whatsapp` permit rule, TWILIO_* env vars/docs). The product runs on **Vonage + Groq**; the Twilio path was dead code (its only hook was a fallback in `VonageWebhookController` that never ran because Groq is always configured).
+
+**Decision:** **Remove all Twilio code, config, dependencies, tests, and documentation references** from the repository. Delete the four Twilio classes plus their domain records (`ConversationState`, `ConversationStep`) and tests; drop the `twilio:` block from `application.yml`, the `com.twilio.sdk:twilio` dependency from `pom.xml`, the `/webhooks/whatsapp` permit rule from `SecurityConfig`, TWILIO_* vars from `docker-compose.yml`/`.env.example`, and the Twilio row/notes from `docs/18`. The legacy `WhatsAppService` fallback in `VonageWebhookController` was removed; the AI chatbot is the single WhatsApp path.
+
+**Consequences:**
+- Cleaner repo: no dead provider surface, no maintenance on code that never runs.
+- WhatsApp provider switching now touches one place (`backend/.../whatsapp/`): Vonage for messaging + Groq for AI.
+- Historical reference for the old Twilio design is lost; the decision record above preserves the rationale.
+- The remaining **legacy outbound** modules (campaigns/calls/appointments/calendar) stay in-tree per ADR-010; removing those is a separate, larger decision.

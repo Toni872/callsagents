@@ -32,7 +32,7 @@ Callsagents is a **multi-tenant SaaS** that captures and converts website leads 
 
 ### LEGACY (kept in-tree, deprecated — recording tables only)
 
-`campaigns`, `campaign_leads`, `calls` (Twilio-era), `appointments` (+ calendar hook), `calendar_integrations`, `integrations`, `users`, `dashboard`, `audit`. Reference for the SaaS design; **do not extend for product work** (ADR-010).
+`campaigns`, `campaign_leads`, `calls` (legacy outbound), `appointments` (+ calendar hook), `calendar_integrations`, `integrations`, `users`, `dashboard`, `audit`. Reference for the SaaS design; **do not extend for product work** (ADR-010).
 
 ## 3. Request flow diagrams
 
@@ -143,4 +143,4 @@ Response envelope for the SaaS core: `{ "success": true, "data": ... }`.
 
 ## 8. Legacy vs live — a note to future readers
 
-The repo contains a complete outbound-campaigns MVP (leads/campaigns/calls/appointments/Twilio, ADMIN/SUPERVISOR/AGENT roles) that the product **pivoted away from**. It stays in-tree as reference (ADR-010) but is **not the product**. All new behavior builds on the SaaS core (auth, leads, chat, whatsapp, voice, business, escalation). When extending, prefer the SaaS path and update this document's module table and endpoints inventory.
+The repo contains a complete outbound-campaigns MVP (leads/campaigns/calls/appointments, ADMIN/SUPERVISOR/AGENT roles) that the product **pivoted away from**. It stays in-tree as reference (ADR-010) but is **not the product**; Twilio was fully removed 2026-08-29. All new behavior builds on the SaaS core (auth, leads, chat, whatsapp, voice, business, escalation). When extending, prefer the SaaS path and update this document's module table and endpoints inventory.

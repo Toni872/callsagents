@@ -93,7 +93,7 @@ callsagents/
 │   │   ├── auth/                       # JWT, security, login/refresh/logout, Google OAuth
 │   │   ├── leads/                      # Lead CRUD + CSV import + filters
 │   │   ├── chat/                       # ChatService (Caffeine) + /chat endpoints
-│   │   ├── whatsapp/                   # Vonage + WhatsAppAiChatbotService + GroqService (+ legacy Twilio)
+│   │   ├── whatsapp/                   # Vonage + WhatsAppAiChatbotService + GroqService (Twilio removed 2026-08-29)
 │   │   ├── voice/                      # VoiceCallService, VoiceProvider (Retell/Vapi), web-call, webhooks
 │   │   ├── business/                   # BusinessProfile + BusinessPromptComposer + widget-config
 │   │   ├── campaigns/                  # LEGACY outbound
@@ -186,7 +186,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 | Add a new migration | `backend/src/main/resources/db/migration/V{n}__desc.sql` | Sequential V-number. Note **V13 is missing** — do not create a "V13" collision; numbering is by file name. |
 | Change the JWT secret | `application.yml` (`app.jwt.secret`) + `.env` (`JWT_SECRET`) | ≥32 bytes / 256 bits; `openssl rand -base64 32`. |
 | Add/provide a voice provider | `backend/.../voice/service/VoiceProvider.java` impl | Retell/Vapi abstraction; signature validation is fail-closed. |
-| Change WhatsApp provider | `backend/.../whatsapp/` | Vonage is the live path; Twilio `WhatsAppService` is legacy. |
+| Change WhatsApp provider | `backend/.../whatsapp/` | Vonage is the only path (Twilio removed 2026-08-29). |
 
 ## 8. Tests
 
@@ -205,7 +205,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 | WhatsApp chatbot (Vonage + Groq) — dogfooded on Script9 | ✅ live |
 | Voice web-call (WebRTC) + webhooks + provider abstraction | ✅ live |
 | Leads (CRUD + CSV + sources incl. WHATSAPP/WEB_CHAT) | ✅ live |
-| **Legacy outbound** (campaigns/calls/appointments/Twilio/calendar-partial) | ✅ done but **deprecated** |
+| **Legacy outbound** (campaigns/calls/appointments/calendar-partial) | ✅ done but **deprecated** |
 | Calendar sync (Google; Outlook stub throws) | ⚠️ partial |
 | **Escalation Orchestrator** (WhatsApp follow-up → timeout → Retell outbound voice) | 🔜 **next** (ADR-009 designed) |
 | Retell **phone** outbound live | ❌ blocked — `RETELL_FROM_NUMBER` empty; only web-call works |
@@ -230,7 +230,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 ## 11. Glossary
 
 - **SaaS core**: the live product modules (auth, leads, chat, whatsapp, voice, business).
-- **Legacy / LEGACY**: outbound-campaign scaffolding retained in-tree (campaigns, calls, appointments, calendar-partial, Twilio, users).
+- **Legacy / LEGACY**: outbound-campaign scaffolding retained in-tree (campaigns, calls, appointments, calendar-partial, users).
 - **Candidate**: set of changes frozen for review (RDD).
 - **Receipt**: SHA-256 of the candidate (RDD).
 - **VoiceProvider**: abstraction over Retell/Vapi for placing voice calls.

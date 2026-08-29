@@ -21,7 +21,6 @@ environment `production`), verified live against deployment
 | `VONAGE_API_SECRET` | ✅ | ✅ | — | Rotated 2026-08-28 (previous value was invalid); sandbox send returned a message UUID |
 | `VONAGE_SANDBOX_NUMBER` | ✅ | ✅ | — | `14157386102` |
 | `VONAGE_SIGNATURE_SECRET` | ❌ | — | **fail-open** | NOT set. Inbound webhooks are not cryptographically verified. Attacker can POST forged webhooks (fake leads, abuse). Scheme mismatch: Vonage sandbox dashboard signs a **JWT in the `Authorization` header**; backend `VonageWebhookValidator` expects `X-Vonage-Signature` HMAC-SHA256 hex. Setting the secret today would fail-closed and break webhooks until the validator is aligned to the JWT scheme. |
-| `TWILIO_AUTH_TOKEN` | ❌ | — | **fail-open** | Twilio webhooks accepted without signature verification. |
 | `RETELL_API_KEY` | ✅ | — | — | Present. |
 | `RETELL_AGENT_ID` | ✅ | — | — | `agent_9fda91a4d3ddaa0f8c8cbfa7c9` (Script9 profile). |
 | `RETELL_FROM_NUMBER` | ❌ | — | voice blocked | Empty. Outbound voice calls are skipped until a number is configured. |
@@ -71,8 +70,7 @@ Mitigation options (not yet applied — requires a decision):
 ## 5. Known gaps before "production permanent"
 
 1. **Webhook signature verification (security)**: align `VonageWebhookValidator` to
-   Vonage's JWT-in-Authorization scheme, then set `VONAGE_SIGNATURE_SECRET`; generate and
-   set a Twilio auth token, then switch Twilio validation to fail-closed.
+   Vonage's JWT-in-Authorization scheme, then set `VONAGE_SIGNATURE_SECRET`.
 2. **Lead capture fix** (see §4) so every qualified WhatsApp contact becomes a real lead
    with `created_by` set.
 3. **Retell number**: buy a number, set `RETELL_FROM_NUMBER`, then outbound voice works.

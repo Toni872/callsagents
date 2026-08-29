@@ -92,13 +92,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Twilio Java SDK for WhatsApp integration -->
-        <dependency>
-            <groupId>com.twilio.sdk</groupId>
-            <artifactId>twilio</artifactId>
-            <version>10.5.0</version>
-        </dependency>
-
         <!-- Vonage Java SDK for WhatsApp sandbox integration -->
         <dependency>
             <groupId>com.vonage</groupId>

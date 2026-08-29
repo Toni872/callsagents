@@ -112,7 +112,7 @@ class WebhookSignatureValidatorTest {
     @DisplayName("verify: rejects unknown providers and null provider")
     void verify_rejectsUnknownProvider() {
         WebhookSignatureValidator v = validator();
-        assertThat(v.verify("twilio", RAW_BODY, null, null)).isFalse();
+        assertThat(v.verify("unknown-provider", RAW_BODY, null, null)).isFalse();
         assertThat(v.verify(null, RAW_BODY, null, null)).isFalse();
     }
 }

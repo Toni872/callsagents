@@ -64,9 +64,6 @@ public class SecurityConfig {
                 // de seguridad a propósito: el handler verifica la firma del provider
                 // (Retell HMAC-SHA256, Vapi X-Vapi-Secret) y devuelve 401 si no cuadra.
                 auth.requestMatchers("/voice/webhook/**").permitAll();
-                // WhatsApp webhook (Twilio): sin auth, Twilio llama directamente.
-                auth.requestMatchers("/webhooks/whatsapp").permitAll();
-                auth.requestMatchers("/webhooks/whatsapp/**").permitAll();
                 // WhatsApp webhook (Vonage sandbox): sin auth, Vonage llama directamente.
                 auth.requestMatchers("/webhooks/vonage").permitAll();
                 auth.requestMatchers("/webhooks/vonage/**").permitAll();

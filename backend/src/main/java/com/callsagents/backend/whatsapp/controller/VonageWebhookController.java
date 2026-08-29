@@ -8,7 +8,6 @@ import com.callsagents.backend.leads.repository.LeadRepository;
 import com.callsagents.backend.whatsapp.service.VonageMessageService;
 import com.callsagents.backend.whatsapp.service.VonageWebhookValidator;
 import com.callsagents.backend.whatsapp.service.WhatsAppAiChatbotService;
-import com.callsagents.backend.whatsapp.service.WhatsAppService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -26,7 +25,6 @@ public class VonageWebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(VonageWebhookController.class);
 
-    private final WhatsAppService whatsAppService;
     private final WhatsAppAiChatbotService aiChatbotService;
     private final VonageMessageService vonageMessageService;
     private final BusinessService businessService;
@@ -35,14 +33,12 @@ public class VonageWebhookController {
     private final VonageWebhookValidator webhookValidator;
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
-    public VonageWebhookController(WhatsAppService whatsAppService,
-                                    WhatsAppAiChatbotService aiChatbotService,
+    public VonageWebhookController(WhatsAppAiChatbotService aiChatbotService,
                                     VonageMessageService vonageMessageService,
                                     BusinessService businessService,
                                     EscalationService escalationService,
                                     LeadRepository leadRepository,
                                     VonageWebhookValidator webhookValidator) {
-        this.whatsAppService = whatsAppService;
         this.aiChatbotService = aiChatbotService;
         this.vonageMessageService = vonageMessageService;
         this.businessService = businessService;
@@ -100,14 +96,6 @@ public class VonageWebhookController {
             }
         }
         String reply = aiChatbotService.processMessage(from, text, businessId);
-
-        // Only fall back to the basic state machine when Groq is genuinely
-        // unavailable. When the chatbot IS configured but returns null it has
-        // already sent interactive buttons/greeting — falling through here
-        // caused a duplicate (and failing) second send. Do NOT re-send.
-        if (reply == null && !aiChatbotService.isGroqConfigured()) {
-            reply = whatsAppService.processMessage(from, text, businessId);
-        }
 
         // Send reply via Vonage API (only when there is actually text to send)
         if (reply != null) {

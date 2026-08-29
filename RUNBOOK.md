@@ -334,7 +334,7 @@ callsagents/
 │   │   ├── auth/        # Auth: JWT, guards, login/refresh/logout, Google OAuth
 │   │   ├── leads/       # Leads CRUD + CSV + filtros
 │   │   ├── chat/        # ChatService (Caffeine) + /chat
-│   │   ├── whatsapp/    # Vonage + WhatsAppAiChatbotService + GroqService (+ Twilio legacy)
+│   │   ├── whatsapp/    # Vonage + WhatsAppAiChatbotService + GroqService (Twilio removed 2026-08-29)
 │   │   ├── voice/       # VoiceProvider (Retell/Vapi), web-call, webhooks
 │   │   ├── business/    # BusinessProfile + BusinessPromptComposer + widget-config
 │   │   ├── campaigns/   # LEGACY outbound

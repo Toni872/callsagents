@@ -54,7 +54,7 @@ Lead entra al website del cliente
 - **Stack congelado**: Angular 18.2 + Spring Boot 3.5 + PostgreSQL 16 (ENUMs nativos + JSONB) + Redis 7 + JWT + Swagger + Docker Compose/Railway. Definido en `docs/01-arquitectura.md`.
 - **IA como servicio auxiliar**: voz = provider externo; no construir motor propio.
 - **Sin sobreingeniería**: cada abstracción debe tener razón de existir hoy. No generalizar sin un segundo caso de uso real.
-- **Legacy no se extiende**: los módulos outbound (campaigns/calls/appointments/calendar) están en el repo como **legacy deprecado**; el trabajo de producto va al SaaS core (auth, leads, chat, whatsapp, voice, business). Twilio fue eliminado por completo (2026-08-29).
+- **MVP-origin no se extiende**: los módulos outbound (campaigns/calls/appointments/calendar) tienen origen en el MVP, pero **varios están activos hoy** en el flujo live (voz lee campaign config, `voice_calls` referencia appointments, auth usa users, dashboard es la página principal). El trabajo nuevo de producto va al SaaS core (auth, leads, chat, whatsapp, voice, business); los módulos MVP-origin **no son objetivo de borrado**. Twilio fue eliminado por completo (2026-08-29); `integration_configs` se eliminó en V20.
 
 ## Métricas de éxito
 

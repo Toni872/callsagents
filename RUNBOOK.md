@@ -337,13 +337,12 @@ callsagents/
 │   │   ├── whatsapp/    # Vonage + WhatsAppAiChatbotService + GroqService (Twilio removed 2026-08-29)
 │   │   ├── voice/       # VoiceProvider (Retell/Vapi), web-call, webhooks
 │   │   ├── business/    # BusinessProfile + BusinessPromptComposer + widget-config
-│   │   ├── campaigns/   # LEGACY outbound
-│   │   ├── calls/       # LEGACY llamadas
-│   │   ├── appointments/# LEGACY citas
-│   │   ├── calendar/    # LEGACY/PARCIAL (Google; Outlook stub)
-│   │   ├── users/       # LEGACY gestión de usuarios
-│   │   ├── dashboard/   # LEGACY /dashboard/summary
-│   │   ├── integrations/# LEGACY IntegrationConfig
+│   │   ├── campaigns/   # MVP-origin (active: voice reads campaign config)
+│   │   ├── calls/       # MVP-origin (dashboard counts)
+│   │   ├── appointments/# MVP-origin (used by voice_calls FK + calendar sync)
+│   │   ├── calendar/    # MVP-origin/partial (Google works; Outlook stub)
+│   │   ├── users/       # MVP-origin (auth registration path active)
+│   │   ├── dashboard/   # MVP-origin (main FE page)
 │   │   ├── audit/       # AuditLog
 │   │   ├── common/      # Excepciones, ApiError, PaginationUtils, RateLimitFilter
 │   │   └── config/      # Config beans (app.*)
@@ -378,7 +377,7 @@ callsagents/
 | **DB** | PostgreSQL 16 con ENUMs nativos y JSONB |
 | **Caché/Auth** | Redis 7 (revocación de refresh tokens) |
 | **Auth** | JWT HS256 (access 15min + refresh 7d rotable) + BCrypt + Google OAuth |
-| **Migrations** | Flyway (V1–V16; V13 gap; V2 dev) |
+| **Migrations** | Flyway (V1–V20; V13 gap; V2 dev) |
 | **Documentación** | springdoc-openapi 2.9 (Swagger UI) |
 | **Contenedores** | Docker + Docker Compose (dev) · Railway (prod) |
 | **HTTP cliente** | nginx (proxy `/api/` + Origin-strip) |

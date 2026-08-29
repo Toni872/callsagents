@@ -34,7 +34,7 @@ Toda la copia de cara al usuario dice **"Script9"**, nunca "Callsagents" (decisi
 ### ❌ ELIMINADO
 
 - La demo `callsagents/demo` **ya no existe** (fue quitada). No referenciarla.
-- El MVP original "outbound campaigns" está en el repo como **legacy deprecated** — no es el producto.
+- El MVP original "outbound campaigns" está en el repo — origen de los módulos que hoy son **activos pero secundarios** (el SaaS chat+voice es el producto). No es el foco de trabajo nuevo; consultar `docs/01-arquitectura.md §8` antes de tocar esos módulos.
 
 ---
 

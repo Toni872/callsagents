@@ -1,6 +1,6 @@
-# Callsagents — Data Model (current schema V1–V19)
+# Callsagents — Data Model (current schema V1–V20)
 
-> Live schema reference. Entities are marked **SaaS-core** (the product) or **LEGACY** (outbound-campaign scaffolding retained in-tree). `Chat` is **ephemeral** — no table. This describes the **real, current** schema as materialized by Flyway migrations V1–V19.
+> Live schema reference. Entities are marked **SaaS-core** (the product), **MVP-origin** (born in the outbound MVP; several are actively wired into the live flow — see `01-arquitectura.md §8`), or **DROPPED**. `Chat` is **ephemeral** — no table. This describes the **real, current** schema as materialized by Flyway migrations V1–V20.
 
 ## Schema conventions
 
@@ -16,7 +16,7 @@
 | **Index naming** | `idx_<table>_<cols>` (e.g. `idx_leads_status`) |
 | **Migrations** | Never edit a shipped migration; add `V{n}__...sql`. `V13` is **missing**; `V2` is **dev-only** under `db/migration/dev` |
 
-**Migration inventory (V1–V19):**
+**Migration inventory (V1–V20):**
 
 | Migration | Purpose |
 |---|---|
@@ -39,6 +39,7 @@
 | V17 | Escalation Orchestrator: `escalations` table + `escalation_stage` ENUM + 4 `business_profiles` escalation columns |
 | V18 | `leads.created_by` + backfill + NOT NULL + index (per-user scoping) |
 | V19 | Rotate admin password (hash; plaintext only in secrets/env `CALLSAGENTS_ADMIN_PASSWORD`) |
+| V20 | Drop dead `integration_configs` table + index (2026-08-29 cleanup) |
 
 ---
 
@@ -135,7 +136,7 @@ Indexes: `idx_vc_user_status`, `idx_vc_provider_call`, `idx_vc_lead`, `idx_vc_st
 
 Web chat conversations are **not persisted**. `ChatService` keeps conversation history in a **Caffeine cache** (`MAX_HISTORY = 20`). There is also a **GLOBAL 50-lead trial cap** (see `ChatService`/`LeadService` `TRIAL_LEAD_LIMIT = 50`).
 
-### `campaigns` — Campaign (LEGACY)
+### `campaigns` — Campaign (MVP-origin)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -149,7 +150,7 @@ Web chat conversations are **not persisted**. `ChatService` keeps conversation h
 | `created_by` | UUID NOT NULL FK → users | |
 | `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
 
-### `campaign_leads` — CampaignLead (LEGACY)
+### `campaign_leads` — CampaignLead (MVP-origin)
 
 Composite PK `(campaign_id, lead_id)`.
 
@@ -164,7 +165,7 @@ Composite PK `(campaign_id, lead_id)`.
 | `next_attempt_at` | TIMESTAMPTZ | **written by no service** — no scheduler |
 | `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | defaults via V3 |
 
-### `calls` — Call (LEGACY, Twilio-era)
+### `calls` — Call (MVP-origin, Twilio-era)
 
 FK to composite PK of `campaign_leads`.
 
@@ -182,7 +183,7 @@ FK to composite PK of `campaign_leads`.
 | `notes` | TEXT | |
 | `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
 
-### `appointments` — Appointment (LEGACY)
+### `appointments` — Appointment (MVP-origin)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -199,7 +200,7 @@ FK to composite PK of `campaign_leads`.
 | `external_event_url` | VARCHAR(1024) | Google htmlLink (V9) |
 | `created_at`/`updated_at` | TIMESTAMPTZ NOT NULL | |
 
-### `calendar_integrations` — CalendarIntegration (LEGACY / PARTIAL)
+### `calendar_integrations` — CalendarIntegration (MVP-origin / PARTIAL)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -218,9 +219,9 @@ FK to composite PK of `campaign_leads`.
 
 UNIQUE `(user_id, provider)`. Indexes `idx_cal_user`, `idx_cal_provider_enabled`.
 
-### `integration_configs` — IntegrationConfig (LEGACY)
+### `integration_configs` — DROPPED (V20, 2026-08-29)
 
-Generic provider connector (Vapi/Retell/Bland era).
+Generic provider connector (Vapi/Retell/Bland era). **Unused dead table:** created in V1 but never referenced by any entity, repository, service, or controller (the "integrations" module has no Java classes). Removed by `V20__drop_integration_configs.sql`.
 
 | Column | Type | Notes |
 |---|---|---|

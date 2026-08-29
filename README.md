@@ -30,7 +30,7 @@ Retell AI voice call (fallback only)
 | Chatbot LLM | Groq (`openai/gpt-oss-20b`) | n/a |
 | WhatsApp | Vonage (sandbox for dev, paid number for prod) | n/a |
 | Voice | Retell AI (`retellai.com`) via `VoiceProvider` abstraction; Vapi present as alternative | n/a |
-| Migrations | Flyway | V1–V16 (V13 missing, V2 dev-only under `db/migration/dev`) |
+| Migrations | Flyway | V1–V20 (V13 missing, V2 dev-only under `db/migration/dev`) |
 | API docs | springdoc-openapi (Swagger UI) | 2.9 |
 | `@Scheduled`/`@EnableScheduling` | **None anywhere in the codebase** | n/a |
 
@@ -57,10 +57,10 @@ Retell AI voice call (fallback only)
 | Area | Status |
 |---|---|
 | **SaaS core (LIVE)** | ✅ Auth (email + Google OAuth), `BusinessProfile` multi-tenancy + onboarding, chat widget, WhatsApp chatbot (Vonage + Groq), voice web-call (WebRTC), leads, per-tenant prompt composer |
-| **Legacy outbound (kept in-tree)** | ✅ Campaigns / Calls / Appointments — **deprecated**, no scheduling, recording tables only |
+| **MVP-origin modules (retained)** | ⚠️ Campaigns / Calls / Appointments / Calendar / Users / Dashboard — origin is the outbound MVP; **several are actively used** (voice reads campaign config, auth uses users, dashboard is the main page) but they are not the focus of new product work |
 | **Calendar sync** | ⚠️ Partial — Google only, Outlook stub throws |
 | **Escalation Orchestrator** | ✅ **Live** — WhatsApp follow-up → timeout → Retell outbound voice (`EscalationScheduledTask` polls every 60s; ADR-009, V17) |
 | **Retell phone outbound** | ⚠️ Blocked — `RETELL_FROM_NUMBER` currently empty; only WebRTC web-call works |
 | **Stripe billing** | 🔜 Planned |
 
-> **Legacy vs live:** the outbound campaign/calls/appointment modules are scaffolding kept in-tree for reference (Twilio was removed 2026-08-29). They are **not** the product. The product is the SaaS chat + voice lead-capture flow described above. `@Scheduled` exists in one place: `EscalationScheduledTask` polls expiring escalations every 60s and elevates them to Retell voice calls.
+> **MVP-origin vs product:** modules born in the outbound-campaign MVP (campaigns/calls/appointments/calendar/users/dashboard/audit) are retained in-tree (Twilio was removed 2026-08-29). Despite the old "legacy/deprecated" labels, **several are active today**: `VoiceCallService` reads `Campaign` (voice-config), `voice_calls` references `Appointment`, `AuthService` uses `UserService.register`, and `/dashboard/summary` is the frontend's main page. They are not the focus of new product work, but **do not delete them** — they are wired into the live flow. `@Scheduled` exists in one place: `EscalationScheduledTask` polls expiring escalations every 60s and elevates them to Retell voice calls.

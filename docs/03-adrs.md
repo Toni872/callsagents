@@ -161,6 +161,8 @@ Each ADR records a real decision made during the lifecycle of the product, in `C
 - The legacy code now primarily serves as reference for the Escalation Orchestrator design.
 - `dashboard/summary` and `users`/`calendar` remain partly useful but are not the growth path.
 
+**Update (2026-08-29):** re-labeled from "LEGACY/deprecated" to **MVP-origin (active-but-secondary)** after the dead-code audit proved several of these modules are **wired into the live flow** — `VoiceCallService` reads `Campaign` voice-config, `voice_calls` has an FK to `appointments`, `AuthService` uses `UserService.register`, `/dashboard/summary` is the frontend default page, and `AuditService` is shared live infra. The "do not extend" guidance stands (prefer the SaaS core for new work), but the earlier "recording tables only / do not touch" framing was wrong: these are **not delete targets**. The also-unused `integration_configs` table was dropped in V20 (see ADR-011 context).
+
 ---
 
 ## ADR-011 — Twilio fully removed (WhatsApp is Vonage-only)

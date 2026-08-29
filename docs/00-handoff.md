@@ -8,7 +8,7 @@
 
 Callsagents is a **multi-tenant SaaS** that captures and converts website leads through an instant **WhatsApp chatbot** and **web chat widget**, with an **AI voice call as a fallback escalation** when a lead doesn't respond. It is **dogfooded on Script9** (www.script-9.com); all user-facing copy says "Script9", never "Callsagents". Each client business sets up its own branding, WhatsApp number, widget, and prompt through its `BusinessProfile`.
 
-> **Do NOT read the words "outbound sales platform"** — the product has **pivoted** away from that. The original outbound-campaigns MVP (leads/campaigns/calls/appointments with ADMIN/SUPERVISOR/AGENT roles + Twilio) is **legacy scaffolding kept in-tree but deprecated**. It is not the product.
+> **Do NOT read the words "outbound sales platform"** — the product has **pivoted** away from that. The original outbound-campaigns MVP (leads/campaigns/calls/appointments with ADMIN/SUPERVISOR/AGENT roles + Twilio) is retained in-tree; Twilio was removed 2026-08-29 and several of the MVP-origin modules remain **actively wired** into the live SaaS flow (voice/escalation/auth/dashboard). They are not the primary growth path.
 
 **This is a working SaaS, dogfooded.** It runs locally via Docker and on Railway in prod. Voice AI is **implemented** (Retell + web-call + webhooks) and the **Escalation Orchestrator** (WhatsApp follow-up → timeout → Retell voice) is **implemented and E2E-verified** (V17 + `EscalationScheduledTask`).
 
@@ -26,7 +26,7 @@ Callsagents is a **multi-tenant SaaS** that captures and converts website leads 
 | WhatsApp | Vonage (sandbox dev / paid prod) | n/a |
 | Voice | Retell AI via `VoiceProvider` abstraction; Vapi present as alternative; `WebhookSignatureValidator` fail-closed | n/a |
 | ORM | Hibernate `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for Postgres ENUMs | 6.x |
-| Migrations | Flyway (V1–V19; V13 missing, V2 dev-only under `db/migration/dev`) | 11.7.2 |
+| Migrations | Flyway (V1–V20; V13 missing, V2 dev-only under `db/migration/dev`) | 11.7.2 |
 | Docs | springdoc-openapi (Swagger UI) | 2.9.0 |
 | Containerization | Docker Compose (dev) + Railway (prod) | Docker 29+ |
 | Scheduling | `@Schedule`/`@EnableScheduling` — **none exists** | n/a |
@@ -83,9 +83,9 @@ callsagents/
 ├── RUNBOOK.md                          # Operational how-to (start/stop/troubleshoot/deploy)
 ├── docs/                               # Architecture + decisions + handoff
 │   ├── 00-handoff.md                   # ← you are here
-│   ├── 01-arquitectura.md              # Live architecture (SaaS core vs legacy)
-│   ├── 02-modelo-de-datos.md           # Live schema V1–V19
-│   ├── 03-adrs.md                      # Architecture Decision Records (ADR-001..010)
+│   ├── 01-arquitectura.md              # Live architecture (SaaS core vs MVP-origin modules)
+│   ├── 02-modelo-de-datos.md           # Live schema V1–V20
+│   ├── 03-adrs.md                      # Architecture Decision Records (ADR-001..011)
 │   ├── 16-railway-deploy.md            # Railway deploy specifics
 │   ├── rdd-workflow.md                 # gentle-ai RDD gate
 ├── backend/                            # Spring Boot app
@@ -96,13 +96,12 @@ callsagents/
 │   │   ├── whatsapp/                   # Vonage + WhatsAppAiChatbotService + GroqService (Twilio removed 2026-08-29)
 │   │   ├── voice/                      # VoiceCallService, VoiceProvider (Retell/Vapi), web-call, webhooks
 │   │   ├── business/                   # BusinessProfile + BusinessPromptComposer + widget-config
-│   │   ├── campaigns/                  # LEGACY outbound
-│   │   ├── calls/                      # LEGACY call logging
-│   │   ├── appointments/               # LEGACY appointments + calendar hook
-│   │   ├── calendar/                   # LEGACY/PARTIAL Google (Outlook stub throws)
-│   │   ├── users/                      # LEGACY user management
-│   │   ├── dashboard/                  # LEGACY /dashboard/summary
-│   │   ├── integrations/               # LEGACY IntegrationConfig entity
+│   │   ├── campaigns/                  # MVP-origin (active: voice reads campaign config)
+│   │   ├── calls/                      # MVP-origin (dashboard counts)
+│   │   ├── appointments/               # MVP-origin (voice_calls FK + calendar sync)
+│   │   ├── calendar/                   # MVP-origin/partial (Google works; Outlook stub throws)
+│   │   ├── users/                      # MVP-origin (auth registration path active)
+│   │   ├── dashboard/                  # MVP-origin (main FE page, /dashboard/summary)
 │   │   ├── audit/                      # AuditLog entity
 │   │   ├── common/                     # GlobalExceptionHandler, ApiError, PaginationUtils, RateLimitFilter
 │   │   └── config/                     # @ConfigurationPropertiesScan + app.* beans
@@ -178,7 +177,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 | You want to... | Touch this | Be careful |
 |---|---|---|
 | Add a new REST endpoint | `backend/.../{module}/controller/`, service, dto | `@PreAuthorize`, `@Schema`, add to the live-module table in `01-arquitectura.md` |
-| Add a field to an existing entity | `backend/.../entity/Entity.java` + new `V{n}__...sql` | NEVER edit V1–V19 migrations; add a new one. Set DEFAULT for NOT NULL. |
+| Add a field to an existing entity | `backend/.../entity/Entity.java` + new `V{n}__...sql` | NEVER edit V1–V20 migrations; add a new one. Set DEFAULT for NOT NULL. |
 | Add a new ENUM value | New `V{n}__...sql`: `ALTER TYPE foo ADD VALUE 'BAR';` | Postgres ENUMs immutable; restart backend after. |
 | Add a new native enum to an entity | `@Enumerated(STRING) + @JdbcTypeCode(NAMED_ENUM)` | The classic "expression is of type character varying" bug otherwise. |
 | Add a new nav item | `core/layout/main-layout/main-layout.component.ts` (`navItems`) | Add route in `app.routes.ts`. |
@@ -205,7 +204,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 | WhatsApp chatbot (Vonage + Groq) — dogfooded on Script9 | ✅ live |
 | Voice web-call (WebRTC) + webhooks + provider abstraction | ✅ live |
 | Leads (CRUD + CSV + sources incl. WHATSAPP/WEB_CHAT) | ✅ live |
-| **Legacy outbound** (campaigns/calls/appointments/calendar-partial) | ✅ done but **deprecated** |
+| **MVP-origin modules** (campaigns/calls/appointments/calendar/users/dashboard/audit) | ✅ retained — several **active** in the live flow (voice/escalation/auth/dashboard) but not the focus of new product work |
 | Calendar sync (Google; Outlook stub throws) | ⚠️ partial |
 | **Escalation Orchestrator** (WhatsApp follow-up → timeout → Retell outbound voice) | ✅ **live** (ADR-009, V17, `EscalationScheduledTask`) |
 | Retell **phone** outbound live | ❌ blocked — `RETELL_FROM_NUMBER` empty; only web-call works |
@@ -230,7 +229,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 ## 11. Glossary
 
 - **SaaS core**: the live product modules (auth, leads, chat, whatsapp, voice, business).
-- **Legacy / LEGACY**: outbound-campaign scaffolding retained in-tree (campaigns, calls, appointments, calendar-partial, users).
+- **MVP-origin / legacy-origin**: modules that began as outbound-campaign scaffolding (campaigns, calls, appointments, calendar-partial, users, dashboard, audit). The old "LEGACY / deprecated / do not extend" labels were **corrected 2026-08-29**: several of these are actively wired into the live SaaS flow (voice reads campaigns, `voice_calls` references appointments, auth uses users, dashboard is the main page, audit is shared infra). They remain secondary to new product work (the SaaS chat + voice core) but are **not delete targets**.
 - **Candidate**: set of changes frozen for review (RDD).
 - **Receipt**: SHA-256 of the candidate (RDD).
 - **VoiceProvider**: abstraction over Retell/Vapi for placing voice calls.
@@ -249,4 +248,4 @@ See `ROADMAP.md` for the full phase detail and Script9 vs Callsagents role split
 
 ---
 
-**If you get stuck**: read `RUNBOOK.md` (operational), this file (developer onboarding), then `docs/01-arquitectura.md` and `docs/03-adrs.md` for the real architecture and the reasoning behind it. When in doubt, extend the SaaS core (auth/leads/chat/whatsapp/voice/business) — do NOT extend the legacy outbound modules.
+**If you get stuck**: read `RUNBOOK.md` (operational), this file (developer onboarding), then `docs/01-arquitectura.md` and `docs/03-adrs.md` for the real architecture and the reasoning behind it. When extending, prefer the SaaS core (auth/leads/chat/whatsapp/voice/business) — but do NOT assume the MVP-origin modules are dead: several are wired into the live flow (see §9).

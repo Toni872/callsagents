@@ -1,6 +1,6 @@
 # Callsagents — Live Architecture
 
-> Source of truth for the current SaaS architecture. Distinguishes the **LIVE SaaS core** (the product) from the **LEGACY** outbound-campaign scaffolding that is retained in-tree but deprecated. Read `00-handoff.md` for onboarding, `02-modelo-de-datos.md` for the schema, and `03-adrs.md` for the decisions behind each choice.
+> Source of truth for the current SaaS architecture. Distinguishes the **LIVE SaaS core** (the product) from the **MVP-origin** modules (born in the outbound-campaign MVP; several are actively wired into the live flow — see §8 — even though they are not the focus of new product work). Read `00-handoff.md` for onboarding, `02-modelo-de-datos.md` for the schema, and `03-adrs.md` for the decisions behind each choice.
 
 ---
 
@@ -30,9 +30,9 @@ Callsagents is a **multi-tenant SaaS** that captures and converts website leads 
 | **escalation** | Escalation Orchestrator (V17): WhatsApp follow-up → timeout → Retell outbound voice, per-business config. |
 | **business** | `BusinessProfile` (SaaS tenancy anchor, `@MapsId` 1:1 with User) + widget-config. |
 
-### LEGACY (kept in-tree, deprecated — recording tables only)
+### MVP-origin modules (retained in-tree; several active in the live flow)
 
-`campaigns`, `campaign_leads`, `calls` (legacy outbound), `appointments` (+ calendar hook), `calendar_integrations`, `integrations`, `users`, `dashboard`, `audit`. Reference for the SaaS design; **do not extend for product work** (ADR-010).
+`campaigns`, `campaign_leads`, `calls`, `appointments` (+ calendar hook), `calendar_integrations`, `users`, `dashboard`, `audit`. Origin is the outbound MVP (ADR-010). **Several are active today**: `VoiceCallService` reads `Campaign` voice-config, `voice_calls` references `Appointment`, `AuthService` uses `UserService.register`, `/dashboard/summary` is the frontend main page, and `AuditService` is shared live infra. Prefer the SaaS core for new work, but do not delete or assume-dead these modules.
 
 ## 3. Request flow diagrams
 
@@ -113,7 +113,7 @@ Implemented and verified end-to-end (real Vonage sandbox + tunnel). A lead that 
 | `/api/escalation/leads/{leadId}` | GET | escalation | bearer |
 | `/api/escalation/{id}/cancel` | POST | escalation | ADMIN/SUPERVISOR |
 | `/api/business/profile` & `/api/business/widget-config` | GET/PUT | business | bearer |
-| `/api/appointments` `/api/campaigns` `/api/calls` `/api/users` `/api/dashboard/summary` | — | LEGACY | (deprecated) |
+| `/api/appointments` `/api/campaigns` `/api/calls` `/api/users` `/api/dashboard/summary` | — | MVP-origin | (see §8; several active) |
 
 Response envelope for the SaaS core: `{ "success": true, "data": ... }`.
 
@@ -131,7 +131,7 @@ Response envelope for the SaaS core: `{ "success": true, "data": ... }`.
 - **PostgreSQL 16** with native ENUMs + JSONB (`hypersistence-utils`); UUID PKs, `TIMESTAMPTZ`, hard delete + `AuditLog`.
 - **Redis 7** for auth revocation state.
 - **Caffeine** for ephemeral chat history (max 20 turns) — no chat table.
-- Flyway migrations V1–V19 (V13 missing by design; V2 dev-only under `db/migration/dev`), fully listed in `docs/02-modelo-de-datos.md`.
+- Flyway migrations V1–V20 (V13 missing by design; V2 dev-only under `db/migration/dev`), fully listed in `docs/02-modelo-de-datos.md`.
 - **Windows host note**: docker Postgres is on **5433:5432** (native PG owns 5432).
 
 ## 7. Codebase conventions
@@ -141,6 +141,8 @@ Response envelope for the SaaS core: `{ "success": true, "data": ... }`.
 - **Git**: conventional commits (`feat(scope):`, `fix(scope):`, `docs:`, `chore:`); one commit per logical change; RDD review gate before commit/push.
 - Migrations: never edit a shipped migration; add `V{n}__...sql`.
 
-## 8. Legacy vs live — a note to future readers
+## 8. MVP-origin vs live — a note to future readers
 
-The repo contains a complete outbound-campaigns MVP (leads/campaigns/calls/appointments, ADMIN/SUPERVISOR/AGENT roles) that the product **pivoted away from**. It stays in-tree as reference (ADR-010) but is **not the product**; Twilio was fully removed 2026-08-29. All new behavior builds on the SaaS core (auth, leads, chat, whatsapp, voice, business, escalation). When extending, prefer the SaaS path and update this document's module table and endpoints inventory.
+The repo contains a complete outbound-campaigns MVP (leads/campaigns/calls/appointments, ADMIN/SUPERVISOR/AGENT roles) that the product **pivoted away from** as the primary growth path; Twilio was fully removed 2026-08-29 (ADR-011). All **new** behavior builds on the SaaS core (auth, leads, chat, whatsapp, voice, business, escalation).
+
+However, the MVP-origin modules are **not dead scaffolding**: `VoiceCallService` reads `Campaign` voice-config and `campaignId`, `voice_calls` has an FK to `appointments`, `AuthService` uses `UserService.register`, `/dashboard/summary` is the frontend's default page, and `AuditService` is shared live infra. The old "LEGACY/deprecated — do not touch" labels were corrected 2026-08-29: treat these modules as **active-but-secondary**, extend the SaaS core for new work, and **do not delete them** without checking those couplings. When extending, update this document's module table and endpoints inventory.

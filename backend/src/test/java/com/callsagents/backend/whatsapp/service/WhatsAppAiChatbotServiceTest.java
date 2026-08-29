@@ -105,13 +105,19 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    void emailOutsideCollectingInfo_noLeadSaved() {
-        // Bare email in the initial step should not trigger the fallback
+    void emailInInitialStep_leadStillSaved() {
+        // A bare message with name+email (e.g. first contact or after cache
+        // expiry) must still produce a lead — email is a strong signal.
+        expectNoExistingLead();
         when(groqService.chat(any(), any(), any()))
-            .thenReturn("Hola, ¿en qué puedo ayudarte?");
-        service.processMessage(PHONE, "Mi email es antonio@test.com", BUSINESS_ID);
+            .thenReturn("Confirmo tu nombre y email. ¿En qué te ayudo?");
 
-        verify(leadRepository, never()).save(any(Lead.class));
+        service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com", BUSINESS_ID);
+
+        verify(leadRepository).save(argThat(lead ->
+            ((Lead) lead).getEmail().equals("antonio@test.com")
+                && "Antonio".equals(((Lead) lead).getFirstName())
+                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
     }
 
     @Test

@@ -146,10 +146,11 @@ public class WhatsAppAiChatbotService {
 
         // Deterministic fallback: some models (observed: gpt-oss-20b) reply
         // conversationally and never emit the [LEAD:...] tag even when the system
-        // prompt instructs it. When we are in the data-collection step and the
-        // user message carries an email, parse name/email directly from the
-        // message and persist the lead instead of silently dropping it.
-        if (businessId != null && "collecting_info".equals(step) && containsEmail(text)) {
+        // prompt instructs it. A user message carrying an email is a strong signal
+        // that contact data is being shared, regardless of the conversation step
+        // (the cache may have expired, or the user may start with name+email).
+        // Parse name/email directly from the message and persist the lead.
+        if (businessId != null && containsEmail(text)) {
             saveLeadFromMessage(phone, text, businessId);
         }
 
@@ -447,9 +448,9 @@ public class WhatsAppAiChatbotService {
     /**
      * Deterministic fallback that saves a lead directly from the user message
      * when the AI model failed to emit the machine-readable [LEAD:...] tag.
-     * Only called when a business profile is resolved and the flow is in
-     * collecting_info (name/email collection). Fills the leadData cache too so
-     * follow-up confirmation buttons show the captured values.
+     * Triggered by an email in the user message, regardless of the conversation
+     * step, whenever a business profile is resolved. Fills the leadData cache
+     * too so follow-up confirmation buttons show the captured values.
      */
     private void saveLeadFromMessage(String phone, String message, UUID businessId) {
         try {

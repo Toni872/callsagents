@@ -113,7 +113,7 @@ Implemented and verified end-to-end (real Vonage sandbox + tunnel). A lead that 
 | `/api/escalation/leads/{leadId}` | GET | escalation | bearer |
 | `/api/escalation/{id}/cancel` | POST | escalation | ADMIN/SUPERVISOR |
 | `/api/business/profile` & `/api/business/widget-config` | GET/PUT | business | bearer |
-| `/api/appointments` `/api/campaigns` `/api/calls` `/api/users` `/api/dashboard/summary` `/api/integrations/voice` | — | LEGACY | (deprecated) |
+| `/api/appointments` `/api/campaigns` `/api/calls` `/api/users` `/api/dashboard/summary` | — | LEGACY | (deprecated) |
 
 Response envelope for the SaaS core: `{ "success": true, "data": ... }`.
 
@@ -131,12 +131,12 @@ Response envelope for the SaaS core: `{ "success": true, "data": ... }`.
 - **PostgreSQL 16** with native ENUMs + JSONB (`hypersistence-utils`); UUID PKs, `TIMESTAMPTZ`, hard delete + `AuditLog`.
 - **Redis 7** for auth revocation state.
 - **Caffeine** for ephemeral chat history (max 20 turns) — no chat table.
-- Flyway migrations V1–V16 (V13 missing by design; V2 dev-only under `db/migration/dev`), fully listed in `docs/02-modelo-de-datos.md`.
+- Flyway migrations V1–V19 (V13 missing by design; V2 dev-only under `db/migration/dev`), fully listed in `docs/02-modelo-de-datos.md`.
 - **Windows host note**: docker Postgres is on **5433:5432** (native PG owns 5432).
 
 ## 7. Codebase conventions
 
-- **Backend (Java 21 / Spring Boot 3.5)**: standalone single-class files, Lombok entities, DTO records, microservices-style per-module packages under `com.callsagents.backend`. ORM ENUMs must use `@Enumerated(STRING) + @JdbcTypeCode(SqlTypes.NAMED_ENUM)`. Tests: Mockito + JUnit 5, `@ExtendWith(MockitoExtension.class)`, naming `{Method}_when{State}_then{Expected}` (214 tests / 22 classes).
+- **Backend (Java 21 / Spring Boot 3.5)**: standalone single-class files, Lombok entities, DTO records, microservices-style per-module packages under `com.callsagents.backend`. ORM ENUMs must use `@Enumerated(STRING) + @JdbcTypeCode(SqlTypes.NAMED_ENUM)`. Tests: Mockito + JUnit 5, `@ExtendWith(MockitoExtension.class)`, naming `{Method}_when{State}_then{Expected}` (223 tests / 23 classes).
 - **Frontend (Angular 18.2)**: standalone components, signals, `inject()`, `OnPush`, native `<dialog>`, lazy routes, CSS variables (no Material/Tailwind).
 - **Git**: conventional commits (`feat(scope):`, `fix(scope):`, `docs:`, `chore:`); one commit per logical change; RDD review gate before commit/push.
 - Migrations: never edit a shipped migration; add `V{n}__...sql`.

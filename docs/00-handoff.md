@@ -10,7 +10,7 @@ Callsagents is a **multi-tenant SaaS** that captures and converts website leads 
 
 > **Do NOT read the words "outbound sales platform"** — the product has **pivoted** away from that. The original outbound-campaigns MVP (leads/campaigns/calls/appointments with ADMIN/SUPERVISOR/AGENT roles + Twilio) is **legacy scaffolding kept in-tree but deprecated**. It is not the product.
 
-**This is a working SaaS, dogfooded.** It runs locally via Docker and on Railway in prod. Voice AI is **implemented** (Retell + web-call + webhooks); the **Escalation Orchestrator** is the NEXT phase.
+**This is a working SaaS, dogfooded.** It runs locally via Docker and on Railway in prod. Voice AI is **implemented** (Retell + web-call + webhooks) and the **Escalation Orchestrator** (WhatsApp follow-up → timeout → Retell voice) is **implemented and E2E-verified** (V17 + `EscalationScheduledTask`).
 
 ## 2. Stack (frozen — don't change without team discussion)
 
@@ -26,7 +26,7 @@ Callsagents is a **multi-tenant SaaS** that captures and converts website leads 
 | WhatsApp | Vonage (sandbox dev / paid prod) | n/a |
 | Voice | Retell AI via `VoiceProvider` abstraction; Vapi present as alternative; `WebhookSignatureValidator` fail-closed | n/a |
 | ORM | Hibernate `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for Postgres ENUMs | 6.x |
-| Migrations | Flyway (V1–V16; V13 missing, V2 dev-only under `db/migration/dev`) | 11.7.2 |
+| Migrations | Flyway (V1–V19; V13 missing, V2 dev-only under `db/migration/dev`) | 11.7.2 |
 | Docs | springdoc-openapi (Swagger UI) | 2.9.0 |
 | Containerization | Docker Compose (dev) + Railway (prod) | Docker 29+ |
 | Scheduling | `@Schedule`/`@EnableScheduling` — **none exists** | n/a |
@@ -84,7 +84,7 @@ callsagents/
 ├── docs/                               # Architecture + decisions + handoff
 │   ├── 00-handoff.md                   # ← you are here
 │   ├── 01-arquitectura.md              # Live architecture (SaaS core vs legacy)
-│   ├── 02-modelo-de-datos.md           # Live schema V1–V16
+│   ├── 02-modelo-de-datos.md           # Live schema V1–V19
 │   ├── 03-adrs.md                      # Architecture Decision Records (ADR-001..010)
 │   ├── 16-railway-deploy.md            # Railway deploy specifics
 │   ├── rdd-workflow.md                 # gentle-ai RDD gate
@@ -110,8 +110,8 @@ callsagents/
 │   │   ├── application.yml             # Common config (app.voice, app.vonage, app.groq)
 │   │   ├── application-dev.yml         # Dev profile
 │   │   ├── application-test.yml        # Test profile
-│   │   └── db/migration/               # Flyway V1..V16 (V13 gap; V2 under db/migration/dev)
-│   ├── src/test/                       # 214 @Test methods across 22 test classes
+│   │   └── db/migration/               # Flyway V1..V19 (V13 gap; V2 under db/migration/dev)
+│   ├── src/test/                       # 223 @Test methods across 23 test classes
 │   └── Dockerfile                      # Backend (Railway root constraint)
 ├── frontend/                           # Angular app
 │   ├── src/app/
@@ -178,7 +178,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 | You want to... | Touch this | Be careful |
 |---|---|---|
 | Add a new REST endpoint | `backend/.../{module}/controller/`, service, dto | `@PreAuthorize`, `@Schema`, add to the live-module table in `01-arquitectura.md` |
-| Add a field to an existing entity | `backend/.../entity/Entity.java` + new `V{n}__...sql` | NEVER edit V1–V16 migrations; add a new one. Set DEFAULT for NOT NULL. |
+| Add a field to an existing entity | `backend/.../entity/Entity.java` + new `V{n}__...sql` | NEVER edit V1–V19 migrations; add a new one. Set DEFAULT for NOT NULL. |
 | Add a new ENUM value | New `V{n}__...sql`: `ALTER TYPE foo ADD VALUE 'BAR';` | Postgres ENUMs immutable; restart backend after. |
 | Add a new native enum to an entity | `@Enumerated(STRING) + @JdbcTypeCode(NAMED_ENUM)` | The classic "expression is of type character varying" bug otherwise. |
 | Add a new nav item | `core/layout/main-layout/main-layout.component.ts` (`navItems`) | Add route in `app.routes.ts`. |
@@ -190,7 +190,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 
 ## 8. Tests
 
-- **214 @Test methods across 22 test classes** currently. Run with `mvn test` from `backend/`.
+- **223 @Test methods across 23 test classes** currently. Run with `mvn test` from `backend/`.
 - Naming: `{MethodName}_when{State}_then{Expected}`.
 - Always test: happy path, validation failure, edge cases (null/blank/empty), security (forbidden).
 - See recent services for the pattern: `@ExtendWith(MockitoExtension.class)` + mocks + `@MockitoSettings(strictness = Strictness.LENIENT)` where stubs may not run on every path.
@@ -207,7 +207,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 | Leads (CRUD + CSV + sources incl. WHATSAPP/WEB_CHAT) | ✅ live |
 | **Legacy outbound** (campaigns/calls/appointments/calendar-partial) | ✅ done but **deprecated** |
 | Calendar sync (Google; Outlook stub throws) | ⚠️ partial |
-| **Escalation Orchestrator** (WhatsApp follow-up → timeout → Retell outbound voice) | 🔜 **next** (ADR-009 designed) |
+| **Escalation Orchestrator** (WhatsApp follow-up → timeout → Retell outbound voice) | ✅ **live** (ADR-009, V17, `EscalationScheduledTask`) |
 | Retell **phone** outbound live | ❌ blocked — `RETELL_FROM_NUMBER` empty; only web-call works |
 | Stripe billing | 🔜 planned |
 | Per-tenant trial enforcement | ❌ currently **global** (7 days / 50 leads) |
@@ -225,7 +225,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 8. **AuthController `/me`** must use `Authentication.getName()` (principal is a String, not `UserDetails`).
 9. **EncryptionService MVP-tolerant**: if `ENCRYPTION_KEY` is empty the bean still boots with `ready=false`; calendar encrypt/decrypt return 503.
 10. **Console 401 noise**: `GET /api/auth/me` fires on `MainLayoutComponent` mount when logged out — cosmetic.
-11. **No scheduler**: `@Scheduled`/`@EnableScheduling` is absent; nothing auto-dials. Escalation Orchestrator will introduce the first background mechanism.
+11. **Scheduler exists**: `EscalationScheduledTask` runs `@Scheduled(fixedDelay = 60000)` and elevates `WAITING_REPLY` escalations past their per-business timeout to Retell voice calls (in-process lock guards overlap). This is the only `@Scheduled`; no campaign/call auto-dialing exists.
 
 ## 11. Glossary
 

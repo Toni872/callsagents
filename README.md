@@ -59,8 +59,8 @@ Retell AI voice call (fallback only)
 | **SaaS core (LIVE)** | ✅ Auth (email + Google OAuth), `BusinessProfile` multi-tenancy + onboarding, chat widget, WhatsApp chatbot (Vonage + Groq), voice web-call (WebRTC), leads, per-tenant prompt composer |
 | **Legacy outbound (kept in-tree)** | ✅ Campaigns / Calls / Appointments — **deprecated**, no scheduling, recording tables only |
 | **Calendar sync** | ⚠️ Partial — Google only, Outlook stub throws |
-| **Escalation Orchestrator** | 🔜 **Next** — WhatsApp follow-up → timeout → Retell outbound voice (designed in ADR-009, not yet implemented) |
+| **Escalation Orchestrator** | ✅ **Live** — WhatsApp follow-up → timeout → Retell outbound voice (`EscalationScheduledTask` polls every 60s; ADR-009, V17) |
 | **Retell phone outbound** | ⚠️ Blocked — `RETELL_FROM_NUMBER` currently empty; only WebRTC web-call works |
 | **Stripe billing** | 🔜 Planned |
 
-> **Legacy vs live:** the outbound campaign/calls/appointment modules are scaffolding kept in-tree for reference (Twilio was removed 2026-08-29). They are **not** the product. The product is the SaaS chat + voice lead-capture flow described above. Grep for `@Scheduled` — there is none; nothing auto-dials.
+> **Legacy vs live:** the outbound campaign/calls/appointment modules are scaffolding kept in-tree for reference (Twilio was removed 2026-08-29). They are **not** the product. The product is the SaaS chat + voice lead-capture flow described above. `@Scheduled` exists in one place: `EscalationScheduledTask` polls expiring escalations every 60s and elevates them to Retell voice calls.

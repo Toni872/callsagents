@@ -1,6 +1,6 @@
-# Callsagents — Data Model (current schema V1–V16)
+# Callsagents — Data Model (current schema V1–V19)
 
-> Live schema reference. Entities are marked **SaaS-core** (the product) or **LEGACY** (outbound-campaign scaffolding retained in-tree). `Chat` is **ephemeral** — no table. This describes the **real, current** schema as materialized by Flyway migrations V1–V16.
+> Live schema reference. Entities are marked **SaaS-core** (the product) or **LEGACY** (outbound-campaign scaffolding retained in-tree). `Chat` is **ephemeral** — no table. This describes the **real, current** schema as materialized by Flyway migrations V1–V19.
 
 ## Schema conventions
 
@@ -16,7 +16,7 @@
 | **Index naming** | `idx_<table>_<cols>` (e.g. `idx_leads_status`) |
 | **Migrations** | Never edit a shipped migration; add `V{n}__...sql`. `V13` is **missing**; `V2` is **dev-only** under `db/migration/dev` |
 
-**Migration inventory (V1–V16):**
+**Migration inventory (V1–V19):**
 
 | Migration | Purpose |
 |---|---|
@@ -36,7 +36,7 @@
 | V14 | Update admin password (hash; previous rotation) |
 | V15 | `business_profiles` table (SaaS tenancy) |
 | V16 | `business_profiles.whatsapp_number` + partial index for webhook routing |
-| V17 | Call detail fields (duration/status/outcome/recording) |
+| V17 | Escalation Orchestrator: `escalations` table + `escalation_stage` ENUM + 4 `business_profiles` escalation columns |
 | V18 | `leads.created_by` + backfill + NOT NULL + index (per-user scoping) |
 | V19 | Rotate admin password (hash; plaintext only in secrets/env `CALLSAGENTS_ADMIN_PASSWORD`) |
 
@@ -271,11 +271,11 @@ Indexes: `idx_audit_entity`, `idx_audit_user`, `idx_audit_created_at`, `idx_audi
 
 ---
 
-## Planned (NOT implemented — Escalation Orchestrator, ADR-009)
+## Escalation Orchestrator (IMPLEMENTED — V17, ADR-009)
 
-The following are **designed, not yet built**. Do not implement them in this doc's scope — this is the target data model for the escalation phase:
+The escalation data model is **built** (not planned). Migration `V17__escalation_orchestrator.sql` creates:
 
-- **New `escalations` table** — per-lead escalation lifecycle: `id`, `lead_id`, `business_id`, `stage` (e.g. `WAITING_WHATSAPP` → `ESCALATED_VOICE` → `RESOLVED`), `timeout_at`, `voice_call_id`, `status`, `created_at`/`updated_at`.
-- **4 new `business_profiles` columns** — per-tenant escalation config: `whatsapp_follow_up_delay_seconds`, `escalation_timeout_seconds`, `enable_voice_escalation` (BOOLEAN), `escalation_enabled` (kill switch) — exact names TBD at implementation.
+- **`escalations` table** — per-lead escalation lifecycle: `id`, `lead_id`, `user_id`, `stage`, `followup_sent_at`, `waiting_until`, `voice_called_at`, `provider_call_id`, `voice_outcome`, `metadata` (JSONB), `created_at`. `stage` is the PG enum `escalation_stage` (`QUALIFIED`, `FOLLOWUP_SENT`, `WAITING_REPLY`, `VOICE_CALLED`, `RESOLVED`, `ABANDONED`, `CANCELLED`).
+- **4 `business_profiles` columns** — per-tenant escalation config: `escalation_enabled` (BOOLEAN, default true), `reply_timeout_minutes` (INTEGER, default 30), `followup_message` (TEXT), `voice_agent_id` (VARCHAR).
 
-These are documented here so the schema direction is agreed *before* the migration is written; the actual DDL lives in a future `V{n}` migration.
+`EscalationScheduledTask` polls `WAITING_REPLY` escalations past their timeout every 60s and elevates them via `EscalationService.escalateToVoice`.

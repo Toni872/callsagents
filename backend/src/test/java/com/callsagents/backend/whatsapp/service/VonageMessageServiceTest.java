@@ -58,6 +58,29 @@ class VonageMessageServiceTest {
     }
 
     @Test
+    void sendText_withPlusPrefix_stripsPrefixBeforeSending() {
+        when(vonageConfig.isConfigured()).thenReturn(true);
+        when(vonageConfig.getApiKey()).thenReturn("test-key");
+        when(vonageConfig.getApiSecret()).thenReturn("test-secret");
+        when(vonageConfig.getSandboxNumber()).thenReturn("14157386102");
+        when(vonageConfig.getSandboxUrl()).thenReturn("https://messages-sandbox.nexmo.com/v1/messages");
+        when(restTemplate.postForEntity(anyString(), any(), eq(String.class)))
+            .thenReturn(new ResponseEntity<>(HttpStatus.OK));
+
+        boolean result = service.sendText("+34687723287", "Hello!");
+
+        assertTrue(result);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(anyString(), captor.capture(), eq(String.class));
+
+        Map<String, Object> body = captor.getValue().getBody();
+        assertNotNull(body);
+        assertEquals("34687723287", body.get("to"));
+    }
+
+    @Test
     void sendText_whenNotConfigured_returnsFalse() {
         when(vonageConfig.isConfigured()).thenReturn(false);
 

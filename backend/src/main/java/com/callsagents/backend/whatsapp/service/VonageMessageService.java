@@ -37,14 +37,15 @@ public class VonageMessageService {
             log.warn("Vonage not configured — cannot send text to {}", to);
             return false;
         }
+        String normalizedTo = normalizeTo(to);
         Map<String, Object> body = Map.of(
             "from", config.getSandboxNumber(),
-            "to", to,
+            "to", normalizedTo,
             "channel", "whatsapp",
             "message_type", "text",
             "text", text
         );
-        return send(body, to);
+        return send(body, normalizedTo);
     }
 
     /**
@@ -57,6 +58,7 @@ public class VonageMessageService {
             log.warn("Vonage not configured — cannot send buttons to {}", to);
             return false;
         }
+        String normalizedTo = normalizeTo(to);
         List<Map<String, Object>> buttonObjects = new ArrayList<>();
         for (String[] btn : buttons) {
             buttonObjects.add(Map.of(
@@ -67,7 +69,7 @@ public class VonageMessageService {
 
         Map<String, Object> body = Map.of(
             "from", config.getSandboxNumber(),
-            "to", to,
+            "to", normalizedTo,
             "channel", "whatsapp",
             "message_type", "custom",
             "custom", Map.of(
@@ -79,7 +81,7 @@ public class VonageMessageService {
                 )
             )
         );
-        return send(body, to);
+        return send(body, normalizedTo);
     }
 
     /**
@@ -95,6 +97,7 @@ public class VonageMessageService {
             log.warn("Vonage not configured — cannot send list to {}", to);
             return false;
         }
+        String normalizedTo = normalizeTo(to);
         List<Map<String, Object>> sectionObjects = new ArrayList<>();
         for (Map<String, List<String[]>> section : sections) {
             String title = section.keySet().iterator().next();
@@ -120,7 +123,7 @@ public class VonageMessageService {
 
         Map<String, Object> body = Map.of(
             "from", config.getSandboxNumber(),
-            "to", to,
+            "to", normalizedTo,
             "channel", "whatsapp",
             "message_type", "custom",
             "custom", Map.of(
@@ -128,7 +131,20 @@ public class VonageMessageService {
                 "interactive", interactive
             )
         );
-        return send(body, to);
+        return send(body, normalizedTo);
+    }
+
+    /**
+     * Vonage rejects numbers that carry a leading "+" (E.164 as stored for
+     * leads: "+34687723287"). The sandbox whitelists the number without it
+     * ("34687723287"), so strip the prefix before building the request.
+     */
+    private String normalizeTo(String to) {
+        if (to == null) {
+            return to;
+        }
+        String trimmed = to.trim();
+        return trimmed.startsWith("+") ? trimmed.substring(1) : trimmed;
     }
 
     private boolean send(Map<String, Object> body, String to) {

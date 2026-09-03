@@ -17,10 +17,11 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,21 +48,27 @@ class WhatsAppAiChatbotServiceTest {
             businessService, promptComposer, escalationService, voiceCallService
         );
         when(groqService.isConfigured()).thenReturn(true);
+        lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
+        lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
     }
 
     private void expectNoExistingLead() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        lenient().when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+    }
+
+    private void stubStructured(String responseText, String name, String email) {
+        GroqService.LeadData leadData = name == null && email == null ? null
+            : new GroqService.LeadData(name, email, null, null);
+        when(groqService.chatStructured(anyString(), anyList(), anyString()))
+            .thenReturn(new GroqService.LeadExtraction(responseText, leadData));
     }
 
     @Test
-    void modelOmitsLeadTag_leadStillSavedFromMessage() {
-        // Step 1: user taps "Ventas" -> step becomes collecting_info
+    void structuredLead_savedFromStructuredResponse() {
         service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
 
-        // Step 2: model replies conversationally WITHOUT the [LEAD:...] tag
         expectNoExistingLead();
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Hola Antonio, soy Naiara de Script9. ¿En qué te ayudo?");
+        stubStructured("Perfecto, te ayudo", "Antonio", "antonio@test.com");
 
         service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com", BUSINESS_ID);
 
@@ -76,56 +83,10 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    void modelEmitsLeadTag_leadSavedOnce() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-
-        // Model complies: tag present at the end of the reply
-        expectNoExistingLead();
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Listo, te ayudo con eso [LEAD:name=Antonio|email=antonio@test.com|service=Automatizacion]");
-
-        service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com", BUSINESS_ID);
-
-        verify(leadRepository, times(1)).save(any(Lead.class));
-        verify(leadRepository).save(argThat(lead ->
-            ((Lead) lead).getEmail().equals("antonio@test.com")
-                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
-    }
-
-    @Test
-    void withoutBusinessId_noLeadSaved() {
-        // Same flow but no business profile resolved -> created_by NOT NULL guard
-        service.processMessage(PHONE, "intent_ventas");
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Hola Antonio, soy Naiara de Script9.");
-
-        service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com");
-
-        verify(leadRepository, never()).save(any(Lead.class));
-    }
-
-    @Test
-    void emailInInitialStep_leadStillSaved() {
-        // A bare message with name+email (e.g. first contact or after cache
-        // expiry) must still produce a lead — email is a strong signal.
-        expectNoExistingLead();
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Confirmo tu nombre y email. ¿En qué te ayudo?");
-
-        service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com", BUSINESS_ID);
-
-        verify(leadRepository).save(argThat(lead ->
-            ((Lead) lead).getEmail().equals("antonio@test.com")
-                && "Antonio".equals(((Lead) lead).getFirstName())
-                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
-    }
-
-    @Test
-    void onlyEmailNoName_leadSavedWithUnknownName() {
+    void structuredLead_noEmail_savedWithUnknownName() {
         service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
         expectNoExistingLead();
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Perfecto, ¿algo más?");
+        stubStructured("Perfecto, ¿algo más?", null, "antonio@test.com");
 
         service.processMessage(PHONE, "antonio@test.com", BUSINESS_ID);
 
@@ -136,57 +97,12 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    void nameInEarlierMessage_emailLater_leadSavedWithThatName() {
-        // User introduces themselves in one message ("Me llamo Juan") and only
-        // gives the email in a later one. The deterministic fallback must
-        // recover the name from the conversation history instead of saving
-        // "Desconocido".
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Perfecto, ¿cómo te llamas?");
-        service.processMessage(PHONE, "Me llamo Juan", BUSINESS_ID);
-
-        expectNoExistingLead();
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Gracias Juan. ¿Cuál es tu email?");
-        service.processMessage(PHONE, "mi email es juan@test.com", BUSINESS_ID);
-
-        verify(leadRepository).save(argThat(lead ->
-            ((Lead) lead).getEmail().equals("juan@test.com")
-                && "Juan".equals(((Lead) lead).getFirstName())
-                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
-    }
-
-    @Test
-    void onlyGenericWordEarlier_noFalseNameTaken() {
-        // A prior button reply or generic word ("Ventas") must never be
-        // mistaken for a name when the email arrives in a later message.
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Perfecto, ¿en qué te ayudo?");
-        service.processMessage(PHONE, "Ventas", BUSINESS_ID);
-
-        expectNoExistingLead();
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Gracias. ¿Cuál es tu email?");
-        service.processMessage(PHONE, "antonio@test.com", BUSINESS_ID);
-
-        verify(leadRepository).save(argThat(lead ->
-            ((Lead) lead).getEmail().equals("antonio@test.com")
-                && "Desconocido".equals(((Lead) lead).getFirstName())
-                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
-    }
-
-    @Test
-    void nameAndEmailSameMessage_withConnectorWord_savesCleanName() {
-        // Real case from the sandbox transcript: "Me llamo Juan y mi email es
-        // juan@test.com" must save the lead as "Juan", never as "Juan y".
+    void structuredLead_withConnectorName_usesCleanStructuredName() {
+        // Name/email hygiene now comes from the structured model output, so the
+        // message can contain connector words without polluting the saved name.
         service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
         expectNoExistingLead();
-        when(groqService.chat(any(), any(), any()))
-            .thenReturn("Perfecto, te ayudo con eso");
+        stubStructured("Perfecto, te ayudo con eso", "Juan", "juan@test.com");
 
         service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
 
@@ -194,5 +110,26 @@ class WhatsAppAiChatbotServiceTest {
             ((Lead) lead).getEmail().equals("juan@test.com")
                 && "Juan".equals(((Lead) lead).getFirstName())
                 && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
+    }
+
+    @Test
+    void nullExtraction_noLeadSaved() {
+        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+        expectNoExistingLead();
+        stubStructured("¿Cuál es tu email?", null, null);
+
+        service.processMessage(PHONE, "Me llamo Antonio", BUSINESS_ID);
+
+        verify(leadRepository, never()).save(any(Lead.class));
+    }
+
+    @Test
+    void withoutBusinessId_noLeadSaved() {
+        service.processMessage(PHONE, "intent_ventas");
+        stubStructured("Hola Antonio", "Antonio", "antonio@test.com");
+
+        service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com");
+
+        verify(leadRepository, never()).save(any(Lead.class));
     }
 }

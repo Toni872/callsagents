@@ -96,6 +96,12 @@ app:
   google:
     client-id: ${GOOGLE_CLIENT_ID:}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
 server:
   port: ${PORT:8080}
   servlet:

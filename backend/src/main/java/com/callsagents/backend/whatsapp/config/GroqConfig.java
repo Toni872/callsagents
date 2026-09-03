@@ -15,9 +15,13 @@ public class GroqConfig {
     @Value("${groq.model:openai/gpt-oss-20b}")
     private String model;
 
+    @Value("${groq.model.structured:${groq.model:openai/gpt-oss-20b}}")
+    private String structuredModel;
+
     public String getApiKey() { return apiKey; }
     public String getApiUrl() { return apiUrl; }
     public String getModel() { return model; }
+    public String getStructuredModel() { return structuredModel; }
 
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();

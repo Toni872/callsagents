@@ -19,8 +19,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Component
 public class WhatsAppAiChatbotService {
@@ -51,8 +49,13 @@ public class WhatsAppAiChatbotService {
 
     private static final int MAX_HISTORY = 20;
 
-    private static final Pattern EMAIL_PATTERN =
-        Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
+    // Terminal states: once reached, duplicate button clicks are no-ops
+    private static final Set<String> TERMINAL_STATES = Set.of(
+        "confirmed_yes", "confirmed_no", "voice_accepted", "voice_declined"
+    );
+
+    private static final String ALREADY_HANDLED_MSG =
+        "Ya procesé tu respuesta. Si necesitás algo más, escribí 'hola' para reiniciar.";
 
     // System prompt for AI with interactive step awareness
     private String resolveSystemPrompt(UUID userId) {
@@ -123,13 +126,17 @@ public class WhatsAppAiChatbotService {
         // Get or create conversation history
         List<Map<String, String>> history = conversationHistory.get(phone, k -> new ArrayList<>());
 
-        // Call Groq AI
-        String aiResponse = groqService.chat(resolveSystemPrompt(businessId), history, text);
+        // Call Groq AI with structured output for lead extraction
+        GroqService.LeadExtraction extraction = groqService.chatStructured(
+            resolveSystemPrompt(businessId), history, text
+        );
 
-        if (aiResponse == null) {
+        if (extraction == null) {
             log.warn("Groq returned null for phone={}", phone);
             return "Disculpa, tuve un problema técnico. ¿Podrías repetir tu mensaje?";
         }
+
+        String aiResponse = extraction.response();
 
         // Update conversation history
         history.add(Map.of("role", "user", "content", text));
@@ -141,17 +148,17 @@ public class WhatsAppAiChatbotService {
             history.remove(0);
         }
 
-        // Check if AI extracted lead data
-        String cleanResponse = extractAndSaveLead(phone, aiResponse, businessId);
-
-        // Deterministic fallback: some models (observed: gpt-oss-20b) reply
-        // conversationally and never emit the [LEAD:...] tag even when the system
-        // prompt instructs it. A user message carrying an email is a strong signal
-        // that contact data is being shared, regardless of the conversation step
-        // (the cache may have expired, or the user may start with name+email).
-        // Parse name/email directly from the message and persist the lead.
-        if (businessId != null && containsEmail(text)) {
-            saveLeadFromMessage(phone, text, businessId);
+        // Check if AI extracted lead data from structured response
+        String cleanResponse = aiResponse;
+        GroqService.LeadData extractedLead = extraction.lead();
+        if (extractedLead != null && !extractedLead.isEmpty()) {
+            Map<String, String> data = leadData.get(phone, k -> new HashMap<>());
+            if (extractedLead.name() != null) data.put("name", extractedLead.name());
+            if (extractedLead.email() != null) data.put("email", extractedLead.email());
+            if (extractedLead.service() != null) data.put("service", extractedLead.service());
+            if (extractedLead.timing() != null) data.put("timing", extractedLead.timing());
+            leadData.put(phone, data);
+            saveLead(phone, data, businessId);
         }
 
         // Determine next interactive step
@@ -214,6 +221,11 @@ public class WhatsAppAiChatbotService {
      */
     @SuppressWarnings("unchecked")
     private String[] handleButtonReply(String phone, String text, String step, UUID businessId) {
+        // Terminal-state guard: if already processed, return polite message and no-op
+        if (TERMINAL_STATES.contains(step)) {
+            return new String[]{ALREADY_HANDLED_MSG, "false"};
+        }
+
         // Intent buttons are GLOBAL — handled at any step
         if (text.startsWith("intent_")) {
             return switch (text) {
@@ -256,14 +268,12 @@ public class WhatsAppAiChatbotService {
         if ("confirmation".equals(step)) {
             return switch (text) {
                 case "confirm_yes" -> {
-                    conversationStep.invalidate(phone);
-                    leadData.invalidate(phone);
+                    conversationStep.put(phone, "confirmed_yes");
                     triggerEscalation(phone, businessId);
                     yield new String[]{"¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nTe envío un email con el link para agendar.\n\n¿Te parece bien esta semana?", "false"};
                 }
                 case "confirm_no" -> {
-                    conversationStep.invalidate(phone);
-                    leadData.invalidate(phone);
+                    conversationStep.put(phone, "confirmed_no");
                     yield new String[]{"No te preocupes. Cuando quieras, aquí estoy.\n\n¡Hasta pronto!", "false"};
                 }
                 default -> new String[]{null, "false"};
@@ -274,7 +284,7 @@ public class WhatsAppAiChatbotService {
         if ("awaiting_voice_decision".equals(step)) {
             return switch (text) {
                 case "accept_voice_call" -> {
-                    conversationStep.invalidate(phone);
+                    conversationStep.put(phone, "voice_accepted");
                     boolean placed = acceptVoiceCall(phone, businessId);
                     if (placed) {
                         yield new String[]{"Perfecto, te estoy conectando con un asesor por teléfono...", "false"};
@@ -282,7 +292,7 @@ public class WhatsAppAiChatbotService {
                     yield new String[]{"Estamos teniendo un problema para conectarte por teléfono. Un asesor te va a contactar por chat en breve.", "false"};
                 }
                 case "decline_voice_call" -> {
-                    conversationStep.invalidate(phone);
+                    conversationStep.put(phone, "voice_declined");
                     yield new String[]{"No hay problema, seguimos por chat. ¿En qué más te ayudo?", "false"};
                 }
                 default -> new String[]{null, "false"};
@@ -371,36 +381,6 @@ public class WhatsAppAiChatbotService {
         return text.matches(".*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}.*");
     }
 
-    /**
-     * Extract [LEAD:...] tag from AI response, save lead, and return clean response.
-     */
-    private String extractAndSaveLead(String phone, String aiResponse, UUID businessId) {
-        String leadTag = "[LEAD:";
-        int start = aiResponse.indexOf(leadTag);
-        if (start == -1) return aiResponse;
-
-        int end = aiResponse.indexOf("]", start);
-        if (end == -1) return aiResponse;
-
-        String leadDataStr = aiResponse.substring(start + leadTag.length(), end);
-        String cleanResponse = aiResponse.substring(0, start).trim();
-
-        Map<String, String> data = new HashMap<>();
-        for (String part : leadDataStr.split("\\|")) {
-            String[] kv = part.split("=", 2);
-            if (kv.length == 2) {
-                data.put(kv[0].trim(), kv[1].trim());
-            }
-        }
-
-        // Merge with existing lead data
-        leadData.get(phone, k -> new HashMap<>()).putAll(data);
-
-        Map<String, String> leadForSave = leadData.getIfPresent(phone);
-        saveLead(phone, leadForSave != null ? leadForSave : Map.of(), businessId);
-        return cleanResponse;
-    }
-
     private void saveLead(String phone, Map<String, String> data, UUID businessId) {
         try {
             String name = data.getOrDefault("name", "Desconocido");
@@ -443,133 +423,6 @@ public class WhatsAppAiChatbotService {
         } catch (Exception e) {
             log.error("Failed to save AI chatbot lead: phone={}", phone, e);
         }
-    }
-
-    /**
-     * Deterministic fallback that saves a lead directly from the user message
-     * when the AI model failed to emit the machine-readable [LEAD:...] tag.
-     * Triggered by an email in the user message, regardless of the conversation
-     * step, whenever a business profile is resolved. Fills the leadData cache
-     * too so follow-up confirmation buttons show the captured values.
-     */
-    private void saveLeadFromMessage(String phone, String message, UUID businessId) {
-        try {
-            String text = message.trim();
-            Matcher emailMatcher = EMAIL_PATTERN.matcher(text);
-            if (!emailMatcher.find()) {
-                return;
-            }
-            String email = emailMatcher.group();
-
-            Map<String, String> cached = leadData.getIfPresent(phone);
-            Map<String, String> data = cached == null ? new HashMap<>() : new HashMap<>(cached);
-
-            // The AI tag parser already captured this lead -> nothing to add.
-            if (data.containsKey("email")) {
-                return;
-            }
-
-            // Do not overwrite data the tag parser might have added for name only.
-            // Prefer the name from THIS message; fall back to an earlier user
-            // message ("Me llamo Juan" followed by "mi email es juan@x.com").
-            String name = extractNameFromMessage(text);
-            if (name == null) {
-                name = extractNameFromHistory(phone);
-            }
-            if (name != null && !data.containsKey("name")) {
-                data.put("name", name);
-            }
-            data.put("email", email);
-            leadData.put(phone, data);
-            saveLead(phone, data, businessId);
-            log.info("AI chatbot lead fallback saved: phone={} email={}", phone, email);
-        } catch (Exception e) {
-            log.error("Failed to save AI chatbot lead from message: phone={}", phone, e);
-        }
-    }
-
-    /**
-     * Best-effort name lookup across recent user turns when the current
-     * message only carries an email. Only unambiguous self-introduction
-     * phrases ("me llamo X", "mi nombre es X") are accepted to avoid picking
-     * up button labels or generic words from earlier turns. The most recent
-     * match wins.
-     */
-    private String extractNameFromHistory(String phone) {
-        List<Map<String, String>> history = conversationHistory.getIfPresent(phone);
-        if (history == null) {
-            return null;
-        }
-        for (int i = history.size() - 1; i >= 0; i--) {
-            Map<String, String> turn = history.get(i);
-            if (!"user".equals(turn.get("role"))) {
-                continue;
-            }
-            String content = turn.get("content");
-            if (content == null || content.isBlank()) {
-                continue;
-            }
-            String lower = content.toLowerCase();
-            // Conservative: skip turns without an explicit intro phrase so a
-            // bare "Ventas" or "demo" earlier in the chat is never a name.
-            if (!lower.contains("me llamo ") && !lower.contains("mi nombre es ")) {
-                continue;
-            }
-            String name = extractNameFromMessage(content);
-            if (name != null) {
-                return name;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Best-effort name extraction from a free-form message such as
-     * "Me llamo Antonio, antonio@test.com" or "Soy María García maria@mail.com".
-     * Strips common Spanish intro words and returns up to two tokens.
-     */
-    private String extractNameFromMessage(String message) {
-        String text = message.trim();
-        String lower = text.toLowerCase();
-
-        String[] intro = {"me llamo ", "mi nombre es ", "soy ", "es "};
-        String afterIntro = null;
-        for (String marker : intro) {
-            int idx = lower.indexOf(marker);
-            if (idx >= 0) {
-                afterIntro = text.substring(idx + marker.length()).trim();
-                break;
-            }
-        }
-        String nameCandidate = afterIntro != null ? afterIntro : text;
-
-        // Cut at email or punctuation: "Antonio, antonio@test.com" -> "Antonio"
-        Matcher email = EMAIL_PATTERN.matcher(nameCandidate);
-        if (email.find()) {
-            nameCandidate = nameCandidate.substring(0, email.start()).trim();
-        }
-        int comma = nameCandidate.indexOf(',');
-        if (comma >= 0) {
-            nameCandidate = nameCandidate.substring(0, comma).trim();
-        }
-
-        if (nameCandidate.isEmpty()) {
-            return null;
-        }
-        // Stop words that mark the end of a name phrase:
-        // "Me llamo Juan y mi email es juan@test.com" -> "Juan" (never "Juan y").
-        Set<String> stopTokens = Set.of("y", "mi", "mis", "email", "correo", "telefono", "telf", "es", "el", "la", "del");
-        // Keep up to two words ("Antonio" or "María García")
-        String[] tokens = nameCandidate.split("\\s+");
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < Math.min(2, tokens.length); i++) {
-            if (stopTokens.contains(tokens[i].toLowerCase())) {
-                break;
-            }
-            if (sb.length() > 0) sb.append(' ');
-            sb.append(tokens[i]);
-        }
-        return sb.toString();
     }
 
     /**

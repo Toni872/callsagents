@@ -5,6 +5,7 @@ import com.callsagents.backend.voice.domain.VoiceProviderType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,9 +44,35 @@ public class RetellProvider implements VoiceProvider {
         .build();
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
+    /**
+     * Startup gate: surface missing voice configuration as WARNs instead of
+     * failing hard. Backward-compatible — the provider still reports whether it
+     * is configured, and startCall keeps its own explicit guards.
+     */
+    @PostConstruct
+    void validateConfig() {
+        Map<String, String> vars = new LinkedHashMap<>();
+        vars.put("RETELL_API_KEY", apiKey);
+        vars.put("RETELL_AGENT_ID", defaultAgentId);
+        vars.put("RETELL_FROM_NUMBER", defaultFromNumber);
+        vars.forEach((varName, value) -> {
+            if (value == null || value.isBlank()) {
+                log.warn("Voice gate: {} is not configured", varName);
+            }
+        });
+    }
+
     @Override
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
+    }
+
+    /**
+     * Whether the host/from phone number for outbound calls is set. Used by the
+     * voice health indicator to distinguish API-key from number gaps.
+     */
+    public boolean isFromNumberConfigured() {
+        return defaultFromNumber != null && !defaultFromNumber.isBlank();
     }
 
     @Override

@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -217,9 +218,11 @@ public class EscalationService {
             metadata.put("leadId", lead.getId().toString());
             metadata.put("escalationId", escalation.getId().toString());
 
+            Map<String, Object> dynamicVars = new HashMap<>(voiceCallService.composeVariables(profile));
+
             VoiceCall call = voiceCallService.placeCall(
                 VoiceProviderType.RETELL,
-                new VoiceProvider.StartCallRequest(lead.getPhone(), agentId, metadata, null),
+                new VoiceProvider.StartCallRequest(lead.getPhone(), agentId, metadata, dynamicVars),
                 escalation.getUserId(),
                 null
             );

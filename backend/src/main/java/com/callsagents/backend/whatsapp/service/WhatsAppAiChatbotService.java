@@ -521,9 +521,10 @@ public class WhatsAppAiChatbotService {
             Map<String, Object> callMetadata = new HashMap<>(metadata);
             callMetadata.put("leadId", called[0].getId().toString());
             callMetadata.put("acceptedByLead", "true");
+            Map<String, Object> dynamicVars = new HashMap<>(voiceCallService.composeVariables(profile));
             voiceCallService.placeCall(
                 VoiceProviderType.RETELL,
-                new VoiceProvider.StartCallRequest(phoneE164, agentId, callMetadata, null),
+                new VoiceProvider.StartCallRequest(phoneE164, agentId, callMetadata, dynamicVars),
                 businessId,
                 null
             );

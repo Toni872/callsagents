@@ -1,5 +1,6 @@
 package com.callsagents.backend.voice.service;
 
+import com.callsagents.backend.business.entity.BusinessProfile;
 import com.callsagents.backend.campaigns.entity.Campaign;
 import com.callsagents.backend.campaigns.repository.CampaignRepository;
 import com.callsagents.backend.common.exception.BadRequestException;
@@ -96,6 +97,29 @@ public class VoiceCallService {
         return repo.save(call);
     }
 
+    /**
+     * Compose the Retell dynamic variables (including the {@code campaign_prompt})
+     * from a business profile, mirroring how a campaign's voice config is promoted
+     * to variables (FR-2/FR-3).
+     *
+     * <p>The WhatsApp/lead-capture flow has no {@code campaignId}, so its outbound
+     * voice call must source the agent's prompt from the business profile instead
+     * of falling back to the Retell agent's generic base prompt. Degrades to an
+     * empty map (a WARN) if composition fails, matching {@link #safeBuildVariables}.
+     */
+    public Map<String, String> composeVariables(BusinessProfile profile) {
+        if (profile == null) {
+            return Map.of();
+        }
+        try {
+            return promptComposer.buildVariables(voiceConfigOf(profile));
+        } catch (RuntimeException e) {
+            log.warn("Failed to build business voice prompt variables; placing call without them: {}",
+                e.getMessage());
+            return Map.of();
+        }
+    }
+
     private Map<String, Object> mergedMetadata(Map<String, Object> metadata, UUID campaignId) {
         if (campaignId == null) {
             return metadata;
@@ -124,6 +148,15 @@ public class VoiceCallService {
             campaign.getIndustry(),
             campaign.getServices(),
             campaign.getTone());
+    }
+
+    private static CampaignVoiceConfig voiceConfigOf(BusinessProfile profile) {
+        return new CampaignVoiceConfig(
+            profile.getCompanyName(),
+            profile.getWebsite(),
+            profile.getIndustry(),
+            profile.getServices(),
+            profile.getTone());
     }
 
     /** Manually log a call (no provider, no external system). */

@@ -9,6 +9,7 @@ export interface BusinessProfile {
   botName: string;
   greeting: string | null;
   chatColor: string;
+  voiceAgentId: string | null;
   onboardingComplete: boolean;
   createdAt: string;
   updatedAt: string;
@@ -23,6 +24,7 @@ export interface BusinessProfileRequest {
   botName?: string;
   greeting?: string;
   chatColor?: string;
+  voiceAgentId?: string;
 }
 
 export interface WidgetConfigResponse {

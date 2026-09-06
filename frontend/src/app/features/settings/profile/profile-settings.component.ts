@@ -93,6 +93,14 @@ import { CardComponent } from '../../../shared/components/card.component';
               <span class="color-value">{{ chatColor() }}</span>
             </div>
           </div>
+
+          <h3 class="settings-form__section">Configuración de voz</h3>
+
+          <div class="field">
+            <label class="field__label" for="voiceAgentId">ID del agente de voz (Retell)</label>
+            <input id="voiceAgentId" class="field__input" type="text" placeholder="agent_..." [ngModel]="voiceAgentId()" (ngModelChange)="voiceAgentId.set($event)" />
+            <p class="field__hint">ID del agente de Retell que recibirá las llamadas cuando un lead acepta ser contactado por voz.</p>
+          </div>
         </div>
       </app-card>
 
@@ -134,6 +142,7 @@ import { CardComponent } from '../../../shared/components/card.component';
     }
     .field__input:focus { border-color: var(--color-primary); }
     .field__textarea { resize: vertical; min-height: 60px; }
+    .field__hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 2px; }
     .color-row { display: flex; align-items: center; gap: var(--spacing-3); }
     .color-picker { width: 48px; height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius); cursor: pointer; padding: 2px; background: var(--color-surface); }
     .color-value { font-size: 0.85rem; color: var(--color-text-muted); font-family: monospace; }
@@ -183,6 +192,7 @@ export class ProfileSettingsComponent implements OnInit {
   readonly tone = signal('profesional');
   readonly greeting = signal('');
   readonly chatColor = signal('#25D366');
+  readonly voiceAgentId = signal('');
   readonly businessId = signal('');
 
   readonly embedCode = signal('');
@@ -200,6 +210,7 @@ export class ProfileSettingsComponent implements OnInit {
         this.tone.set(p.tone);
         this.greeting.set(p.greeting || '');
         this.chatColor.set(p.chatColor);
+        this.voiceAgentId.set(p.voiceAgentId || '');
         this.businessId.set(p.id || '');
         this.generateEmbedCode(p.id || '');
         this.loading.set(false);
@@ -235,7 +246,8 @@ export class ProfileSettingsComponent implements OnInit {
       tone: this.tone(),
       botName: this.botName(),
       greeting: this.greeting() || undefined,
-      chatColor: this.chatColor()
+      chatColor: this.chatColor(),
+      voiceAgentId: this.voiceAgentId() || undefined
     };
 
     this.businessApi.updateProfile(request).subscribe({

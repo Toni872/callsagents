@@ -19,6 +19,15 @@ public class ChatController {
         this.chatService = chatService;
     }
 
+    @GetMapping("/start")
+    public ResponseEntity<ChatResponse> start(@RequestParam(value = "sessionId", required = false) String sessionId,
+                                              @RequestParam(value = "businessId", required = false) UUID businessId) {
+        String sid = sessionId != null && !sessionId.isBlank() ? sessionId : UUID.randomUUID().toString();
+        log.info("Chat start: sessionId={} businessId={}", sid, businessId);
+        ChatResponse response = chatService.start(sid, businessId);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/message")
     public ResponseEntity<ChatResponse> sendMessage(@RequestBody ChatRequest request) {
         log.info("Chat message: sessionId={} message={} businessId={}", 

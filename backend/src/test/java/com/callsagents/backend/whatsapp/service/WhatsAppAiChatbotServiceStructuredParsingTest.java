@@ -2,6 +2,7 @@ package com.callsagents.backend.whatsapp.service;
 
 import com.callsagents.backend.business.service.BusinessPromptComposer;
 import com.callsagents.backend.business.service.BusinessService;
+import com.callsagents.backend.chatbot.ChatbotEngine;
 import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
@@ -34,6 +35,7 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
     @Mock EscalationService escalationService;
     @Mock VoiceCallService voiceCallService;
 
+    private ChatbotEngine engine;
     private WhatsAppAiChatbotService service;
 
     private static final String PHONE = "34687723287";
@@ -41,9 +43,13 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
 
     @BeforeEach
     void setUp() {
-        service = new WhatsAppAiChatbotService(
-            groqService, leadRepository, vonageMessageService,
+        engine = new ChatbotEngine(
+            groqService, leadRepository,
             businessService, promptComposer, escalationService, voiceCallService
+        );
+        service = new WhatsAppAiChatbotService(
+            groqService, vonageMessageService,
+            businessService, engine
         );
         when(groqService.isConfigured()).thenReturn(true);
         // System prompt resolution needs a non-null prompt
@@ -52,55 +58,61 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
     }
 
     @Test
-    @DisplayName("processMessage: structured lead extraction populates leadData and saves lead")
-    void processMessage_savesLeadFromStructuredResponse() {
+    @DisplayName("processMessage: [LEAD] tag extraction populates leadData and saves lead, tag removed from visible text")
+    void processMessage_savesLeadFromLeadTag() {
         // Advance to collecting_info step
         service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
 
-        // Neither a lead exists yet
+        // No lead exists yet
         when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
-
-        // Mock chatStructured to return a structured lead
-        GroqService.LeadData leadData = new GroqService.LeadData(
-            "Juan", "juan@test.com", "taxi", "now"
-        );
-        GroqService.LeadExtraction extraction = new GroqService.LeadExtraction(
-            "Perfecto!", leadData
-        );
-        when(groqService.chatStructured(anyString(), anyList(),
-            anyString())).thenReturn(extraction);
 
         String result = service.processMessage(
             PHONE, "Me llamo Juan, juan@test.com", BUSINESS_ID
         );
 
-        // Lead saved
+        // Lead saved with parsed values
         verify(leadRepository).save(any(Lead.class));
         verify(leadRepository).save(argThat(leadArg -> {
             Lead lead = (Lead) leadArg;
             return "juan@test.com".equals(lead.getEmail())
                 && "Juan".equals(lead.getFirstName());
         }));
-        // Bot reply is the structured response
-        assertThat(result).isEqualTo("Perfecto!");
+        // The tag is stripped: only the natural text is shown (email detected ->
+        // timing buttons are sent, so in this collecting_info flow the reply is null)
+        assertThat(result).isNull();
     }
 
     @Test
-    @DisplayName("processMessage: null lead from structured response does not save lead")
-    void processMessage_nullLead_doesNotSave() {
+    @DisplayName("processMessage: response without a [LEAD] tag does not save a lead")
+    void processMessage_noLeadTag_doesNotSave() {
         service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
 
-        GroqService.LeadExtraction extraction = new GroqService.LeadExtraction(
-            "¿Cuál es tu email?", null
-        );
-        when(groqService.chatStructured(anyString(), anyList(),
-            anyString())).thenReturn(extraction);
+        when(groqService.chat(anyString(), anyList(),
+            anyString())).thenReturn("¿Cuál es tu correo?");
 
         String result = service.processMessage(
             PHONE, "Me llamo Juan", BUSINESS_ID
         );
 
         verify(leadRepository, never()).save(any(Lead.class));
-        assertThat(result).isEqualTo("¿Cuál es tu email?");
+        assertThat(result).isEqualTo("¿Cuál es tu correo?");
+    }
+
+    @Test
+    @DisplayName("free text timing answer advances to confirmation with buttons only")
+    void freeTextTiming_advancesToConfirmation() {
+        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+
+        // name + email advance to awaiting_timing (buttons only)
+        service.processMessage(PHONE, "Juan, juan@test.com", BUSINESS_ID);
+
+        // Free text timing -> confirmation buttons sent, no AI text
+        String result = service.processMessage(PHONE, "Lo antes posible", BUSINESS_ID);
+        assertThat(result).isNull();
+
+        // Confirm button flows after free-text timing
+        String confirm = service.processMessage(PHONE, "Sí, agendar", BUSINESS_ID);
+        assertThat(confirm).contains("demo de 15 minutos");
     }
 }

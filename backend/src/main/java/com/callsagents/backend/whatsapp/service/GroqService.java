@@ -18,6 +18,9 @@ public class GroqService {
 
     private static final Logger log = LoggerFactory.getLogger(GroqService.class);
 
+    /** Sentinel returned by {@link #chat} when HTTP 429 (Too Many Requests) is received. */
+    public static final String RATE_LIMITED_SENTINEL = "__RATE_LIMITED__";
+
     /**
      * Structured extraction result from chatStructured().
      */
@@ -119,6 +122,13 @@ public class GroqService {
             log.error("Groq returned unexpected response: {}", response.getBody());
             return null;
 
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 429) {
+                log.warn("Groq rate limited (HTTP 429) for message: {}", userMessage);
+                return RATE_LIMITED_SENTINEL;
+            }
+            log.error("Groq API error", e);
+            return null;
         } catch (Exception e) {
             log.error("Groq API error", e);
             return null;

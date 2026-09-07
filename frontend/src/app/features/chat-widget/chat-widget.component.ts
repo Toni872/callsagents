@@ -19,6 +19,7 @@ interface ChatMessage {
   role: 'bot' | 'user' | 'system';
   text: string;
   time: string;
+  buttons?: { id: string; label: string }[];
 }
 
 @Component({
@@ -31,7 +32,7 @@ interface ChatMessage {
         <div class="chat__brand">
           <span class="chat__brand-name">{{ widgetConfig()?.companyName || 'CALLSAGENTS' }}</span>
           <span class="chat__online-dot"></span>
-          <span class="chat__online-label">En línea</span>
+          <span class="chat__online-label">En linea</span>
         </div>
         <button
           class="chat__voice"
@@ -64,15 +65,56 @@ interface ChatMessage {
       }
 
       <div class="chat__messages" #messagesContainer>
-        @for (msg of messages(); track msg.time + msg.text) {
+        @for (msg of messages(); track msg.time + msg.text + msg.role) {
           @if (msg.role === 'system') {
             <div class="chat__system">{{ msg.text }}</div>
           } @else {
-            <div class="chat__bubble" [class.chat__bubble--user]="msg.role === 'user'">
-              <span class="chat__text">{{ msg.text }}</span>
-              <span class="chat__time">{{ msg.time }}</span>
+            <div class="chat__bubble-row" [class.chat__bubble-row--user]="msg.role === 'user'">
+              @if (msg.text) {
+                <div class="chat__bubble" [class.chat__bubble--user]="msg.role === 'user'">
+                  <span class="chat__text">{{ msg.text }}</span>
+                  <span class="chat__time">{{ msg.time }}</span>
+                </div>
+              }
+              @if (msg.buttons?.length) {
+                <div class="chat__options">
+                  @for (btn of msg.buttons; track btn.id) {
+                    <button
+                      class="chat__option"
+                      [disabled]="typing()"
+                      (click)="onButton(btn)"
+                    >{{ btn.label }}</button>
+                  }
+                </div>
+              }
             </div>
           }
+        }
+        @if (contactForm() && !typing()) {
+          <div class="chat__contact">
+            <label class="chat__contact-label">Nombre:</label>
+            <input
+              class="chat__contact-input"
+              type="text"
+              placeholder="Escribe tu nombre..."
+              [value]="contactName()"
+              (input)="onContactNameInput($event)"
+            />
+            <label class="chat__contact-label">Email:</label>
+            <input
+              class="chat__contact-input"
+              type="email"
+              placeholder="tucorreo@ejemplo.com"
+              [value]="contactEmail()"
+              (input)="onContactEmailInput($event)"
+              (keydown.enter)="sendContactForm()"
+            />
+            <button
+              class="chat__contact-send"
+              [disabled]="(!contactName().trim() && !contactEmail().trim()) || typing()"
+              (click)="sendContactForm()"
+            >Enviar</button>
+          </div>
         }
         @if (typing()) {
           <div class="chat__bubble chat__bubble--typing">
@@ -85,7 +127,7 @@ interface ChatMessage {
 
       @if (leadCaptured()) {
         <div class="chat__lead-banner">
-          ¡Perfecto! Te hemos registrado. Pronto nos pondremos en contacto.
+          Perfecto! Te hemos registrado. Pronto nos pondremos en contacto.
         </div>
       }
 
@@ -294,6 +336,112 @@ interface ChatMessage {
       color: rgba(255, 255, 255, 0.6);
     }
 
+    .chat__bubble-row {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      max-width: 78%;
+    }
+
+    .chat__bubble-row--user {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .chat__options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chat__option {
+      padding: 8px 14px;
+      background: #0f172a;
+      border: 1px solid #00a86b;
+      border-radius: 999px;
+      color: #a7f3d0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .chat__option:hover:not(:disabled) {
+      background: rgba(0, 168, 107, 0.15);
+      color: #ffffff;
+    }
+
+    .chat__option:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .chat__contact {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px 14px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      max-width: 78%;
+    }
+
+    .chat__contact-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #64748b;
+      letter-spacing: 0.03em;
+    }
+
+    .chat__contact-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.85rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+
+    .chat__contact-input::placeholder {
+      color: #64748b;
+    }
+
+    .chat__contact-input:focus {
+      border-color: #00a86b;
+    }
+
+    .chat__contact-send {
+      margin-top: 4px;
+      align-self: flex-end;
+      padding: 8px 18px;
+      background: #00a86b;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .chat__contact-send:hover:not(:disabled) {
+      background: #009959;
+    }
+
+    .chat__contact-send:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
     .chat__system {
       text-align: center;
       font-size: 0.72rem;
@@ -409,6 +557,10 @@ export class ChatWidgetComponent implements OnDestroy {
   protected readonly widgetConfig = signal<WidgetConfigResponse | null>(null);
   protected readonly businessId = signal<string | null>(this.resolveBusinessId());
 
+  protected readonly contactForm = signal(false);
+  protected readonly contactName = signal('');
+  protected readonly contactEmail = signal('');
+
   protected readonly voiceCalling = signal(false);
   protected readonly voiceActive = signal(false);
   protected readonly voiceError = signal<string | null>(null);
@@ -419,11 +571,7 @@ export class ChatWidgetComponent implements OnDestroy {
     afterNextRender(() => {
       this.loadWidgetConfig();
       this.scrollBottom();
-      if (this.messages().length === 0) {
-        this.messages.set([
-          { role: 'bot', text: 'Hola! Soy tu asistente de CallsAgents. En que puedo ayudarte hoy?', time: this.now() }
-        ]);
-      }
+      this.loadInitialGreeting();
     });
   }
 
@@ -447,7 +595,7 @@ export class ChatWidgetComponent implements OnDestroy {
     try {
       const res = await firstValueFrom(this.voiceWebApi.createWebCall());
       if (!res?.access_token) {
-        throw new Error('No se recibió un token de acceso del servidor.');
+        throw new Error('No se recibio un token de acceso del servidor.');
       }
 
       const client = new RetellWebClient();
@@ -507,6 +655,43 @@ export class ChatWidgetComponent implements OnDestroy {
     this.input.set((event.target as HTMLInputElement).value);
   }
 
+  protected onContactNameInput(event: Event): void {
+    this.contactName.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onContactEmailInput(event: Event): void {
+    this.contactEmail.set((event.target as HTMLInputElement).value);
+  }
+
+  protected sendContactForm(): void {
+    const name = this.contactName().trim();
+    const email = this.contactEmail().trim();
+    if ((!name && !email) || this.typing()) return;
+
+    let composed: string;
+    if (name && email) {
+      composed = `Me llamo ${name} y mi email es ${email}`;
+    } else if (name) {
+      composed = `Me llamo ${name}`;
+    } else {
+      composed = `mi email es ${email}`;
+    }
+
+    const userMsg: ChatMessage = { role: 'user', text: composed, time: this.now() };
+    this.messages.update((msgs) => [...msgs, userMsg]);
+    this.contactForm.set(false);
+    this.contactName.set('');
+    this.contactEmail.set('');
+    this.typing.set(true);
+    this.scrollBottom();
+
+    const payload: Record<string, string> = { sessionId: this.sessionId(), message: composed };
+    if (this.businessId()) {
+      payload['businessId'] = this.businessId()!;
+    }
+    this.postMessage(payload);
+  }
+
   protected send(): void {
     const text = this.input().trim();
     if (!text || this.typing()) return;
@@ -521,11 +706,32 @@ export class ChatWidgetComponent implements OnDestroy {
     if (this.businessId()) {
       payload['businessId'] = this.businessId()!;
     }
+    this.postMessage(payload);
+  }
 
-    this.http.post<{ sessionId: string; reply: string; leadCaptured: boolean }>(
-      apiUrl('/chat/message'),
-      payload
-    ).subscribe({
+  protected onButton(btn: { id: string; label: string }): void {
+    if (this.typing()) return;
+
+    const userMsg: ChatMessage = { role: 'user', text: btn.label, time: this.now() };
+    this.messages.update((msgs) => [...msgs, userMsg]);
+    this.typing.set(true);
+    this.scrollBottom();
+
+    const payload: Record<string, string> = { sessionId: this.sessionId(), message: btn.id };
+    if (this.businessId()) {
+      payload['businessId'] = this.businessId()!;
+    }
+    this.postMessage(payload);
+  }
+
+  private postMessage(payload: Record<string, string>): void {
+    this.http.post<{
+      sessionId: string;
+      reply: string | null;
+      leadCaptured: boolean;
+      buttons?: { id: string; label: string }[] | null;
+      contactForm?: boolean | null;
+    }>(apiUrl('/chat/message'), payload).subscribe({
       next: (res) => {
         if (res.sessionId && res.sessionId !== this.sessionId()) {
           this.sessionId.set(res.sessionId);
@@ -536,15 +742,16 @@ export class ChatWidgetComponent implements OnDestroy {
         }
         this.messages.update((msgs) => [
           ...msgs,
-          { role: 'bot', text: res.reply, time: this.now() }
+          { role: 'bot', text: res.reply ?? '', time: this.now(), buttons: res.buttons ?? undefined }
         ]);
+        this.contactForm.set(!!res.contactForm);
         this.typing.set(false);
         this.scrollBottom();
       },
       error: () => {
         this.messages.update((msgs) => [
           ...msgs,
-          { role: 'system', text: 'Error de conexión. Intenta de nuevo.', time: this.now() }
+          { role: 'system', text: 'Error de conexion. Intenta de nuevo.', time: this.now() }
         ]);
         this.typing.set(false);
       }
@@ -566,7 +773,6 @@ export class ChatWidgetComponent implements OnDestroy {
   private loadWidgetConfig(): void {
     const bid = this.businessId();
     if (!bid) {
-      // No businessId configured — use defaults silently
       return;
     }
     this.http.get<{ success: boolean; data: WidgetConfigResponse }>(
@@ -575,28 +781,58 @@ export class ChatWidgetComponent implements OnDestroy {
       next: (res) => {
         if (res.data) {
           this.widgetConfig.set(res.data);
-          // Update the initial greeting if config is available
-          if (this.messages().length === 1 && res.data.greeting) {
-            this.messages.set([
-              { role: 'bot', text: res.data.greeting, time: this.now() }
-            ]);
-          }
         }
       },
-      error: () => {
-        // Widget config not available — use defaults silently
-      }
+      error: () => {}
     });
   }
 
+  private loadInitialGreeting(): void {
+    const bid = this.businessId();
+    const fallback = this.widgetConfig()?.greeting || 'Hola! Soy tu asistente virtual. En que puedo ayudarte hoy?';
+    if (!bid || this.messages().length > 0) {
+      if (this.messages().length === 0) {
+        this.messages.set([{ role: 'bot', text: fallback, time: this.now() }]);
+      }
+      return;
+    }
+    this.http.get<{
+      sessionId: string;
+      reply: string | null;
+      leadCaptured: boolean;
+      buttons?: { id: string; label: string }[] | null;
+      contactForm?: boolean | null;
+    }>(apiUrl(`/chat/start?sessionId=${encodeURIComponent(this.sessionId())}&businessId=${encodeURIComponent(bid)}`))
+      .subscribe({
+        next: (res) => {
+          if (res.sessionId && res.sessionId !== this.sessionId()) {
+            this.sessionId.set(res.sessionId);
+            localStorage.setItem('callsagents_chat_session', res.sessionId);
+          }
+          if (res.reply || res.buttons?.length) {
+            this.messages.set([
+              { role: 'bot', text: res.reply ?? '', time: this.now(), buttons: res.buttons ?? undefined }
+            ]);
+          } else if (this.messages().length === 0) {
+            this.messages.set([{ role: 'bot', text: fallback, time: this.now() }]);
+          }
+          this.contactForm.set(!!res.contactForm);
+          this.scrollBottom();
+        },
+        error: () => {
+          if (this.messages().length === 0) {
+            this.messages.set([{ role: 'bot', text: fallback, time: this.now() }]);
+          }
+        }
+      });
+  }
+
   private resolveBusinessId(): string | null {
-    // 1. Check window.CallsagentsConfig (set by widget.js embed)
     try {
       const w = window as unknown as Record<string, unknown>;
       const cfg = w['CallsagentsConfig'] as Record<string, unknown> | undefined;
       if (cfg && typeof cfg['businessId'] === 'string') return cfg['businessId'];
     } catch {}
-    // 2. Check URL query param ?businessId=...
     try {
       const params = new URLSearchParams(window.location.search);
       const bid = params.get('businessId');

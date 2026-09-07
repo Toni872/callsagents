@@ -2,6 +2,7 @@ package com.callsagents.backend.whatsapp.service;
 
 import com.callsagents.backend.business.service.BusinessPromptComposer;
 import com.callsagents.backend.business.service.BusinessService;
+import com.callsagents.backend.chatbot.ChatbotEngine;
 import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
@@ -33,6 +34,7 @@ class WhatsAppAiChatbotServiceTerminalStateTest {
     @Mock EscalationService escalationService;
     @Mock VoiceCallService voiceCallService;
 
+    private ChatbotEngine engine;
     private WhatsAppAiChatbotService service;
 
     private static final String PHONE = "34687723287";
@@ -40,17 +42,22 @@ class WhatsAppAiChatbotServiceTerminalStateTest {
 
     @BeforeEach
     void setUp() {
-        service = new WhatsAppAiChatbotService(
-            groqService, leadRepository, vonageMessageService,
+        engine = new ChatbotEngine(
+            groqService, leadRepository,
             businessService, promptComposer, escalationService, voiceCallService
+        );
+        service = new WhatsAppAiChatbotService(
+            groqService, vonageMessageService,
+            businessService, engine
         );
         when(groqService.isConfigured()).thenReturn(true);
         // System prompt resolution needs a non-null prompt
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
-        // Flow steps use structured output — return a response with no lead
-        when(groqService.chatStructured(anyString(), anyList(),
-            anyString())).thenReturn(new GroqService.LeadExtraction("Perfecto, te ayudo", null));
+        // Flow steps use free-text chat — return a response with no [LEAD] tag.
+        // Lenient: confirmation flows (email in collecting_info) skip Groq entirely.
+        lenient().when(groqService.chat(anyString(), anyList(),
+            anyString())).thenReturn("Perfecto, te ayudo");
     }
 
     private void stubExistingLead() {

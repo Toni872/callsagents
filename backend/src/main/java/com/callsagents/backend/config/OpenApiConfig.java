@@ -36,6 +36,6 @@ public class OpenApiConfig {
                         .type(SecurityScheme.Type.HTTP)
                         .scheme("bearer")
                         .bearerFormat("JWT")
-                        .description("Pegá acá el accessToken (sin 'Bearer '). Para obtenerlo, llamá /api/auth/login primero.")));
+                        .description("Pega aquí el accessToken (sin 'Bearer '). Para obtenerlo, llama a /api/auth/login primero.")));
     }
 }

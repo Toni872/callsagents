@@ -34,7 +34,7 @@ public class BusinessPromptComposer {
         - Profesional, calida, directa. Usa el nombre del usuario de forma natural, MAXIMO 1 vez por intercambio.
         - Responde en espanol, en 2-3 oraciones por mensaje. UNA SOLA pregunta por mensaje. NUNCA hagas dos preguntas juntas.
         - No uses jerga tecnica innecesaria. Explica con claridad que aporta a la venta.
-        - Acentos y dialecto: usa SIEMPRE espanol neutro con "tu" (tuteo): "te gustaria", "puedes", "tu caso". NUNCA uses voseo rioplatense: prohibido "preferis", "tenes", "queres", "vos".
+        - Acentos y dialecto: usa SIEMPRE castellano de España con tuteo ("tu", no "vos"). Ejemplos correctos: "te gustaria", "prefieres", "necesitas", "escribes", "esta semana", "aqui". NUNCA uses voseo rioplatense: prohibido "preferis", "tenes", "escribi", "¿queres?", "vos". Tampoco uses español neutro latinoamericano: evita "computadora" (usa "ordenador"), "celular" (usa "movil" o "telefono") y "manejar" en el sentido de conducir (usa "gestionar" o "dirigir un proyecto").
 
         MANEJO DE OBJECIONES (clave, respondelas con empatia y avanza sin forzar):
         - "Estoy viendo si me conviene" / "no se si me sirve" / "todavia estoy evaluando": validalo ("Entiendo, es una decision importante"), destaca UNA ventaja concreta de Callsagents (p.ej. responder en <2 min sin que su equipo toque nada) y conecta con un siguiente paso suave (diagnostico gratuito o demo). No insistas, no presiones.
@@ -64,14 +64,16 @@ public class BusinessPromptComposer {
         - NUNCA inventes cifras de precios, plazos ni estadisticas que no esten en este prompt; usa solo lo indicado.
         - Si preguntan por precios, responde que depende del proyecto y ofrece la demo/diagnostico gratuito.
         - No digas frases de relleno tipo "Estamos teniendo un problema para conectarte" ni menciones problemas internos del sistema.
+        - NUNCA muestres etiquetas tecnicas al usuario: prohibido escribir "Lead extracted", "Lead captured", "[LEAD...]" ni ninguna etiqueta de captura dentro del mensaje visible. El tag [LEAD:...] es interno: solo va al FINAL de la respuesta y nunca es visible; cuando lo uses, escribe la respuesta natural primero y el tag despues, sin mencionarlo en el texto.
 
         CUANDO GUARDAR EL LEAD:
         Cuando tengas nombre Y email (o nombre y teléfono), anade al FINAL de tu respuesta el tag:
         [LEAD:name=NOMBRE|email=EMAIL|service=SERVICIO]
         Donde SERVICIO resume lo que busca (p.ej. Callsagents / automatizacion / desarrollo / IA). Si falta email, omite ese campo.
+        IMPORTANTE: el tag debe ir SIEMPRE al final, en la misma linea del cierre o en linea aparte, y JAMAS debe aparecer en el texto que el usuario lee. El texto visible debe terminar de forma natural (p.ej. "Quedamos en que te envio el correo con el enlace para agendar la demo.") y el tag va despues, invisible para el usuario.
         """;
 
-    private static final String DEFAULT_GREETING = "Hola! Soy tu asistente virtual. En que puedo ayudarte hoy?";
+    private static final String DEFAULT_GREETING = "¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?";
 
     public String compose(BusinessProfile profile) {
         if (profile == null) {

@@ -194,7 +194,7 @@ class BusinessServiceTest {
     void resolveOwnerUserIdMapsBusinessProfileIdToOwnerUserId() {
         UUID profileId = UUID.randomUUID();
         when(profileRepository.findByUserId(profileId)).thenReturn(Optional.empty());
-        when(profileRepository.findUserIdByProfileId(profileId)).thenReturn(Optional.of(userId));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(sampleProfile()));
 
         assertEquals(userId, businessService.resolveOwnerUserId(profileId));
     }
@@ -203,9 +203,24 @@ class BusinessServiceTest {
     void resolveOwnerUserIdReturnsNullForUnknownIdentifier() {
         UUID unknown = UUID.randomUUID();
         when(profileRepository.findByUserId(unknown)).thenReturn(Optional.empty());
-        when(profileRepository.findUserIdByProfileId(unknown)).thenReturn(Optional.empty());
+        when(profileRepository.findById(unknown)).thenReturn(Optional.empty());
 
         assertEquals(null, businessService.resolveOwnerUserId(unknown));
+    }
+
+    @Test
+    void getWidgetConfigResolvesByBusinessProfileId() {
+        BusinessProfile profile = sampleProfile();
+        profile.setBotName("CustomBot");
+        profile.setChatColor("#ABCDEF");
+        UUID profileId = UUID.randomUUID();
+        when(profileRepository.findByUserId(profileId)).thenReturn(Optional.empty());
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
+        WidgetConfigResponse config = businessService.getWidgetConfig(profileId);
+
+        assertEquals("CustomBot", config.botName());
+        assertEquals("#ABCDEF", config.chatColor());
     }
 
     @Test

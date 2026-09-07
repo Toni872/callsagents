@@ -89,9 +89,11 @@ public class BusinessService {
             return businessOrUserId;
         }
         // Otherwise treat it as a business profile id and map to its owner user.
-        // findById cannot be used here: the entity uses @MapsId, so JPA maps the
-        // entity id onto user_id and the independent id column is not the PK.
-        return profileRepository.findUserIdByProfileId(businessOrUserId).orElse(null);
+        // Without @MapsId the entity id maps to the real id column, so findById
+        // now resolves actual profile ids directly.
+        return profileRepository.findById(businessOrUserId)
+            .map(profile -> profile.getUser().getId())
+            .orElse(null);
     }
 
     @Transactional(readOnly = true)
@@ -130,8 +132,9 @@ public class BusinessService {
     }
 
     @Transactional(readOnly = true)
-    public WidgetConfigResponse getWidgetConfig(UUID userId) {
-        BusinessProfile profile = profileRepository.findByUserId(userId).orElse(null);
+    public WidgetConfigResponse getWidgetConfig(UUID businessOrUserId) {
+        BusinessProfile profile = profileRepository.findByUserId(businessOrUserId)
+            .orElseGet(() -> profileRepository.findById(businessOrUserId).orElse(null));
 
         if (profile == null) {
             return new WidgetConfigResponse(

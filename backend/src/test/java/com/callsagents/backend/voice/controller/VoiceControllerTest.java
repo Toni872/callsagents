@@ -14,7 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -45,11 +45,11 @@ class VoiceControllerTest {
 
     @Autowired private MockMvc mvc;
 
-    @MockBean private VoiceCallService service;
-    @MockBean private WebhookSignatureValidator signatureValidator;
-    @MockBean private RetellProvider retellProvider;
-    @MockBean private UserRepository userRepository;
-    @MockBean private JwtService jwtService;
+    @MockitoBean private VoiceCallService service;
+    @MockitoBean private WebhookSignatureValidator signatureValidator;
+    @MockitoBean private RetellProvider retellProvider;
+    @MockitoBean private UserRepository userRepository;
+    @MockitoBean private JwtService jwtService;
 
     @Configuration
     @EnableMethodSecurity

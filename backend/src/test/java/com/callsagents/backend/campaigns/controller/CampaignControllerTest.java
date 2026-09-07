@@ -9,7 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -35,9 +35,9 @@ class CampaignControllerTest {
 
     @Autowired private MockMvc mvc;
 
-    @MockBean private CampaignService campaignService;
-    @MockBean private UserRepository userRepository;
-    @MockBean private JwtService jwtService;
+    @MockitoBean private CampaignService campaignService;
+    @MockitoBean private UserRepository userRepository;
+    @MockitoBean private JwtService jwtService;
 
     @Configuration
     @EnableMethodSecurity

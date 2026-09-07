@@ -11,7 +11,7 @@ import org.springframework.boot.actuate.health.CompositeHealth;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.boot.actuate.health.Status;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,7 +27,7 @@ class VoiceHealthIndicatorIntegrationTest {
 
     @Autowired HealthEndpoint healthEndpoint;
 
-    @MockBean RetellProvider retellProvider;
+    @MockitoBean RetellProvider retellProvider;
 
     @SpringBootConfiguration
     @Import({

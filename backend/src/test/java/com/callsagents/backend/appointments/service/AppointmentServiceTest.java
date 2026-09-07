@@ -201,7 +201,7 @@ class AppointmentServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         Appointment a = sampleAppointment(UUID.randomUUID());
         Page<Appointment> page = new PageImpl<>(List.of(a), pageable, 1);
-        when(appointmentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+        when(appointmentRepository.findAll(org.mockito.ArgumentMatchers.<Specification<Appointment>>any(), eq(pageable))).thenReturn(page);
 
         PageResponse<AppointmentResponse> result = appointmentService.findAll(new AppointmentFilter(null, null, null), pageable, currentUserId);
 

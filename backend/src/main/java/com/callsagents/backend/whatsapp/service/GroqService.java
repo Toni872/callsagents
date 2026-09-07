@@ -2,6 +2,7 @@ package com.callsagents.backend.whatsapp.service;
 
 import com.callsagents.backend.whatsapp.config.GroqConfig;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,13 +107,10 @@ public class GroqService {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                // Parse response
-                Map<String, Object> responseMap = objectMapper.readValue(response.getBody(), Map.class);
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) responseMap.get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-                    String content = (String) message.get("content");
-                    // Strip thinking tags from response
+                JsonNode root = objectMapper.readTree(response.getBody());
+                JsonNode message = root.path("choices").path(0).path("message");
+                String content = message.path("content").isMissingNode() ? null : message.path("content").asText();
+                if (content != null) {
                     content = stripThinkingTags(content);
                     log.info("Groq response: {}", content);
                     return content;
@@ -185,11 +183,10 @@ public class GroqService {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Map<String, Object> responseMap = objectMapper.readValue(response.getBody(), Map.class);
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) responseMap.get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-                    String content = (String) message.get("content");
+                JsonNode root = objectMapper.readTree(response.getBody());
+                JsonNode message = root.path("choices").path(0).path("message");
+                String content = message.path("content").isMissingNode() ? null : message.path("content").asText();
+                if (content != null) {
                     content = stripThinkingTags(content);
                     log.info("Groq structured response: {}", content);
                     return objectMapper.readValue(content, LeadExtraction.class);

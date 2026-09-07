@@ -73,6 +73,27 @@ public class BusinessService {
         return profileRepository.findByUserId(userId).orElse(null);
     }
 
+    /**
+     * Resolve the tenant owner (user id) from either a business profile id or a
+     * user id. The web widget sends the profile {@code id} (from
+     * BusinessProfileResponse) while WhatsApp always sends the user id, so the
+     * shared chatbot engine must accept both. Returns null when neither matches.
+     */
+    @Transactional(readOnly = true)
+    public UUID resolveOwnerUserId(UUID businessOrUserId) {
+        if (businessOrUserId == null) {
+            return null;
+        }
+        // Already a user id? Then the profile lookup by user id succeeds.
+        if (profileRepository.findByUserId(businessOrUserId).isPresent()) {
+            return businessOrUserId;
+        }
+        // Otherwise treat it as a business profile id and map to its owner user.
+        // findById cannot be used here: the entity uses @MapsId, so JPA maps the
+        // entity id onto user_id and the independent id column is not the PK.
+        return profileRepository.findUserIdByProfileId(businessOrUserId).orElse(null);
+    }
+
     @Transactional(readOnly = true)
     public BusinessProfile getProfileEntityByWhatsappNumber(String whatsappNumber) {
         if (whatsappNumber == null || whatsappNumber.isBlank()) return null;

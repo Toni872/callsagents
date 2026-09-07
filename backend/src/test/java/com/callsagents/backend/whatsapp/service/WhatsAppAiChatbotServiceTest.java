@@ -58,6 +58,7 @@ class WhatsAppAiChatbotServiceTest {
         when(groqService.isConfigured()).thenReturn(true);
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
+        lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     private void expectNoExistingLead() {

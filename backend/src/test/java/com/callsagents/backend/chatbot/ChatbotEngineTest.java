@@ -56,6 +56,8 @@ class ChatbotEngineTest {
         lenient().when(groqService.isConfigured()).thenReturn(true);
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
+        // By default the engine treats the identifier as a plain user id (identity mapping).
+        lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     private String stepOf(String key) {
@@ -172,6 +174,39 @@ class ChatbotEngineTest {
             return "mariana@test.com".equals(lead.getEmail())
                 && "Mariana".equals(lead.getFirstName());
         }));
+    }
+
+    @Test
+    @DisplayName("Bug2: widget sends BusinessProfile.id -> lead is saved with the real owner userId")
+    void widgetProfileId_resolvesUserId_savesLeadWithOwner() {
+        UUID profileId = UUID.randomUUID();
+        UUID ownerUserId = UUID.randomUUID();
+        when(businessService.resolveOwnerUserId(profileId)).thenReturn(ownerUserId);
+        when(leadRepository.countByCreatedBy(ownerUserId)).thenReturn(0L);
+
+        engine.process("session-widget", "intent_ventas", profileId, Channel.WEB);
+        ChatTurn turn = engine.process("session-widget", "Me llamo Laura y mi email es laura@test.com",
+            profileId, Channel.WEB);
+
+        assertThat(turn.leadCaptured()).isTrue();
+        verify(leadRepository).save(argThat(leadArg -> {
+            Lead lead = (Lead) leadArg;
+            return ownerUserId.equals(lead.getCreatedBy());
+        }));
+    }
+
+    @Test
+    @DisplayName("Bug2: unknown/unresolvable id -> lead skipped, no FK violation, no crash")
+    void unresolvableId_skipsLead_noCrash() {
+        UUID unknownId = UUID.randomUUID();
+        when(businessService.resolveOwnerUserId(unknownId)).thenReturn(null);
+
+        engine.process("session-unknown", "intent_ventas", unknownId, Channel.WEB);
+        ChatTurn turn = engine.process("session-unknown", "Me llamo Pedro y mi email es pedro@test.com",
+            unknownId, Channel.WEB);
+
+        assertThat(turn.leadCaptured()).isFalse();
+        verify(leadRepository, never()).save(any());
     }
 
     @Test

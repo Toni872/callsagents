@@ -183,6 +183,36 @@ class BusinessServiceTest {
         assertThrows(ResourceNotFoundException.class, () -> businessService.markOnboardingComplete(userId));
     }
 
+    @Test
+    void resolveOwnerUserIdReturnsUserIdWhenIdentifierIsAUserId() {
+        when(profileRepository.findByUserId(userId)).thenReturn(Optional.of(sampleProfile()));
+
+        assertEquals(userId, businessService.resolveOwnerUserId(userId));
+    }
+
+    @Test
+    void resolveOwnerUserIdMapsBusinessProfileIdToOwnerUserId() {
+        UUID profileId = UUID.randomUUID();
+        when(profileRepository.findByUserId(profileId)).thenReturn(Optional.empty());
+        when(profileRepository.findUserIdByProfileId(profileId)).thenReturn(Optional.of(userId));
+
+        assertEquals(userId, businessService.resolveOwnerUserId(profileId));
+    }
+
+    @Test
+    void resolveOwnerUserIdReturnsNullForUnknownIdentifier() {
+        UUID unknown = UUID.randomUUID();
+        when(profileRepository.findByUserId(unknown)).thenReturn(Optional.empty());
+        when(profileRepository.findUserIdByProfileId(unknown)).thenReturn(Optional.empty());
+
+        assertEquals(null, businessService.resolveOwnerUserId(unknown));
+    }
+
+    @Test
+    void resolveOwnerUserIdReturnsNullForNull() {
+        assertEquals(null, businessService.resolveOwnerUserId(null));
+    }
+
     private BusinessProfile sampleProfile() {
         return BusinessProfile.builder()
             .id(UUID.randomUUID())

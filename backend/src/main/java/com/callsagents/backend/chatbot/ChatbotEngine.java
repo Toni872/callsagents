@@ -104,6 +104,8 @@ public class ChatbotEngine {
      * Sets the step to {@code awaiting_intent}.
      */
     public ChatTurn greeting(String sessionKey, UUID businessId) {
+        // Accept either a business profile id (web widget) or a user id (WhatsApp).
+        businessId = businessService.resolveOwnerUserId(businessId);
         String botName = "Naiara";
         String companyName = "Script9";
         if (businessId != null) {
@@ -133,6 +135,8 @@ public class ChatbotEngine {
      */
     public ChatTurn process(String sessionKey, String message, UUID businessId, Channel channel) {
         String text = message == null ? "" : message.trim();
+        // Accept either a business profile id (web widget) or a user id (WhatsApp).
+        businessId = businessService.resolveOwnerUserId(businessId);
         String stepVal = conversationStep.getIfPresent(sessionKey);
         String step = stepVal == null ? "initial" : stepVal;
         log.info("processMessage [{}]: step={} text='{}'", sessionKey, step, text);

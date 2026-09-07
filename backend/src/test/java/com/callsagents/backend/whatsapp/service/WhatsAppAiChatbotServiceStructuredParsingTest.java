@@ -55,6 +55,7 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
         // System prompt resolution needs a non-null prompt
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
+        lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test

@@ -35,6 +35,11 @@ spring:
     redis:
       url: ${REDIS_URL:redis://${REDIS_HOST:localhost}:${REDIS_PORT:6379}}
       timeout: 2000ms
+      # This project has no Redis repositories (only a connection for caching),
+      # so disable Spring Data Redis repository scanning to avoid the
+      # "Could not safely identify store assignment" WARN for every JPA repository.
+      repositories:
+        enabled: false
   servlet:
     multipart:
       enabled: true
@@ -126,3 +131,7 @@ logging:
     root: INFO
     com.callsagents: INFO
     org.hibernate.SQL: INFO
+    # We intentionally define both an AuthenticationProvider bean and a
+    # UserDetailsService bean; Spring Security emits a WARN about that at startup.
+    # This is an expected configuration, so silence the WARN (official suggestion).
+    org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: ERROR

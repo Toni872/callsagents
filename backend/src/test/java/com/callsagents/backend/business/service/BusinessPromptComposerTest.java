@@ -58,10 +58,8 @@ class BusinessPromptComposerTest {
 
         String prompt = composer.compose(profile);
 
-        // La cabecera dinamica usa el botName/companyName del negocio...
         assertTrue(prompt.contains("Eres Roberto"));
         assertTrue(prompt.contains("Acme Corp"));
-        // ...y la base de conocimiento comercial rica compartida se mantiene (SCRIPT9).
         assertTrue(prompt.contains("SCRIPT9"));
     }
 
@@ -115,7 +113,6 @@ class BusinessPromptComposerTest {
         String prompt = composer.compose(profile);
 
         assertTrue(prompt.contains("Botty"));
-        // Blank companyName falls back to "nuestra empresa"
         assertTrue(prompt.contains("nuestra empresa"));
     }
 
@@ -142,6 +139,15 @@ class BusinessPromptComposerTest {
         String prompt = composer.compose(profile);
 
         assertTrue(prompt.contains("casual"));
+    }
+
+    @Test
+    void composeDefaultDescribesHumanAgentPersona() {
+        String prompt = composer.composeDefault();
+
+        assertTrue(prompt.contains("atencion al cliente"));
+        assertTrue(prompt.contains("preguntas"));
+        assertTrue(prompt.contains("UNA"));
     }
 
     @Test

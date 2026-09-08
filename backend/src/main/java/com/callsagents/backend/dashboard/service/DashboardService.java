@@ -49,8 +49,8 @@ public class DashboardService {
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant endOfDay = startOfDay.plusSeconds(86_400);
 
-        long totalLeads = leadRepository.countByCreatedBy(currentUserId);
-        long assignedLeads = leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId);
+        long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId);
+        long assignedLeads = leadRepository.countByCreatedByAndDeletedAtIsNullAndAssignedToIsNotNull(currentUserId);
         long activeCampaigns = campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId);
         long callsToday = callRepository.countByCreatedAtBetweenAndUserId(startOfDay, endOfDay, currentUserId);
         long callsTodayConnected = callRepository.countByCreatedAtBetweenAndStatusAndUserId(

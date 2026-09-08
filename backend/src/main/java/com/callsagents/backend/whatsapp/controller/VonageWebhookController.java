@@ -172,11 +172,11 @@ public class VonageWebhookController {
      * fallback for Vonage's occasionally inconsistent number formatting.
      */
     private Optional<Lead> findLeadByPhone(String phoneE164) {
-        Optional<Lead> lead = leadRepository.findByPhone(phoneE164);
+        Optional<Lead> lead = leadRepository.findByPhoneAndDeletedAtIsNull(phoneE164);
         if (lead.isPresent()) {
             return lead;
         }
         String raw = phoneE164.startsWith("+") ? phoneE164.substring(1) : phoneE164;
-        return leadRepository.findByPhone(raw);
+        return leadRepository.findByPhoneAndDeletedAtIsNull(raw);
     }
 }

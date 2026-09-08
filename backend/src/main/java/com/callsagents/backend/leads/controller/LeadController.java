@@ -73,6 +73,24 @@ public class LeadController {
         return ResponseEntity.ok(leadService.findAll(filter, pageable, current.getId()));
     }
 
+    @Operation(summary = "Listar leads eliminados (papelera)")
+    @GetMapping("/trash")
+    public ResponseEntity<PageResponse<LeadResponse>> findTrash(
+        @RequestParam(required = false) LeadStatus status,
+        @RequestParam(required = false) LeadSource source,
+        @RequestParam(required = false) UUID assignedToId,
+        @RequestParam(required = false) String search,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size,
+        @RequestParam(defaultValue = "deletedAt,desc") String sort,
+        @AuthenticationPrincipal UserDetails user
+    ) {
+        User current = resolveUser(user);
+        Pageable pageable = buildPageable(page, size, sort);
+        LeadFilter filter = new LeadFilter(status, source, assignedToId, search);
+        return ResponseEntity.ok(leadService.findTrash(filter, pageable, current.getId()));
+    }
+
     @Operation(summary = "Obtener lead por ID")
     @GetMapping("/{id}")
     public ResponseEntity<LeadResponse> findById(
@@ -105,15 +123,35 @@ public class LeadController {
         return ResponseEntity.ok(leadService.update(id, req, userId));
     }
 
-    @Operation(summary = "Eliminar lead (solo ADMIN)")
+    @Operation(summary = "Eliminar lead (soft delete, papelera)")
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(
         @PathVariable UUID id,
         @AuthenticationPrincipal UserDetails user
     ) {
         User current = resolveUser(user);
         leadService.delete(id, current.getId(), current.getRole());
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Restaurar lead eliminado")
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<LeadResponse> restore(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserDetails user
+    ) {
+        User current = resolveUser(user);
+        return ResponseEntity.ok(leadService.restore(id, current.getId(), current.getRole()));
+    }
+
+    @Operation(summary = "Eliminar lead definitivamente (solo desde papelera)")
+    @DeleteMapping("/{id}/hard")
+    public ResponseEntity<Void> hardDelete(
+        @PathVariable UUID id,
+        @AuthenticationPrincipal UserDetails user
+    ) {
+        User current = resolveUser(user);
+        leadService.hardDelete(id, current.getId(), current.getRole());
         return ResponseEntity.noContent().build();
     }
 
@@ -129,7 +167,7 @@ public class LeadController {
     }
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
-        "createdAt", "updatedAt", "firstName", "lastName", "email", "status", "source", "company"
+        "createdAt", "updatedAt", "deletedAt", "firstName", "lastName", "email", "status", "source", "company"
     );
 
     private Pageable buildPageable(int page, int size, String sort) {

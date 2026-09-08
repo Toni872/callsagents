@@ -354,7 +354,7 @@ public class ChatbotEngine {
     private boolean saveWhatsAppLead(String phone, String firstName, String lastName,
                                      String email, String service, UUID businessId) {
         String phoneE164 = phone.startsWith("+") ? phone : "+" + phone;
-        Optional<Lead> existing = leadRepository.findByPhone(phoneE164);
+        Optional<Lead> existing = leadRepository.findByPhoneAndDeletedAtIsNull(phoneE164);
         if (existing.isPresent()) {
             Lead lead = existing.get();
             if (email != null) lead.setEmail(email);
@@ -389,7 +389,7 @@ public class ChatbotEngine {
 
     private boolean saveWebLead(String sessionId, String firstName, String lastName,
                                 String email, String service, UUID businessId) {
-        long totalLeads = businessId == null ? 0 : leadRepository.countByCreatedBy(businessId);
+        long totalLeads = businessId == null ? 0 : leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
         if (businessId == null || totalLeads >= TRIAL_LEAD_LIMIT) {
             log.warn("Lead limit reached ({}) — skipping web lead creation for session {}", TRIAL_LEAD_LIMIT, sessionId);
             return false;
@@ -424,7 +424,7 @@ public class ChatbotEngine {
         }
         try {
             String phoneE164 = phone.startsWith("+") ? phone : "+" + phone;
-            leadRepository.findByPhone(phoneE164).ifPresent(lead ->
+            leadRepository.findByPhoneAndDeletedAtIsNull(phoneE164).ifPresent(lead ->
                 escalationService.qualify(lead.getId(), businessId)
             );
         } catch (Exception e) {

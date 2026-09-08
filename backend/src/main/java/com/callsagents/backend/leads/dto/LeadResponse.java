@@ -26,7 +26,9 @@ public record LeadResponse(
     Boolean doNotCall,
     LocalDate dataRetentionUntil,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    UUID createdBy,
+    Instant deletedAt
 ) {
     public static LeadResponse fromEntity(Lead lead, UserDto assignee) {
         return new LeadResponse(
@@ -45,7 +47,9 @@ public record LeadResponse(
             lead.getDoNotCall(),
             lead.getDataRetentionUntil(),
             lead.getCreatedAt(),
-            lead.getUpdatedAt()
+            lead.getUpdatedAt(),
+            lead.getCreatedBy(),
+            lead.getDeletedAt()
         );
     }
 }

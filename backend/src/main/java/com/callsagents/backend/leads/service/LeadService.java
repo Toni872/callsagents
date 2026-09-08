@@ -76,13 +76,16 @@ public class LeadService {
         if (lead.getCreatedBy() == null || !lead.getCreatedBy().equals(currentUserId)) {
             throw new ResourceNotFoundException("Lead not found: " + id);
         }
+        if (lead.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Lead not found: " + id);
+        }
         return toResponse(lead);
     }
 
     @Transactional
     public LeadResponse create(CreateLeadRequest req, UUID currentUserId) {
         // Trial lead limit check (per tenant)
-        long totalLeads = leadRepository.countByCreatedBy(currentUserId);
+        long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId);
         if (totalLeads >= TRIAL_LEAD_LIMIT) {
             throw new BadRequestException(
                 "Límite de leads alcanzado (" + TRIAL_LEAD_LIMIT + "). " +
@@ -146,14 +149,61 @@ public class LeadService {
 
     @Transactional
     public void delete(UUID id, UUID currentUserId, UserRole role) {
+        Lead lead = requireOwnedOrAdmin(id, currentUserId, role);
+        Instant now = Instant.now();
+        lead.setDeletedAt(now);
+        lead.setUpdatedAt(now);
+        leadRepository.save(lead);
+        auditService.log(currentUserId, "Lead", id, AuditAction.DELETE);
+    }
+
+    @Transactional
+    public LeadResponse restore(UUID id, UUID currentUserId, UserRole role) {
+        Lead lead = requireOwnedOrAdmin(id, currentUserId, role);
+        if (lead.getDeletedAt() == null) {
+            return toResponse(lead);
+        }
+        Instant now = Instant.now();
+        lead.setDeletedAt(null);
+        lead.setUpdatedAt(now);
+        Lead saved = leadRepository.save(lead);
+        auditService.log(currentUserId, "Lead", saved.getId(), AuditAction.UPDATE);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public void hardDelete(UUID id, UUID currentUserId, UserRole role) {
+        Lead lead = requireOwnedOrAdmin(id, currentUserId, role);
+        if (lead.getDeletedAt() == null) {
+            throw new ResourceNotFoundException("Lead not found: " + id);
+        }
+        leadRepository.delete(lead);
+        auditService.log(currentUserId, "Lead", id, AuditAction.DELETE);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<LeadResponse> findTrash(LeadFilter filter, Pageable pageable, UUID currentUserId) {
+        Specification<Lead> spec = LeadSpecifications.isDeleted()
+            .and(LeadSpecifications.ownedBy(currentUserId));
+        if (filter != null) {
+            spec = spec
+                .and(LeadSpecifications.hasStatus(filter.status()))
+                .and(LeadSpecifications.hasSource(filter.source()))
+                .and(LeadSpecifications.isAssignedTo(filter.assignedToId()))
+                .and(LeadSpecifications.searchText(filter.search()));
+        }
+        Page<Lead> page = leadRepository.findAll(spec, pageable);
+        return PageResponse.from(page.map(this::toResponse));
+    }
+
+    private Lead requireOwnedOrAdmin(UUID id, UUID currentUserId, UserRole role) {
         Lead lead = leadRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + id));
         if ((lead.getCreatedBy() == null || !lead.getCreatedBy().equals(currentUserId))
             && role != UserRole.ADMIN) {
             throw new ForbiddenException("You can only delete your own leads");
         }
-        leadRepository.deleteById(id);
-        auditService.log(currentUserId, "Lead", id, AuditAction.DELETE);
+        return lead;
     }
 
     @Transactional

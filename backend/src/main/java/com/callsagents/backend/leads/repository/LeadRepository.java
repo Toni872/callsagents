@@ -10,13 +10,13 @@ import java.util.UUID;
 
 @Repository
 public interface LeadRepository extends JpaRepository<Lead, UUID>, JpaSpecificationExecutor<Lead> {
-    Optional<Lead> findByEmail(String email);
-    Optional<Lead> findByPhone(String phone);
+    Optional<Lead> findByEmailAndDeletedAtIsNull(String email);
+    Optional<Lead> findByPhoneAndDeletedAtIsNull(String phone);
 
     // Dashboard metrics — derived methods, no JPQL needed
     long countByAssignedToIsNotNull();
 
     // Multi-tenant (per-user) scoping metrics
-    long countByCreatedBy(UUID createdBy);
-    long countByCreatedByAndAssignedToIsNotNull(UUID createdBy);
+    long countByCreatedByAndDeletedAtIsNull(UUID createdBy);
+    long countByCreatedByAndDeletedAtIsNullAndAssignedToIsNotNull(UUID createdBy);
 }

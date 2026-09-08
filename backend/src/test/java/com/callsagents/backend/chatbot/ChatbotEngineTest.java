@@ -284,6 +284,50 @@ class ChatbotEngineTest {
         assertThat(turn.reply()).doesNotContain("problema técnico");
     }
 
+    @Test
+    @DisplayName("confirmed_no -> affirmative -> change of mind: escalates on WHATSAPP, returns contact URL, step=confirmed_yes")
+    void confirmedNo_thenAffirmative_escalatesAndReturnsContactUrl() {
+        Lead existingLead = new Lead();
+        org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
+        // First call (lead save) returns empty, second call (triggerEscalation) returns the lead
+        when(leadRepository.findByPhone(anyString()))
+            .thenReturn(Optional.empty(), Optional.of(existingLead));
+
+        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "Antonio antohachi@gmail.com", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WHATSAPP);
+
+        // User declines
+        ChatTurn decline = engine.process(KEY, "confirm_no", BUSINESS_ID, Channel.WHATSAPP);
+        assertThat(decline.reply()).contains("No te preocupes");
+        assertThat(stepOf(KEY)).isEqualTo("confirmed_no");
+
+        // User changes mind
+        verify(escalationService, never()).qualify(any(), any());
+        ChatTurn changeOfMind = engine.process(KEY, "Sí, agendar", BUSINESS_ID, Channel.WHATSAPP);
+        assertThat(changeOfMind.reply()).contains("demo de 15 minutos");
+        assertThat(changeOfMind.reply()).contains("script-9.com/contacto");
+        assertThat(stepOf(KEY)).isEqualTo("confirmed_yes");
+        verify(escalationService, times(1)).qualify(any(), any());
+    }
+
+    @Test
+    @DisplayName("confirmed_no -> negative again -> farewell, stays in confirmed_no")
+    void confirmedNo_thenNegativeAgain_farewellStaysConfirmedNo() {
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+
+        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "Antonio antohachi@gmail.com", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WHATSAPP);
+
+        engine.process(KEY, "confirm_no", BUSINESS_ID, Channel.WHATSAPP);
+        assertThat(stepOf(KEY)).isEqualTo("confirmed_no");
+
+        ChatTurn insist = engine.process(KEY, "no quiero", BUSINESS_ID, Channel.WHATSAPP);
+        assertThat(insist.reply()).contains("No te preocupes");
+        assertThat(stepOf(KEY)).isEqualTo("confirmed_no");
+    }
+
     private static List<ChatButton> extractVoiceButtons(ChatTurn turn) {
         if (turn == null || turn.buttons() == null) return null;
         return turn.buttons().stream()

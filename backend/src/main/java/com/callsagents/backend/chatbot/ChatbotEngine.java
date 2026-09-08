@@ -324,6 +324,21 @@ public class ChatbotEngine {
             return null;
         }
 
+        // confirmed_no: user previously declined but may change their mind
+        if ("confirmed_no".equals(step)) {
+            if ("confirm_yes".equals(text) || isAffirmative(text)) {
+                conversationStep.put(key, "confirmed_yes");
+                if (channel == Channel.WHATSAPP) {
+                    triggerEscalation(key, businessId);
+                }
+                String contactUrl = resolveContactUrl(businessId);
+                return ChatTurn.text("¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nAgenda directamente aquí: " + contactUrl);
+            }
+            if ("confirm_no".equals(text) || isNegative(text)) {
+                return ChatTurn.text("No te preocupes. Cuando quieras, aquí estoy.\n\n¡Hasta pronto!");
+            }
+        }
+
         return null; // Not a button reply or unhandled step
     }
 

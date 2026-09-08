@@ -1,14 +1,13 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { LeadApi } from '../../../core/api/lead.api';
-import { AuthService } from '../../../core/auth/auth.service';
 import { ErrorService } from '../../../core/errors/error.service';
 import { LeadResponse } from '../../../shared/models/lead.model';
 
 @Component({
-  selector: 'app-lead-list',
+  selector: 'app-lead-trash',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, ReactiveFormsModule, RouterLink],
@@ -16,10 +15,11 @@ import { LeadResponse } from '../../../shared/models/lead.model';
     <section class="page">
       <header class="page__header">
         <div>
-          <h2>Leads</h2>
-          <p class="muted">Listado paginado contra <code>GET /api/leads</code>.</p>
+          <h2>Papelera</h2>
+          <p class="muted">Leads eliminados. Puedes restaurarlos o borrarlos definitivamente.</p>
         </div>
         <div class="page__actions">
+          <a class="secondary" [routerLink]="['/leads']">← Volver a Leads</a>
           <input
             type="search"
             placeholder="Buscar..."
@@ -28,13 +28,6 @@ import { LeadResponse } from '../../../shared/models/lead.model';
           />
           <button class="secondary" type="button" (click)="onSearch()">Buscar</button>
           <button type="button" (click)="reload()">Recargar</button>
-          <a [routerLink]="['/leads', 'trash']">Papelera</a>
-          <a
-            [routerLink]="trialLocked() ? null : ['/leads', 'new']"
-            [title]="trialLocked() ? 'Disponible al contratar' : undefined"
-            [attr.aria-disabled]="trialLocked()"
-            [class.is-locked]="trialLocked()"
-          >+ Nuevo lead</a>
         </div>
       </header>
 
@@ -46,48 +39,45 @@ import { LeadResponse } from '../../../shared/models/lead.model';
               <th>Email</th>
               <th>Teléfono</th>
               <th>Empresa</th>
-              <th>Estado</th>
               <th>Origen</th>
-              <th>Asignado a</th>
+              <th>Borrado</th>
+              <th>Estado</th>
               <th class="actions-col">Acciones</th>
             </tr>
           </thead>
           <tbody>
             @for (lead of leads(); track lead.id) {
               <tr>
-                <td>
-                  <a [routerLink]="['/leads', lead.id]">
-                    {{ lead.firstName }} {{ lead.lastName }}
-                  </a>
-                </td>
+                <td>{{ lead.firstName }} {{ lead.lastName }}</td>
                 <td>{{ lead.email || '—' }}</td>
                 <td>{{ lead.phone || '—' }}</td>
                 <td>{{ lead.company || '—' }}</td>
-                <td><span class="badge">{{ lead.status }}</span></td>
                 <td>{{ lead.source }}</td>
-                <td>{{ lead.assignedTo?.fullName || '—' }}</td>
+                <td>{{ formatDate(lead.deletedAt) }}</td>
+                <td><span class="badge">{{ lead.status }}</span></td>
                 <td class="actions-col">
-                  <a [routerLink]="['/leads', lead.id]">Ver</a>
-                  @if (canDelete(lead)) {
-                    <button
-                      type="button"
-                      class="danger"
-                      (click)="onDelete(lead)"
-                      [disabled]="deletingId() === lead.id"
-                    >
-                      @if (deletingId() === lead.id) {
-                        Eliminando...
-                      } @else {
-                        Eliminar
-                      }
-                    </button>
-                  }
+                  <button
+                    class="secondary"
+                    type="button"
+                    (click)="onRestore(lead)"
+                    [disabled]="busyId() === lead.id"
+                  >
+                    Restaurar
+                  </button>
+                  <button
+                    class="danger"
+                    type="button"
+                    (click)="onHardDelete(lead)"
+                    [disabled]="busyId() === lead.id"
+                  >
+                    Borrar definitivamente
+                  </button>
                 </td>
               </tr>
             } @empty {
               <tr>
                 <td colspan="8" class="muted" style="text-align: center; padding: 2rem;">
-                  Sin resultados.
+                  No hay leads en la papelera.
                 </td>
               </tr>
             }
@@ -150,9 +140,15 @@ import { LeadResponse } from '../../../shared/models/lead.model';
         width: 1%;
         white-space: nowrap;
       }
-      .actions-col button + a,
-      .actions-col a + button {
+      .actions-col button + button {
         margin-left: var(--spacing-2);
+      }
+      a {
+        color: var(--color-primary);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
       }
       .danger {
         background: var(--color-error);
@@ -162,33 +158,18 @@ import { LeadResponse } from '../../../shared/models/lead.model';
         background: var(--color-error-bg);
         color: var(--color-error);
       }
-      a {
-        color: var(--color-primary);
-        text-decoration: none;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
-      a.is-locked {
-        opacity: 0.5;
-        cursor: not-allowed;
-        text-decoration: none;
-      }
     `
   ]
 })
-export class LeadListComponent implements OnInit {
+export class LeadTrashComponent implements OnInit {
   private readonly api = inject(LeadApi);
-  private readonly auth = inject(AuthService);
   private readonly errors = inject(ErrorService);
-
-  protected readonly trialLocked = this.auth.isTrialExpired;
 
   protected readonly searchControl = new FormControl<string>('', { nonNullable: true });
 
   protected readonly leads = signal<LeadResponse[]>([]);
   protected readonly loading = signal(false);
-  protected readonly deletingId = signal<string | null>(null);
+  protected readonly busyId = signal<string | null>(null);
   protected readonly page = signal(0);
   protected readonly totalPages = signal(0);
   protected readonly totalElements = signal(0);
@@ -200,41 +181,9 @@ export class LeadListComponent implements OnInit {
     this.fetch();
   }
 
-  protected canDelete(lead: LeadResponse): boolean {
-    return (
-      this.auth.currentRole() === 'ADMIN' ||
-      (!!lead.createdBy && lead.createdBy === this.auth.currentUser()?.id)
-    );
-  }
-
   protected reload(): void {
     this.page.set(0);
     this.fetch();
-  }
-
-  protected onDelete(lead: LeadResponse): void {
-    if (this.deletingId()) {
-      return;
-    }
-    const confirmed = confirm(
-      `¿Eliminar este lead "${lead.firstName} ${lead.lastName}"? Se moverá a la papelera.`
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    this.deletingId.set(lead.id);
-    this.api.delete(lead.id).subscribe({
-      next: () => {
-        this.deletingId.set(null);
-        this.errors.success('Lead eliminado');
-        this.reload();
-      },
-      error: () => {
-        this.deletingId.set(null);
-        // Toast shown by errorInterceptor
-      }
-    });
   }
 
   protected onSearch(): void {
@@ -251,15 +200,66 @@ export class LeadListComponent implements OnInit {
     this.fetch();
   }
 
+  protected formatDate(value: string | null): string {
+    if (!value) {
+      return '—';
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      return value;
+    }
+    return d.toLocaleString();
+  }
+
+  protected onRestore(lead: LeadResponse): void {
+    if (this.busyId()) {
+      return;
+    }
+    this.busyId.set(lead.id);
+    this.api.restore(lead.id).subscribe({
+      next: () => {
+        this.busyId.set(null);
+        this.errors.success('Lead restaurado');
+        this.reload();
+      },
+      error: () => {
+        this.busyId.set(null);
+        // Toast shown by errorInterceptor
+      }
+    });
+  }
+
+  protected onHardDelete(lead: LeadResponse): void {
+    if (this.busyId()) {
+      return;
+    }
+    const confirmed = confirm(`¿Borrar definitivamente "${lead.firstName} ${lead.lastName}"? Esta acción no se puede deshacer.`);
+    if (!confirmed) {
+      return;
+    }
+    this.busyId.set(lead.id);
+    this.api.hardDelete(lead.id).subscribe({
+      next: () => {
+        this.busyId.set(null);
+        this.errors.success('Lead borrado definitivamente');
+        this.reload();
+      },
+      error: () => {
+        this.busyId.set(null);
+        // Toast shown by errorInterceptor
+      }
+    });
+  }
+
   private fetch(): void {
     this.loading.set(true);
 
     this.api
-      .list({
+      .trash({
         page: this.page(),
         size: this.pageSize,
         search: this.currentSearch || undefined,
-        sort: 'createdAt,desc'
+        sort: 'deletedAt,desc'
       })
       .subscribe({
         next: (res) => {

@@ -208,7 +208,14 @@ export class LeadDetailComponent implements OnInit {
   protected readonly lead = signal<LeadResponse | null>(null);
   protected readonly deleting = signal(false);
 
-  protected readonly canDelete = (): boolean => this.auth.currentRole() === 'ADMIN';
+  protected readonly canDelete = (): boolean => {
+    const l = this.lead();
+    return (
+      !!l &&
+      (this.auth.currentRole() === 'ADMIN' ||
+        (!!l.createdBy && l.createdBy === this.auth.currentUser()?.id))
+    );
+  };
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
@@ -246,7 +253,7 @@ export class LeadDetailComponent implements OnInit {
     if (!l || this.deleting()) {
       return;
     }
-    const confirmed = confirm(`¿Eliminar el lead "${l.firstName} ${l.lastName}"? Esta acción no se puede deshacer.`);
+    const confirmed = confirm(`¿Eliminar el lead "${l.firstName} ${l.lastName}"? Se moverá a la papelera. Podrás restaurarlo o borrarlo definitivamente desde la papelera.`);
     if (!confirmed) {
       return;
     }

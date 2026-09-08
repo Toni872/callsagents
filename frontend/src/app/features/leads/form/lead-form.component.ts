@@ -346,7 +346,13 @@ export class LeadFormComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly errors = inject(ErrorService);
 
-  protected readonly sources: LeadSourceValue[] = ['MANUAL', 'IMPORT', 'API'];
+  protected readonly sources: LeadSourceValue[] = [
+    'MANUAL',
+    'IMPORT',
+    'API',
+    'WHATSAPP',
+    'WEB_CHAT'
+  ];
   protected readonly statuses: LeadStatusValue[] = [
     'NEW',
     'ASSIGNED',

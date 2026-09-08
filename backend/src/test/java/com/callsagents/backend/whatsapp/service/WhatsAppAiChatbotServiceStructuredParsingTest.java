@@ -6,7 +6,6 @@ import com.callsagents.backend.chatbot.ChatbotEngine;
 import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
-import com.callsagents.backend.voice.service.VoiceCallService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,13 +13,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -33,7 +31,6 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
     @Mock BusinessService businessService;
     @Mock BusinessPromptComposer promptComposer;
     @Mock EscalationService escalationService;
-    @Mock VoiceCallService voiceCallService;
 
     private ChatbotEngine engine;
     private WhatsAppAiChatbotService service;
@@ -45,75 +42,77 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
     void setUp() {
         engine = new ChatbotEngine(
             groqService, leadRepository,
-            businessService, promptComposer, escalationService, voiceCallService
+            businessService, promptComposer, escalationService
         );
         service = new WhatsAppAiChatbotService(
             groqService, vonageMessageService,
             businessService, engine
         );
         when(groqService.isConfigured()).thenReturn(true);
-        // System prompt resolution needs a non-null prompt
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
         lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
-    @DisplayName("processMessage: [LEAD] tag extraction populates leadData and saves lead, tag removed from visible text")
-    void processMessage_savesLeadFromLeadTag() {
-        // Advance to collecting_info step
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-
-        // No lead exists yet
+    @DisplayName("email capture: deterministic save AND Groq reply in same turn")
+    void emailCapture_savesLeadAndCallsGroq() {
         when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias Juan, te ayudo.");
 
         String result = service.processMessage(
             PHONE, "Me llamo Juan, juan@test.com", BUSINESS_ID
         );
 
-        // Lead saved with parsed values
-        verify(leadRepository).save(any(Lead.class));
-        verify(leadRepository).save(argThat(leadArg -> {
-            Lead lead = (Lead) leadArg;
-            return "juan@test.com".equals(lead.getEmail())
-                && "Juan".equals(lead.getFirstName());
+        assertThat(result).isEqualTo("Gracias Juan, te ayudo.");
+        verify(leadRepository).save(argThat(lead -> {
+            Lead l = (Lead) lead;
+            return "juan@test.com".equals(l.getEmail())
+                && "Juan".equals(l.getFirstName());
         }));
-        // The tag is stripped: only the natural text is shown (email detected ->
-        // timing buttons are sent, so in this collecting_info flow the reply is null)
-        assertThat(result).isNull();
+        verify(groqService).chat(anyString(), anyList(), anyString());
     }
 
     @Test
-    @DisplayName("processMessage: response without a [LEAD] tag does not save a lead")
-    void processMessage_noLeadTag_doesNotSave() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-
-        when(groqService.chat(anyString(), anyList(),
-            anyString())).thenReturn("¿Cuál es tu correo?");
+    @DisplayName("no email in message -> no lead saved, AI reply returned")
+    void noEmail_noLeadSaved() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¿Cuál es tu correo?");
 
         String result = service.processMessage(
             PHONE, "Me llamo Juan", BUSINESS_ID
         );
 
-        verify(leadRepository, never()).save(any(Lead.class));
         assertThat(result).isEqualTo("¿Cuál es tu correo?");
+        verify(leadRepository, never()).save(any(Lead.class));
     }
 
     @Test
-    @DisplayName("free text timing answer advances to confirmation with buttons only")
-    void freeTextTiming_advancesToConfirmation() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+    @DisplayName("[LEAD] tag from AI -> lead saved, tag stripped from visible text")
+    void leadTag_savesLeadAndStripsTag() {
         when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString()))
+            .thenReturn("Perfecto, gracias [LEAD:name=Juan|email=juan@test.com|service=ventas]");
 
-        // name + email advance to awaiting_timing (buttons only)
-        service.processMessage(PHONE, "Juan, juan@test.com", BUSINESS_ID);
+        String result = service.processMessage(
+            PHONE, "Me llamo Juan y mi correo es juan@test.com", BUSINESS_ID
+        );
 
-        // Free text timing -> confirmation buttons sent, no AI text
-        String result = service.processMessage(PHONE, "Lo antes posible", BUSINESS_ID);
-        assertThat(result).isNull();
+        assertThat(result).isEqualTo("Perfecto, gracias");
+        assertThat(result).doesNotContain("[LEAD");
+        verify(leadRepository).save(any(Lead.class));
+    }
 
-        // Confirm button flows after free-text timing
-        String confirm = service.processMessage(PHONE, "Sí, agendar", BUSINESS_ID);
-        assertThat(confirm).contains("demo de 50 leads");
+    @Test
+    @DisplayName("multiple turns after email capture still work")
+    void multipleTurns_afterEmailCapture() {
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entendido");
+
+        service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+        String turn2 = service.processMessage(PHONE, "¿Cuánto cuesta?", BUSINESS_ID);
+        String turn3 = service.processMessage(PHONE, "Quiero más info", BUSINESS_ID);
+
+        assertThat(turn2).isNotNull();
+        assertThat(turn3).isNotNull();
     }
 }

@@ -6,7 +6,6 @@ import com.callsagents.backend.chatbot.ChatbotEngine;
 import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
-import com.callsagents.backend.voice.service.VoiceCallService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,7 +36,6 @@ class WhatsAppAiChatbotServiceTest {
     @Mock BusinessService businessService;
     @Mock BusinessPromptComposer promptComposer;
     @Mock EscalationService escalationService;
-    @Mock VoiceCallService voiceCallService;
 
     private ChatbotEngine engine;
     private WhatsAppAiChatbotService service;
@@ -49,7 +47,7 @@ class WhatsAppAiChatbotServiceTest {
     void setUp() {
         engine = new ChatbotEngine(
             groqService, leadRepository,
-            businessService, promptComposer, escalationService, voiceCallService
+            businessService, promptComposer, escalationService
         );
         service = new WhatsAppAiChatbotService(
             groqService, vonageMessageService,
@@ -66,15 +64,14 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    void chatLead_savedFromLeadTag_andTimingButtonsSent() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-
+    @DisplayName("email in message -> deterministic lead capture AND AI reply (no timing buttons)")
+    void emailInMessage_savesLeadAndReturnsAiReply() {
         expectNoExistingLead();
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias Antonio, te ayudo.");
 
         String result = service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com", BUSINESS_ID);
 
-        // Email detected -> timing buttons sent, no AI text in the same turn
-        assertThat(result).isNull();
+        assertThat(result).isEqualTo("Gracias Antonio, te ayudo.");
         verify(leadRepository).save(argThat(lead -> {
             Lead l = (Lead) lead;
             return "antonio@test.com".equals(l.getEmail())
@@ -85,12 +82,14 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    void chatLead_noEmail_savedWithUnknownName() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+    @DisplayName("email without name -> lead with Desconocido, AI reply returned")
+    void emailOnly_leadWithUnknownName() {
         expectNoExistingLead();
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entendido.");
 
-        service.processMessage(PHONE, "antonio@test.com", BUSINESS_ID);
+        String result = service.processMessage(PHONE, "antonio@test.com", BUSINESS_ID);
 
+        assertThat(result).isEqualTo("Entendido.");
         verify(leadRepository).save(argThat(lead ->
             ((Lead) lead).getEmail().equals("antonio@test.com")
                 && "Desconocido".equals(((Lead) lead).getFirstName())
@@ -98,12 +97,14 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    void chatLead_withConnectorName_usesCleanParsedName() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+    @DisplayName("name + email -> lead saved with clean parsed name")
+    void nameAndEmail_savesCleanParsedName() {
         expectNoExistingLead();
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias Juan.");
 
-        service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+        String result = service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
 
+        assertThat(result).isEqualTo("Gracias Juan.");
         verify(leadRepository).save(argThat(lead ->
             ((Lead) lead).getEmail().equals("juan@test.com")
                 && "Juan".equals(((Lead) lead).getFirstName())
@@ -111,11 +112,10 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    void noLeadTag_noLeadSaved() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+    @DisplayName("no email in message -> no lead saved, AI reply returned")
+    void noEmail_noLeadSaved() {
         expectNoExistingLead();
-        when(groqService.chat(anyString(), anyList(), anyString()))
-            .thenReturn("¿Cuál es tu correo?");
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¿Cuál es tu correo?");
 
         String result = service.processMessage(PHONE, "Me llamo Antonio", BUSINESS_ID);
 
@@ -124,54 +124,22 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    @DisplayName("fallback: model omits the tag but the user stated an email -> lead captured by regex")
-    void noLeadTag_userStatedEmail_leadCapturedByRegex() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-        expectNoExistingLead();
-
-        String result = service.processMessage(PHONE, "Antonio y mi email es antohachi@gmail.com", BUSINESS_ID);
-
-        // Email detected -> timing buttons sent, no AI text in the same turn (single-message rule)
-        assertThat(result).isNull();
-        verify(leadRepository).save(argThat(lead -> {
-            Lead l = (Lead) lead;
-            return "antohachi@gmail.com".equals(l.getEmail())
-                && "Antonio".equals(l.getFirstName())
-                && BUSINESS_ID.equals(l.getCreatedBy());
-        }));
-    }
-
-    @Test
-    @DisplayName("fallback: email without a name token -> lead with Desconocido")
-    void noLeadTag_emailOnly_leadCapturedWithUnknownName() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-        expectNoExistingLead();
-
-        service.processMessage(PHONE, "escribe a antohachi@gmail.com", BUSINESS_ID);
-
-        verify(leadRepository).save(argThat(lead ->
-            ((Lead) lead).getEmail().equals("antohachi@gmail.com")
-                && "Desconocido".equals(((Lead) lead).getFirstName())
-                && BUSINESS_ID.equals(((Lead) lead).getCreatedBy())));
-    }
-
-    @Test
-    @DisplayName("fallback never saves when the user message has no email at all")
-    void noLeadTag_noEmailInMessage_noLeadSaved() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+    @DisplayName("model emits [LEAD] tag -> tag stripped from visible text, lead saved")
+    void leadTag_strippedAndLeadSaved() {
         expectNoExistingLead();
         when(groqService.chat(anyString(), anyList(), anyString()))
-            .thenReturn("Entendido, te ayudo con ventas.");
+            .thenReturn("Claro, aquí tienes la información [LEAD:name=Antonio|email=x@test.com|service=soporte]");
 
-        String result = service.processMessage(PHONE, "Quiero saber más sobre ventas", BUSINESS_ID);
+        String result = service.processMessage(PHONE, "¿Cómo funciona?", BUSINESS_ID);
 
-        assertThat(result).isEqualTo("Entendido, te ayudo con ventas.");
-        verify(leadRepository, never()).save(any(Lead.class));
+        assertThat(result).isEqualTo("Claro, aquí tienes la información");
+        assertThat(result).doesNotContain("[LEAD");
+        verify(leadRepository).save(any(Lead.class));
     }
 
     @Test
-    void nullChatResponse_noLeadSaved_technicalMessage() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+    @DisplayName("null Groq response -> technical error message")
+    void nullGroqResponse_technicalMessage() {
         expectNoExistingLead();
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn(null);
 
@@ -182,9 +150,10 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
+    @DisplayName("without businessId -> no lead saved")
     void withoutBusinessId_noLeadSaved() {
-        service.processMessage(PHONE, "intent_ventas");
         expectNoExistingLead();
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Hola");
 
         service.processMessage(PHONE, "Me llamo Antonio, antonio@test.com");
 
@@ -192,58 +161,38 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    @DisplayName("visible text never contains the [LEAD] tag")
-    void visibleText_stripsLeadTag() {
-        service.processMessage(PHONE, "intent_soporte", BUSINESS_ID);
-        expectNoExistingLead();
-        when(groqService.chat(anyString(), anyList(), anyString()))
-            .thenReturn("Claro, aquí tienes la información [LEAD:name=Antonio|email=x@test.com|service=soporte]");
+    @DisplayName("reset via 'reset' sends greeting text via Vonage")
+    void reset_sendsGreeting() {
+        service.processMessage(PHONE, "test", BUSINESS_ID);
 
-        String result = service.processMessage(PHONE, "¿Cómo funciona?", BUSINESS_ID);
+        service.processMessage(PHONE, "reset", BUSINESS_ID);
 
-        assertThat(result).isEqualTo("Claro, aquí tienes la información");
-        assertThat(result).doesNotContain("[LEAD");
-        assertThat(result).doesNotContain("Lead extracted");
-        verify(leadRepository).save(any(Lead.class));
+        verify(vonageMessageService).sendText(anyString(), anyString());
     }
 
     @Test
-    @DisplayName("real transcript: intent -> timing -> confirmation -> post-confirmation alive, single messages, repeated button guarded")
-    void realTranscript_singleMessages_postConfirmationAlive() {
+    @DisplayName("'hola' is NOT a reset — flows to AI")
+    void hola_isNotReset() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Hola! ¿Cómo estás?");
+
+        String result = service.processMessage(PHONE, "hola", BUSINESS_ID);
+
+        assertThat(result).isEqualTo("¡Hola! ¿Cómo estás?");
+        verify(vonageMessageService, never()).sendText(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("real transcript: email capture + affirmative -> escalation fires once")
+    void realTranscript_emailAndAffirmative_escalationFiresOnce() {
         Lead existingLead = new Lead();
         org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
         when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
-        // 1. user chooses Ventas -> collecting_info (single text reply)
-        String step1 = service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-        assertThat(step1).contains("¿Cómo te llamas");
+        service.processMessage(PHONE, "Me llamo Antonio y mi correo es antohachi@gmail.com", BUSINESS_ID);
+        service.processMessage(PHONE, "Sí, estoy interesado", BUSINESS_ID);
+        service.processMessage(PHONE, "Sí, confirmo", BUSINESS_ID);
 
-        // 2. name + email -> ONLY timing buttons (null reply), lead saved deterministically
-        String step2 = service.processMessage(PHONE, "Me llamo Antonio y mi correo es antohachi@gmail.com", BUSINESS_ID);
-        assertThat(step2).isNull();
-        verify(leadRepository).save(argThat(lead ->
-            ((Lead) lead).getEmail().equals("antohachi@gmail.com")));
-
-        // 3. "Lo antes posible" free text -> confirmation buttons (null, no AI text)
-        String step3 = service.processMessage(PHONE, "Lo antes posible", BUSINESS_ID);
-        assertThat(step3).isNull();
-
-        // 4. "Si, agendar" free text -> real confirmation + escalation + demo message
-        String step4 = service.processMessage(PHONE, "Si, agendar", BUSINESS_ID);
-        assertThat(step4).contains("demo de 50 leads");
-        verify(escalationService, times(1)).qualify(any(), any());
-
-        // 5. another "si" after confirming stays alive (NO "ya procesé tu respuesta")
-        when(groqService.chat(anyString(), anyList(), anyString()))
-            .thenReturn("¡Perfecto! Te envío el correo con el enlace para agendar.");
-        String step5 = service.processMessage(PHONE, "si", BUSINESS_ID);
-        assertThat(step5).isNotNull();
-        assertThat(step5).doesNotContain("Ya procesé tu respuesta");
-
-        // 6. repeating the SAME confirm_yes button -> already handled, no extra escalation
-        String step6 = service.processMessage(PHONE, "confirm_yes", BUSINESS_ID);
-        assertThat(step6).isNotNull();
-        assertThat(step6).contains("Ya procesé tu respuesta");
         verify(escalationService, times(1)).qualify(any(), any());
     }
 }

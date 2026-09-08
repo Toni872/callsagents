@@ -6,7 +6,6 @@ import com.callsagents.backend.chatbot.ChatbotEngine;
 import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
-import com.callsagents.backend.voice.service.VoiceCallService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,16 +22,11 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * End-to-end WhatsApp bot flow: [LEAD] tag extraction, FSM advance to
- * confirmation, single-message turns (no buttons + text together), and a
- * guarded repeated-confirm no-op — verifying no double escalation and that the
- * conversation stays alive after a confirmation.
- */
 @ExtendWith(MockitoExtension.class)
 class WhatsAppIntegrationTest {
 
@@ -42,7 +36,6 @@ class WhatsAppIntegrationTest {
     @Mock BusinessService businessService;
     @Mock BusinessPromptComposer promptComposer;
     @Mock EscalationService escalationService;
-    @Mock VoiceCallService voiceCallService;
 
     private ChatbotEngine engine;
     private WhatsAppAiChatbotService service;
@@ -54,7 +47,7 @@ class WhatsAppIntegrationTest {
     void setUp() {
         engine = new ChatbotEngine(
             groqService, leadRepository,
-            businessService, promptComposer, escalationService, voiceCallService
+            businessService, promptComposer, escalationService
         );
         service = new WhatsAppAiChatbotService(
             groqService, vonageMessageService,
@@ -67,43 +60,58 @@ class WhatsAppIntegrationTest {
     }
 
     @Test
-    @DisplayName("end-to-end: lead tag -> confirmation -> post-confirmation alive, no double escalation")
-    void leadTag_throughConfirmation_noDoubleEscalation() {
-        // A lead already exists for this phone; extraction updates it and
-        // confirm_yes escalates that lead.
+    @DisplayName("end-to-end: email capture + affirmative -> escalation fires once, conversation continues")
+    void emailCaptureAndAffirmative_escalationOnce() {
         Lead existingLead = new Lead();
         org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
         when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
-        // Step 1: user chooses Ventas -> collecting_info
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
+        // Step 1: email captured deterministically + AI reply
+        String step1 = service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+        assertThat(step1).isNotNull();
+        verify(leadRepository).save(argThat(lead ->
+            ((Lead) lead).getEmail().equals("juan@test.com")));
 
-        // Step 2: user shares name+email -> lead saved deterministically.
-        // Email detected -> timing buttons sent, NO AI text in the same turn.
-        String step2Reply = service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
-
-        verify(leadRepository).save(argThat(leadArg ->
-            ((Lead) leadArg).getEmail().equals("juan@test.com")));
-        assertThat(step2Reply).isNull();
-
-        // Step 3: timing ("now") advances toward confirmation (buttons only)
-        service.processMessage(PHONE, "timing_now", BUSINESS_ID);
-
-        // Step 4: confirm_yes -> real confirmation, escalates once
-        String confirm = service.processMessage(PHONE, "confirm_yes", BUSINESS_ID);
-        assertThat(confirm).contains("demo de 50 leads");
+        // Step 2: affirmative -> escalation fires once
+        String step2 = service.processMessage(PHONE, "Sí, estoy interesado", BUSINESS_ID);
+        assertThat(step2).isNotNull();
         verify(escalationService, times(1)).qualify(any(), any());
 
-        // Step 5: another text after confirming keeps the conversation alive
-        when(groqService.chat(anyString(), anyList(), anyString()))
-            .thenReturn("¡Perfecto! Te envío el correo con el enlace para agendar.");
-        String after = service.processMessage(PHONE, "genial, gracias", BUSINESS_ID);
+        // Step 3: more conversation — still alive
+        String step3 = service.processMessage(PHONE, "Cuéntame más", BUSINESS_ID);
+        assertThat(step3).isNotNull();
+
+        // Step 4: another affirmative — no re-escalation
+        String step4 = service.processMessage(PHONE, "Perfecto, confirmo", BUSINESS_ID);
+        assertThat(step4).isNotNull();
+        verify(escalationService, times(1)).qualify(any(), any());
+    }
+
+    @Test
+    @DisplayName("end-to-end: email capture + negative -> no escalation")
+    void emailCaptureAndNegative_noEscalation() {
+        Lead existingLead = new Lead();
+        org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("No te preocupes.");
+
+        service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+        service.processMessage(PHONE, "No, gracias", BUSINESS_ID);
+
+        verify(escalationService, never()).qualify(any(), any());
+    }
+
+    @Test
+    @DisplayName("end-to-end: reset after email capture clears state")
+    void resetAfterEmailCapture() {
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Hola de nuevo");
+
+        service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+        service.processMessage(PHONE, "reset", BUSINESS_ID);
+        String after = service.processMessage(PHONE, "hola", BUSINESS_ID);
+
         assertThat(after).isNotNull();
-        assertThat(after).doesNotContain("Ya procesé tu respuesta");
-
-        // Step 6: duplicate confirm_yes -> already-handled, NO re-escalation
-        String reClick = service.processMessage(PHONE, "confirm_yes", BUSINESS_ID);
-        assertThat(reClick).contains("Ya procesé tu respuesta");
-        verify(escalationService, times(1)).qualify(any(), any());
     }
 }

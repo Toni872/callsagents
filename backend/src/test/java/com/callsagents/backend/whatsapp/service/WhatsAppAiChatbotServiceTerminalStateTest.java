@@ -6,7 +6,6 @@ import com.callsagents.backend.chatbot.ChatbotEngine;
 import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
-import com.callsagents.backend.voice.service.VoiceCallService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +20,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class WhatsAppAiChatbotServiceTerminalStateTest {
@@ -32,7 +35,6 @@ class WhatsAppAiChatbotServiceTerminalStateTest {
     @Mock BusinessService businessService;
     @Mock BusinessPromptComposer promptComposer;
     @Mock EscalationService escalationService;
-    @Mock VoiceCallService voiceCallService;
 
     private ChatbotEngine engine;
     private WhatsAppAiChatbotService service;
@@ -44,112 +46,73 @@ class WhatsAppAiChatbotServiceTerminalStateTest {
     void setUp() {
         engine = new ChatbotEngine(
             groqService, leadRepository,
-            businessService, promptComposer, escalationService, voiceCallService
+            businessService, promptComposer, escalationService
         );
         service = new WhatsAppAiChatbotService(
             groqService, vonageMessageService,
             businessService, engine
         );
         when(groqService.isConfigured()).thenReturn(true);
-        // System prompt resolution needs a non-null prompt
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
         lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
-        // Flow steps use free-text chat — return a response with no [LEAD] tag.
-        // Lenient: confirmation flows (email in collecting_info) skip Groq entirely.
-        lenient().when(groqService.chat(anyString(), anyList(),
-            anyString())).thenReturn("Perfecto, te ayudo");
+        lenient().when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Perfecto, te ayudo");
     }
 
     private void stubExistingLead() {
-        Lead lead = mock(Lead.class);
+        Lead lead = org.mockito.Mockito.mock(Lead.class);
         lenient().when(lead.getId()).thenReturn(UUID.randomUUID());
         lenient().when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(lead));
     }
 
-    /**
-     * Drive the conversation to the confirmation step where confirm_yes/confirm_no buttons work.
-     */
-    private void advanceToConfirmation() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-        service.processMessage(PHONE, "Juan, juan@test.com", BUSINESS_ID);
-        service.processMessage(PHONE, "timing_now", BUSINESS_ID);
-    }
-
-    /**
-     * Drive the conversation to the voice call decision step where accept/decline buttons work.
-     * Requires >= 8 history entries and step NOT in productive steps.
-     */
-    private void advanceToVoiceDecision() {
-        service.processMessage(PHONE, "intent_ventas", BUSINESS_ID);
-        for (int i = 0; i < 8; i++) {
-            service.processMessage(PHONE, "test message " + i, BUSINESS_ID);
-        }
-        // The 4th+ message triggers voice offer (history >= 8)
-    }
-
     @Test
-    @DisplayName("Terminal state: confirmed_yes button re-click returns 'already handled' message")
-    void confirmYesReClick_returnsAlreadyHandled() {
+    @DisplayName("after email captured + affirmative -> escalation fires once, not twice")
+    void emailCapturedAffirmative_escalationOnce() {
         stubExistingLead();
-        advanceToConfirmation();
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
-        // Click confirm_yes — this sets terminal state and triggers escalation once
-        service.processMessage(PHONE, "confirm_yes", BUSINESS_ID);
+        service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+        service.processMessage(PHONE, "Sí, estoy interesado", BUSINESS_ID);
+        service.processMessage(PHONE, "Confirmo", BUSINESS_ID);
 
-        // Re-click confirm_yes — should get "already handled" message, no re-escalation
-        String result2 = service.processMessage(PHONE, "confirm_yes", BUSINESS_ID);
-
-        assertThat(result2).isNotNull();
-        assertThat(result2).contains("Ya procesé tu respuesta");
-        // Escalation should have been triggered exactly once (on first click)
         verify(escalationService, times(1)).qualify(any(), any());
     }
 
     @Test
-    @DisplayName("Terminal state: confirmed_no button re-click returns 'already handled' message")
-    void confirmNoReClick_returnsAlreadyHandled() {
-        advanceToConfirmation();
+    @DisplayName("negative response after email -> no escalation")
+    void emailCapturedNegative_noEscalation() {
+        stubExistingLead();
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("No te preocupes.");
 
-        // Click confirm_no
-        service.processMessage(PHONE, "confirm_no", BUSINESS_ID);
+        service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
+        service.processMessage(PHONE, "No, gracias", BUSINESS_ID);
 
-        // Re-click confirm_no
-        String result = service.processMessage(PHONE, "confirm_no", BUSINESS_ID);
-
-        assertThat(result).isNotNull();
-        assertThat(result).contains("Ya procesé tu respuesta");
+        verify(escalationService, never()).qualify(any(), any());
     }
 
     @Test
-    @DisplayName("Terminal state: voice_accepted re-click returns 'already handled' message")
-    void voiceAcceptedReClick_returnsAlreadyHandled() {
-        stubExistingLead();
-        advanceToVoiceDecision();
+    @DisplayName("after reset, conversation starts fresh")
+    void afterReset_freshConversation() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Hola de nuevo");
 
-        // Accept voice call — sets terminal state
-        service.processMessage(PHONE, "accept_voice_call", BUSINESS_ID);
-
-        // Re-click accept_voice_call — should be no-op, no re-dispatch
-        String result = service.processMessage(PHONE, "accept_voice_call", BUSINESS_ID);
+        service.processMessage(PHONE, "test", BUSINESS_ID);
+        service.processMessage(PHONE, "reset", BUSINESS_ID);
+        String result = service.processMessage(PHONE, "hola", BUSINESS_ID);
 
         assertThat(result).isNotNull();
-        assertThat(result).contains("Ya procesé tu respuesta");
+        verify(vonageMessageService).sendText(anyString(), anyString());
     }
 
     @Test
-    @DisplayName("Terminal state: voice_declined re-click returns 'already handled' message")
-    void voiceDeclinedReClick_returnsAlreadyHandled() {
-        stubExistingLead();
-        advanceToVoiceDecision();
+    @DisplayName("conversation alive after email capture — multiple turns work")
+    void conversationAlive_afterEmailCapture() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entendido");
 
-        // Decline voice call — sets terminal state
-        service.processMessage(PHONE, "decline_voice_call", BUSINESS_ID);
+        service.processMessage(PHONE, "Me llamo Antonio y mi email es antonio@test.com", BUSINESS_ID);
+        String turn2 = service.processMessage(PHONE, "Quiero saber más", BUSINESS_ID);
+        String turn3 = service.processMessage(PHONE, "¿Cuánto cuesta?", BUSINESS_ID);
 
-        // Re-click decline_voice_call — should be no-op
-        String result = service.processMessage(PHONE, "decline_voice_call", BUSINESS_ID);
-
-        assertThat(result).isNotNull();
-        assertThat(result).contains("Ya procesé tu respuesta");
+        assertThat(turn2).isNotNull();
+        assertThat(turn3).isNotNull();
     }
 }

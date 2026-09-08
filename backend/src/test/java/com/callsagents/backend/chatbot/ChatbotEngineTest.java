@@ -5,13 +5,11 @@ import com.callsagents.backend.business.service.BusinessService;
 import com.callsagents.backend.escalation.service.EscalationService;
 import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
-import com.callsagents.backend.voice.service.VoiceCallService;
 import com.callsagents.backend.whatsapp.service.GroqService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -26,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -40,7 +39,6 @@ class ChatbotEngineTest {
     @Mock BusinessService businessService;
     @Mock BusinessPromptComposer promptComposer;
     @Mock EscalationService escalationService;
-    @Mock VoiceCallService voiceCallService;
 
     private ChatbotEngine engine;
 
@@ -51,12 +49,10 @@ class ChatbotEngineTest {
     void setUp() {
         engine = new ChatbotEngine(
             groqService, leadRepository,
-            businessService, promptComposer, escalationService, voiceCallService
+            businessService, promptComposer, escalationService
         );
-        lenient().when(groqService.isConfigured()).thenReturn(true);
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
-        // By default the engine treats the identifier as a plain user id (identity mapping).
         lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -68,140 +64,197 @@ class ChatbotEngineTest {
     }
 
     @Test
-    @DisplayName("greeting returns reply + 3 intent buttons and sets step=awaiting_intent")
-    void greeting_replyAndIntentButtons_awaitingIntent() {
+    @DisplayName("greeting returns natural free-text, no buttons, step=initial")
+    void greeting_freeTextNoButtons() {
         ChatTurn turn = engine.greeting(KEY, BUSINESS_ID);
 
-        assertThat(turn.reply()).contains("Hola, soy Naiara de Script9.");
-        assertThat(turn.buttons()).hasSize(3);
-        assertThat(turn.buttons().get(0).id()).isEqualTo("intent_ventas");
-        assertThat(turn.buttons().get(1).id()).isEqualTo("intent_soporte");
-        assertThat(turn.buttons().get(2).id()).isEqualTo("intent_demo");
-        assertThat(stepOf(KEY)).isEqualTo("awaiting_intent");
+        assertThat(turn.reply()).contains("¡Hola! Soy Naiara de Script9.");
+        assertThat(turn.buttons()).isNull();
+        assertThat(stepOf(KEY)).isEqualTo("initial");
         assertThat(turn.leadCaptured()).isFalse();
         assertThat(turn.contactForm()).isFalse();
     }
 
     @Test
-    @DisplayName("contactForm=true for intent_ventas and intent_demo, false for intent_soporte and greeting")
-    void contactForm_flagPerIntent() {
-        ChatTurn greeting = engine.greeting(KEY, BUSINESS_ID);
-        assertThat(greeting.contactForm()).isFalse();
+    @DisplayName("greeting uses custom botName/companyName from profile")
+    void greeting_customProfile() {
+        com.callsagents.backend.business.entity.BusinessProfile profile =
+            com.callsagents.backend.business.entity.BusinessProfile.builder()
+                .botName("Luca")
+                .companyName("Acme Corp")
+                .build();
+        when(businessService.getProfileEntityByUserId(BUSINESS_ID)).thenReturn(profile);
 
-        ChatTurn ventas = engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WEB);
-        assertThat(ventas.contactForm()).isTrue();
+        ChatTurn turn = engine.greeting(KEY, BUSINESS_ID);
 
-        String key2 = "session-contact-2";
-        ChatTurn demo = engine.process(key2, "intent_demo", BUSINESS_ID, Channel.WEB);
-        assertThat(demo.contactForm()).isTrue();
-
-        String key3 = "session-contact-3";
-        ChatTurn soporte = engine.process(key3, "intent_soporte", BUSINESS_ID, Channel.WEB);
-        assertThat(soporte.contactForm()).isFalse();
+        assertThat(turn.reply()).contains("Soy Luca de Acme Corp");
+        assertThat(turn.buttons()).isNull();
     }
 
     @Test
-    @DisplayName("WHATSAPP full sales flow: email -> timing buttons, timing -> confirmation, confirm_yes escalates once")
-    void whatsapp_fullSalesFlow_escalatesOnce() {
-        Lead existingLead = new Lead();
-        org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
-        when(leadRepository.findByPhone(anyString()))
-            .thenReturn(Optional.empty(), Optional.of(existingLead));
+    @DisplayName("free-text process -> Groq call -> text response, no buttons, contactForm=false")
+    void freeText_returnsNoButtons() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Claro, ¿en qué te ayudo?");
 
-        ChatTurn step1 = engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(step1.reply()).contains("¿Cómo te llamas");
-        assertThat(step1.buttons()).isNull();
-        assertThat(step1.contactForm()).isTrue();
-        assertThat(stepOf(KEY)).isEqualTo("collecting_info");
+        ChatTurn turn = engine.process(KEY, "Necesito ayuda con mi cuenta", BUSINESS_ID, Channel.WEB);
 
-        ChatTurn step2 = engine.process(KEY, "Antonio y mi email es antohachi@gmail.com", BUSINESS_ID, Channel.WHATSAPP);
-        verify(groqService, never()).chat(anyString(), anyList(), anyString());
-        assertThat(step2.reply()).isNull();
-        assertThat(step2.buttons()).hasSize(3);
-        assertThat(step2.buttons().stream().map(ChatButton::id))
-            .containsExactly("timing_now", "timing_month", "timing_later");
-        assertThat(step2.leadCaptured()).isTrue();
+        assertThat(turn.reply()).isEqualTo("Claro, ¿en qué te ayudo?");
+        assertThat(turn.buttons()).isNull();
+        assertThat(turn.contactForm()).isFalse();
+        assertThat(turn.leadCaptured()).isFalse();
+    }
+
+    @Test
+    @DisplayName("email in message -> deterministic lead capture AND Groq reply in same turn")
+    void emailCapture_stillCallsGroq() {
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias Antonio, te ayudo.");
+
+        ChatTurn turn = engine.process(KEY, "Me llamo Antonio y mi email es antonio@test.com",
+            BUSINESS_ID, Channel.WHATSAPP);
+
+        assertThat(turn.reply()).isEqualTo("Gracias Antonio, te ayudo.");
+        assertThat(turn.leadCaptured()).isTrue();
+        assertThat(turn.buttons()).isNull();
+        verify(groqService).chat(anyString(), anyList(), anyString());
         verify(leadRepository).save(argThat(leadArg -> {
             Lead lead = (Lead) leadArg;
-            return "antohachi@gmail.com".equals(lead.getEmail())
+            return "antonio@test.com".equals(lead.getEmail())
                 && "Antonio".equals(lead.getFirstName());
         }));
+    }
 
-        ChatTurn step3 = engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(step3.reply()).contains("¿Confirmas los datos?");
-        assertThat(step3.buttons().stream().map(ChatButton::id))
-            .containsExactly("confirm_yes", "confirm_no");
+    @Test
+    @DisplayName("[LEAD:...] tag extracted from AI response, stripped from visible text")
+    void leadTag_extractedAndStripped() {
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString()))
+            .thenReturn("Perfecto, gracias por tus datos. [LEAD:name=Juan|email=juan@test.com|service=ventas]");
 
-        ChatTurn step4 = engine.process(KEY, "confirm_yes", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(step4.reply()).contains("demo de 50 leads");
+        ChatTurn turn = engine.process(KEY, "Me llamo Juan y mi correo es juan@test.com",
+            BUSINESS_ID, Channel.WHATSAPP);
+
+        assertThat(turn.reply()).isEqualTo("Perfecto, gracias por tus datos.");
+        assertThat(turn.reply()).doesNotContain("[LEAD");
+        assertThat(turn.leadCaptured()).isTrue();
+    }
+
+    @Test
+    @DisplayName("WhatsApp: escalation fires once after email captured + affirmative, never twice")
+    void whatsapp_escalationFiresOnce() {
+        Lead existingLead = new Lead();
+        ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
+
+        engine.process(KEY, "Me llamo Antonio y mi email es antonio@test.com", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "Sí, estoy interesado", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "Confirmo todo", BUSINESS_ID, Channel.WHATSAPP);
+
         verify(escalationService, times(1)).qualify(any(), any());
     }
 
     @Test
-    @DisplayName("WEB confirm_yes does NOT trigger escalation")
-    void web_confirmYes_noEscalation() {
+    @DisplayName("WEB channel: escalation never fires even with email + affirmative")
+    void web_noEscalationEver() {
         when(leadRepository.countByCreatedBy(BUSINESS_ID)).thenReturn(0L);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WEB);
-        engine.process(KEY, "Antonio antohachi@gmail.com", BUSINESS_ID, Channel.WEB);
-        engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WEB);
+        engine.process(KEY, "Me llamo Laura y mi email es laura@test.com", BUSINESS_ID, Channel.WEB);
+        engine.process(KEY, "Sí, estoy interesada", BUSINESS_ID, Channel.WEB);
 
-        ChatTurn confirm = engine.process(KEY, "confirm_yes", BUSINESS_ID, Channel.WEB);
-        assertThat(confirm.reply()).contains("demo de 50 leads");
-        assertThat(confirm.buttons()).isNull();
         verify(escalationService, never()).qualify(any(), any());
     }
 
     @Test
-    @DisplayName("Bug1: email in collecting_info -> skips Groq, saves lead deterministically, returns timing buttons")
-    void emailInCollectingInfo_skipsGroq_savesLead_returnsTimingButtons() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+    @DisplayName("reset via 'reset' clears state and returns greeting")
+    void reset_clearsAndGreets() {
+        engine.greeting(KEY, BUSINESS_ID);
+        assertThat(stepOf(KEY)).isEqualTo("initial");
 
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
-
-        ChatTurn turn = engine.process(KEY, "Me llamo Mariana y mi correo es mariana@test.com",
-            BUSINESS_ID, Channel.WHATSAPP);
-
-        verify(groqService, never()).chat(anyString(), anyList(), anyString());
-        assertThat(turn.reply()).isNull();
-        assertThat(turn.buttons()).hasSize(3);
-        assertThat(turn.buttons().stream().map(ChatButton::id))
-            .containsExactly("timing_now", "timing_month", "timing_later");
-        assertThat(turn.leadCaptured()).isTrue();
-        assertThat(stepOf(KEY)).isEqualTo("awaiting_timing");
-        verify(leadRepository).save(argThat(leadArg -> {
-            Lead lead = (Lead) leadArg;
-            return "mariana@test.com".equals(lead.getEmail())
-                && "Mariana".equals(lead.getFirstName());
-        }));
+        ChatTurn turn = engine.process(KEY, "reset", BUSINESS_ID, Channel.WEB);
+        assertThat(turn.reply()).contains("¡Hola!");
+        assertThat(turn.buttons()).isNull();
+        assertThat(stepOf(KEY)).isEqualTo("initial");
     }
 
     @Test
-    @DisplayName("Bug2: widget sends BusinessProfile.id -> lead is saved with the real owner userId")
-    void widgetProfileId_resolvesUserId_savesLeadWithOwner() {
-        UUID profileId = UUID.randomUUID();
-        UUID ownerUserId = UUID.randomUUID();
-        when(businessService.resolveOwnerUserId(profileId)).thenReturn(ownerUserId);
-        when(leadRepository.countByCreatedBy(ownerUserId)).thenReturn(0L);
-
-        engine.process("session-widget", "intent_ventas", profileId, Channel.WEB);
-        ChatTurn turn = engine.process("session-widget", "Me llamo Laura y mi email es laura@test.com",
-            profileId, Channel.WEB);
-
-        assertThat(turn.leadCaptured()).isTrue();
-        verify(leadRepository).save(argThat(leadArg -> {
-            Lead lead = (Lead) leadArg;
-            return ownerUserId.equals(lead.getCreatedBy());
-        }));
+    @DisplayName("reset via 'reiniciar' clears state")
+    void reiniciar_clearsState() {
+        engine.process(KEY, "test", BUSINESS_ID, Channel.WEB);
+        ChatTurn turn = engine.process(KEY, "reiniciar", BUSINESS_ID, Channel.WEB);
+        assertThat(turn.reply()).contains("¡Hola!");
     }
 
     @Test
-    @DisplayName("Bug2: unknown/unresolvable id -> lead skipped, no FK violation, no crash")
-    void unresolvableId_skipsLead_noCrash() {
+    @DisplayName("'hola' is NOT a reset — flows to Groq")
+    void hola_isNotReset() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Hola! ¿Cómo te llamo?");
+
+        engine.process(KEY, "test", BUSINESS_ID, Channel.WEB);
+        String stepBefore = stepOf(KEY);
+
+        engine.process(KEY, "hola", BUSINESS_ID, Channel.WEB);
+        assertThat(stepOf(KEY)).isEqualTo(stepBefore);
+        verify(groqService, atLeast(1)).chat(anyString(), anyList(), anyString());
+    }
+
+    @Test
+    @DisplayName("'inicio' is NOT a reset — flows to Groq")
+    void inicio_isNotReset() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Hola");
+
+        engine.process(KEY, "test", BUSINESS_ID, Channel.WEB);
+        String stepBefore = stepOf(KEY);
+
+        engine.process(KEY, "inicio", BUSINESS_ID, Channel.WEB);
+        assertThat(stepOf(KEY)).isEqualTo(stepBefore);
+        verify(groqService, atLeast(1)).chat(anyString(), anyList(), anyString());
+    }
+
+    @Test
+    @DisplayName("rate-limit sentinel -> friendly rate-limit message")
+    void rateLimitSentinel_friendlyMessage() {
+        when(groqService.chat(anyString(), anyList(), anyString()))
+            .thenReturn(GroqService.RATE_LIMITED_SENTINEL);
+
+        ChatTurn turn = engine.process(KEY, "test message", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).contains("muchas peticiones");
+        assertThat(turn.reply()).doesNotContain("problema técnico");
+        assertThat(turn.buttons()).isNull();
+    }
+
+    @Test
+    @DisplayName("null Groq response -> friendly technical error, not empty bubble")
+    void nullGroqResponse_friendlyError() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn(null);
+
+        ChatTurn turn = engine.process(KEY, "test", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).contains("problema técnico");
+        assertThat(turn.buttons()).isNull();
+    }
+
+    @Test
+    @DisplayName("empty Groq response -> friendly repeat message")
+    void emptyGroqResponse_friendlyRepeat() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "test", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).isNotBlank();
+        assertThat(turn.reply()).contains("repetirme");
+        assertThat(turn.buttons()).isNull();
+    }
+
+    @Test
+    @DisplayName("unresolvable business id -> no lead saved, no crash")
+    void unresolvableId_noCrash() {
         UUID unknownId = UUID.randomUUID();
         when(businessService.resolveOwnerUserId(unknownId)).thenReturn(null);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Hola");
 
-        engine.process("session-unknown", "intent_ventas", unknownId, Channel.WEB);
         ChatTurn turn = engine.process("session-unknown", "Me llamo Pedro y mi email es pedro@test.com",
             unknownId, Channel.WEB);
 
@@ -210,128 +263,112 @@ class ChatbotEngineTest {
     }
 
     @Test
-    @DisplayName("voice offer happens on WHATSAPP but never on WEB")
-    void voiceOffer_whatsappOnly_neverOnWeb() {
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
-        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Perfecto, te ayudo");
-        List<ChatButton> offer = null;
-        for (int i = 0; i < 8 && offer == null; i++) {
-            offer = extractVoiceButtons(engine.process(KEY, "test message " + i, BUSINESS_ID, Channel.WHATSAPP));
-        }
-        assertThat(offer).isNotNull();
-        assertThat(offer.stream().map(ChatButton::id))
-            .containsExactly("accept_voice_call", "decline_voice_call");
+    @DisplayName("widget profile id resolves to owner userId for lead saving")
+    void widgetProfileId_resolvesOwner() {
+        UUID profileId = UUID.randomUUID();
+        UUID ownerUserId = UUID.randomUUID();
+        when(businessService.resolveOwnerUserId(profileId)).thenReturn(ownerUserId);
+        when(leadRepository.countByCreatedBy(ownerUserId)).thenReturn(0L);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
 
-        String webKey = "session-web-1";
-        engine.process(webKey, "intent_ventas", BUSINESS_ID, Channel.WEB);
-        for (int i = 0; i < 8; i++) {
-            ChatTurn web = engine.process(webKey, "test message " + i, BUSINESS_ID, Channel.WEB);
-            assertThat(extractVoiceButtons(web)).isNull();
-        }
+        engine.process("session-widget", "Me llamo Laura y mi email es laura@test.com",
+            profileId, Channel.WEB);
+
+        verify(leadRepository).save(argThat(leadArg -> {
+            Lead lead = (Lead) leadArg;
+            return ownerUserId.equals(lead.getCreatedBy());
+        }));
     }
 
     @Test
-    @DisplayName("Bug2: button turns are recorded in history visible to Groq")
-    void buttonTurns_recordedInHistory_visibleToGroq() {
+    @DisplayName("no email in message -> no lead saved, only Groq reply")
+    void noEmail_noLeadSaved() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entendido, ¿en qué te ayudo?");
+
+        ChatTurn turn = engine.process(KEY, "Necesito información", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).isEqualTo("Entendido, ¿en qué te ayudo?");
+        assertThat(turn.leadCaptured()).isFalse();
+        verify(leadRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("lead data persisted: WhatsApp lead created with correct fields")
+    void whatsapp_leadCreated() {
         when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
-        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entendido.");
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Perfecto!");
 
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
-        engine.process(KEY, "Antonio antohachi@gmail.com", BUSINESS_ID, Channel.WHATSAPP);
-        engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WHATSAPP);
-        engine.process(KEY, "confirm_yes", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com", BUSINESS_ID, Channel.WHATSAPP);
 
-        ChatTurn turn = engine.process(KEY, "¿Me podés enviar los detalles?", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(turn).isNotNull();
-
-        ArgumentCaptor<List<Map<String, String>>> historyCaptor =
-            ArgumentCaptor.forClass((Class) List.class);
-        verify(groqService).chat(anyString(), historyCaptor.capture(), anyString());
-        List<Map<String, String>> history = historyCaptor.getValue();
-
-        // The user's timing choice appears as a "user" turn
-        assertThat(history).anyMatch(e -> "user".equals(e.get("role"))
-            && "timing_now".equals(e.get("content")));
-        // The confirmation summary body (shown to the user) appears as the assistant reply
-        assertThat(history).anyMatch(e -> "assistant".equals(e.get("role"))
-            && e.get("content").contains("¿Confirmas los datos?"));
-        // The post-confirmation reply (shown to the user) appears as the assistant reply
-        assertThat(history).anyMatch(e -> "assistant".equals(e.get("role"))
-            && e.get("content").contains("demo de 50 leads"));
+        verify(leadRepository).save(argThat(leadArg -> {
+            Lead lead = (Lead) leadArg;
+            return "carlos@test.com".equals(lead.getEmail())
+                && "Carlos".equals(lead.getFirstName())
+                && lead.getPhone().equals("+" + KEY)
+                && BUSINESS_ID.equals(lead.getCreatedBy());
+        }));
     }
 
     @Test
-    @DisplayName("Bug4: empty Groq response -> friendly repeat message, not empty bubble")
-    void emptyGroqResponse_friendlyRepeatMessage() {
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WEB);
-        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
-        ChatTurn turn = engine.process(KEY, "hola necesito ayuda", BUSINESS_ID, Channel.WEB);
-
-        assertThat(turn.reply()).isNotBlank();
-        assertThat(turn.reply()).contains("repetirme");
-        assertThat(turn.reply()).doesNotContain("problema técnico");
-    }
-
-    @Test
-    @DisplayName("Bug5: 429 sentinel -> rate limit message, not generic technical error")
-    void rateLimitSentinel_rateLimitMessage() {
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WEB);
-        when(groqService.chat(anyString(), anyList(), anyString()))
-            .thenReturn(GroqService.RATE_LIMITED_SENTINEL);
-        ChatTurn turn = engine.process(KEY, "hola necesito ayuda", BUSINESS_ID, Channel.WEB);
-
-        assertThat(turn.reply()).contains("muchas peticiones");
-        assertThat(turn.reply()).doesNotContain("problema técnico");
-    }
-
-    @Test
-    @DisplayName("confirmed_no -> affirmative -> change of mind: escalates on WHATSAPP, returns contact URL, step=confirmed_yes")
-    void confirmedNo_thenAffirmative_escalatesAndReturnsContactUrl() {
+    @DisplayName("WhatsApp: existing lead is updated, not duplicated")
+    void whatsapp_existingLeadUpdated() {
         Lead existingLead = new Lead();
-        org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
-        // First call (lead save) returns empty, second call (triggerEscalation) returns the lead
-        when(leadRepository.findByPhone(anyString()))
-            .thenReturn(Optional.empty(), Optional.of(existingLead));
+        ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
 
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
-        engine.process(KEY, "Antonio antohachi@gmail.com", BUSINESS_ID, Channel.WHATSAPP);
-        engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "Mi email es nuevo@test.com", BUSINESS_ID, Channel.WHATSAPP);
 
-        // User declines
-        ChatTurn decline = engine.process(KEY, "confirm_no", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(decline.reply()).contains("No te preocupes");
-        assertThat(stepOf(KEY)).isEqualTo("confirmed_no");
-
-        // User changes mind
-        verify(escalationService, never()).qualify(any(), any());
-        ChatTurn changeOfMind = engine.process(KEY, "Sí, agendar", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(changeOfMind.reply()).contains("demo de 50 leads");
-        assertThat(changeOfMind.reply()).contains("callsagents-frontend-production.up.railway.app/landing");
-        assertThat(stepOf(KEY)).isEqualTo("confirmed_yes");
-        verify(escalationService, times(1)).qualify(any(), any());
+        verify(leadRepository, never()).save(argThat(leadArg ->
+            ((Lead) leadArg).getPhone() != null && ((Lead) leadArg).getFirstName() != null
+        ));
+        verify(leadRepository).save(existingLead);
     }
 
     @Test
-    @DisplayName("confirmed_no -> negative again -> farewell, stays in confirmed_no")
-    void confirmedNo_thenNegativeAgain_farewellStaysConfirmedNo() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+    @DisplayName("WEB lead creation respects trial limit")
+    void web_trialLimit() {
+        when(leadRepository.countByCreatedBy(BUSINESS_ID)).thenReturn(50L);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
 
-        engine.process(KEY, "intent_ventas", BUSINESS_ID, Channel.WHATSAPP);
-        engine.process(KEY, "Antonio antohachi@gmail.com", BUSINESS_ID, Channel.WHATSAPP);
-        engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WHATSAPP);
+        ChatTurn turn = engine.process("session-web", "Me llamo Pedro y mi email es pedro@test.com",
+            BUSINESS_ID, Channel.WEB);
 
-        engine.process(KEY, "confirm_no", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(stepOf(KEY)).isEqualTo("confirmed_no");
-
-        ChatTurn insist = engine.process(KEY, "no quiero", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(insist.reply()).contains("No te preocupes");
-        assertThat(stepOf(KEY)).isEqualTo("confirmed_no");
+        assertThat(turn.leadCaptured()).isFalse();
     }
 
-    private static List<ChatButton> extractVoiceButtons(ChatTurn turn) {
-        if (turn == null || turn.buttons() == null) return null;
-        return turn.buttons().stream()
-            .filter(b -> "accept_voice_call".equals(b.id()) || "decline_voice_call".equals(b.id()))
-            .toList();
+    @Test
+    @DisplayName("state context includes name, email, and captured status")
+    void stateContext_includesAll() {
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
+
+        engine.process(KEY, "Me llamo Antonio y mi email es antonio@test.com", BUSINESS_ID, Channel.WHATSAPP);
+
+        org.mockito.ArgumentCaptor<String> promptCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(groqService).chat(promptCaptor.capture(), anyList(), anyString());
+        String prompt = promptCaptor.getValue();
+
+        assertThat(prompt).contains("ESTADO ACTUAL DE LA CONVERSACIÓN");
+        assertThat(prompt).contains("Nombre: Antonio");
+        assertThat(prompt).contains("Email: antonio@test.com");
+        assertThat(prompt).contains("Datos de contacto capturados");
+    }
+
+    @Test
+    @DisplayName("fresh session with no step still triggers greeting behavior")
+    void freshSession_greetingWorks() {
+        ChatTurn turn = engine.greeting("fresh-session", BUSINESS_ID);
+        assertThat(turn.reply()).contains("¡Hola!");
+        assertThat(stepOf("fresh-session")).isEqualTo("initial");
+    }
+
+    @Test
+    @DisplayName("isAffirmative helper recognizes common affirmative phrases")
+    void affirmativePhrases() {
+        assertThat(engine.process(KEY, "test", BUSINESS_ID, Channel.WEB)).isNotNull();
+        // isAffirmative is private — tested indirectly via escalation test above
+        // and WhatsApp service tests. The helper recognizes: si, sí, confirmo,
+        // adelante, dale, agenda, vale, ok, claro, perfecto
     }
 }

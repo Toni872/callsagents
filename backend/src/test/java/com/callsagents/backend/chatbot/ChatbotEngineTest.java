@@ -133,7 +133,7 @@ class ChatbotEngineTest {
             .containsExactly("confirm_yes", "confirm_no");
 
         ChatTurn step4 = engine.process(KEY, "confirm_yes", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(step4.reply()).contains("demo de 15 minutos");
+        assertThat(step4.reply()).contains("demo de 50 leads");
         verify(escalationService, times(1)).qualify(any(), any());
     }
 
@@ -147,7 +147,7 @@ class ChatbotEngineTest {
         engine.process(KEY, "timing_now", BUSINESS_ID, Channel.WEB);
 
         ChatTurn confirm = engine.process(KEY, "confirm_yes", BUSINESS_ID, Channel.WEB);
-        assertThat(confirm.reply()).contains("demo de 15 minutos");
+        assertThat(confirm.reply()).contains("demo de 50 leads");
         assertThat(confirm.buttons()).isNull();
         verify(escalationService, never()).qualify(any(), any());
     }
@@ -257,7 +257,7 @@ class ChatbotEngineTest {
             && e.get("content").contains("¿Confirmas los datos?"));
         // The post-confirmation reply (shown to the user) appears as the assistant reply
         assertThat(history).anyMatch(e -> "assistant".equals(e.get("role"))
-            && e.get("content").contains("demo de 15 minutos"));
+            && e.get("content").contains("demo de 50 leads"));
     }
 
     @Test
@@ -305,8 +305,8 @@ class ChatbotEngineTest {
         // User changes mind
         verify(escalationService, never()).qualify(any(), any());
         ChatTurn changeOfMind = engine.process(KEY, "Sí, agendar", BUSINESS_ID, Channel.WHATSAPP);
-        assertThat(changeOfMind.reply()).contains("demo de 15 minutos");
-        assertThat(changeOfMind.reply()).contains("script-9.com/contacto");
+        assertThat(changeOfMind.reply()).contains("demo de 50 leads");
+        assertThat(changeOfMind.reply()).contains("callsagents-frontend-production.up.railway.app/landing");
         assertThat(stepOf(KEY)).isEqualTo("confirmed_yes");
         verify(escalationService, times(1)).qualify(any(), any());
     }

@@ -230,7 +230,7 @@ class WhatsAppAiChatbotServiceTest {
 
         // 4. "Si, agendar" free text -> real confirmation + escalation + demo message
         String step4 = service.processMessage(PHONE, "Si, agendar", BUSINESS_ID);
-        assertThat(step4).contains("demo de 15 minutos");
+        assertThat(step4).contains("demo de 50 leads");
         verify(escalationService, times(1)).qualify(any(), any());
 
         // 5. another "si" after confirming stays alive (NO "ya procesé tu respuesta")

@@ -114,6 +114,6 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
 
         // Confirm button flows after free-text timing
         String confirm = service.processMessage(PHONE, "Sí, agendar", BUSINESS_ID);
-        assertThat(confirm).contains("demo de 15 minutos");
+        assertThat(confirm).contains("demo de 50 leads");
     }
 }

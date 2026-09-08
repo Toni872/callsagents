@@ -91,7 +91,7 @@ class WhatsAppIntegrationTest {
 
         // Step 4: confirm_yes -> real confirmation, escalates once
         String confirm = service.processMessage(PHONE, "confirm_yes", BUSINESS_ID);
-        assertThat(confirm).contains("demo de 15 minutos");
+        assertThat(confirm).contains("demo de 50 leads");
         verify(escalationService, times(1)).qualify(any(), any());
 
         // Step 5: another text after confirming keeps the conversation alive

@@ -67,7 +67,7 @@ public class ChatbotEngine {
 
     private static final int MAX_HISTORY = 20;
     private static final int TRIAL_LEAD_LIMIT = 50;
-    private static final String DEFAULT_CONTACT_URL = "https://www.script-9.com/contacto";
+    private static final String DEFAULT_CONTACT_URL = "https://callsagents-frontend-production.up.railway.app/landing";
 
     private static final java.util.regex.Pattern EMAIL_PATTERN =
         java.util.regex.Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
@@ -268,7 +268,7 @@ public class ChatbotEngine {
                 case "intent_demo" -> {
                     conversationStep.put(key, "collecting_info");
                     conversationHistory.invalidate(key);
-                    yield ChatTurn.textContact("Genial, agendemos una demo.\n\n¿Cómo te llamas y cuál es tu correo?");
+                    yield ChatTurn.textContact("Genial, te propongo probar Callsagents gratis con una demo de 50 leads.\n\n¿Cómo te llamas y cuál es tu correo?");
                 }
                 default -> null;
             };
@@ -301,7 +301,7 @@ public class ChatbotEngine {
                     log.debug("Escalation skipped for web chat (WEB channel) key={}", key);
                 }
                 String contactUrl = resolveContactUrl(businessId);
-                return ChatTurn.text("¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nAgenda directamente aquí: " + contactUrl);
+                return ChatTurn.text("¡Genial! Te propongo probar Callsagents gratis con una demo de 50 leads.\n\nEmpieza directamente aquí: " + contactUrl);
             }
             if (no) {
                 conversationStep.put(key, "confirmed_no");
@@ -332,7 +332,7 @@ public class ChatbotEngine {
                     triggerEscalation(key, businessId);
                 }
                 String contactUrl = resolveContactUrl(businessId);
-                return ChatTurn.text("¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nAgenda directamente aquí: " + contactUrl);
+                return ChatTurn.text("¡Genial! Te propongo probar Callsagents gratis con una demo de 50 leads.\n\nEmpieza directamente aquí: " + contactUrl);
             }
             if ("confirm_no".equals(text) || isNegative(text)) {
                 return ChatTurn.text("No te preocupes. Cuando quieras, aquí estoy.\n\n¡Hasta pronto!");
@@ -791,7 +791,7 @@ public class ChatbotEngine {
             if (timing != null && !timing.isBlank()) sb.append("Preferencia: ").append(timing).append(". ");
         }
         if ("confirmed_yes".equals(step)) {
-            sb.append("El usuario ya confirmó agendar la demo. ");
+            sb.append("El usuario ya confirmó probar la demo de 50 leads. ");
             sb.append("Responde acorde: cierra la venta con calidez, sin volver a pedir datos.");
         } else if ("confirmed_no".equals(step)) {
             sb.append("El usuario declinó la demo. Responde con cortesía y deja la puerta abierta.");

@@ -112,6 +112,7 @@ public class BusinessService {
 
         if (request.companyName() != null) profile.setCompanyName(request.companyName());
         if (request.website() != null) profile.setWebsite(request.website());
+        if (request.contactUrl() != null) profile.setContactUrl(request.contactUrl());
         if (request.industry() != null) profile.setIndustry(request.industry());
         if (request.services() != null) profile.setServices(request.services());
         if (request.tone() != null) profile.setTone(request.tone());

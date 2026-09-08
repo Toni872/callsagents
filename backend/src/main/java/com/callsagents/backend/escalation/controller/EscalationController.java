@@ -84,7 +84,7 @@ public class EscalationController {
     ) {
         UUID userId = resolveUserId(user);
         BusinessProfileRequest profileRequest = new BusinessProfileRequest(
-            null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null, null,
             request.escalationEnabled(),
             request.replyTimeoutMinutes(),
             request.followupMessage(),

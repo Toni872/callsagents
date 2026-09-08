@@ -10,6 +10,8 @@ public record BusinessProfileRequest(
 
     @Size(max = 500) String website,
 
+    @Size(max = 500) String contactUrl,
+
     @Size(max = 100) String industry,
 
     String services,

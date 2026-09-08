@@ -44,6 +44,9 @@ public class BusinessProfile {
     @Column(name = "website", length = 500)
     private String website;
 
+    @Column(name = "contact_url", length = 500)
+    private String contactUrl;
+
     @Column(name = "industry", length = 100)
     private String industry;
 

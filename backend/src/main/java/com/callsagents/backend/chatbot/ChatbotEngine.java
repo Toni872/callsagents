@@ -67,6 +67,7 @@ public class ChatbotEngine {
 
     private static final int MAX_HISTORY = 20;
     private static final int TRIAL_LEAD_LIMIT = 50;
+    private static final String DEFAULT_CONTACT_URL = "https://www.script-9.com/contacto";
 
     private static final java.util.regex.Pattern EMAIL_PATTERN =
         java.util.regex.Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
@@ -299,7 +300,8 @@ public class ChatbotEngine {
                 } else {
                     log.debug("Escalation skipped for web chat (WEB channel) key={}", key);
                 }
-                return ChatTurn.text("¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nTe envío un correo con el enlace para agendar.\n\n¿Te parece bien esta semana?");
+                String contactUrl = resolveContactUrl(businessId);
+                return ChatTurn.text("¡Genial! Te propongo una demo de 15 minutos donde vemos tu caso.\n\nAgenda directamente aquí: " + contactUrl);
             }
             if (no) {
                 conversationStep.put(key, "confirmed_no");
@@ -798,6 +800,20 @@ public class ChatbotEngine {
             history.remove(0);
             history.remove(0);
         }
+    }
+
+    /**
+     * Resolve the business's contact/booking URL, falling back to the default
+     * when the profile has not configured one.
+     */
+    private String resolveContactUrl(UUID businessId) {
+        if (businessId != null) {
+            BusinessProfile profile = businessService.getProfileEntityByUserId(businessId);
+            if (profile != null && profile.getContactUrl() != null && !profile.getContactUrl().isBlank()) {
+                return profile.getContactUrl();
+            }
+        }
+        return DEFAULT_CONTACT_URL;
     }
 
     private String resolveSystemPrompt(UUID userId) {

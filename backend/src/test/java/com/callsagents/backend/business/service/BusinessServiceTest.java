@@ -117,7 +117,7 @@ class BusinessServiceTest {
         when(profileRepository.save(any(BusinessProfile.class))).thenAnswer(inv -> inv.getArgument(0));
 
         BusinessProfileRequest req = new BusinessProfileRequest(
-            "New Corp", "https://new.com", "Tech", "Web dev",
+            "New Corp", "https://new.com", null, "Tech", "Web dev",
             "amigable", "Botty", "Hola!", "#FF0000",
             null, null, null, null, "14157386102"
         );
@@ -136,7 +136,7 @@ class BusinessServiceTest {
     void updateThrowsWhenNotFound() {
         when(profileRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
-        BusinessProfileRequest req = new BusinessProfileRequest("X", null, null, null, null, null, null, null, null, null, null, null, null);
+        BusinessProfileRequest req = new BusinessProfileRequest("X", null, null, null, null, null, null, null, null, null, null, null, null, null);
         assertThrows(ResourceNotFoundException.class, () -> businessService.update(userId, req));
     }
 

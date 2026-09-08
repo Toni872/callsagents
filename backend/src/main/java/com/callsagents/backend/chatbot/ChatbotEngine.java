@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -154,7 +155,9 @@ public class ChatbotEngine {
 
         if (cleanResponse == null || cleanResponse.isBlank()) {
             log.warn("Groq returned empty response for key={}, user='{}'", sessionKey, text);
-            cleanResponse = "¿Podrías repetirme eso, por favor? No te he entendido bien.";
+            // NEVER tell the user we didn't understand when we actually captured
+            // their contact data. Build a deterministic confirmation instead.
+            cleanResponse = buildFallbackReply(text, leadData.getIfPresent(sessionKey));
         }
 
         history.add(Map.of("role", "user", "content", text));
@@ -204,6 +207,43 @@ public class ChatbotEngine {
             }
         }
         return false;
+    }
+
+    /**
+     * Deterministic reply used when Groq returns an empty response. Never claims
+     * "I didn't understand" when contact data was actually captured — it confirms
+     * the captured data and hands over the real next step.
+     */
+    private String buildFallbackReply(String userText, Map<String, String> data) {
+        String lower = (userText == null ? "" : userText).toLowerCase();
+        boolean captured = data != null && data.get("email") != null && !data.get("email").isBlank();
+
+        if (captured) {
+            String name = data.get("name") == null ? "" : data.get("name");
+            String salutation = name.isBlank() ? "¡Gracias!" : "¡Gracias, " + name + "!";
+            if (isAffirmative(lower)) {
+                return salutation + " He apuntado tu correo (" + data.get("email") + ")."
+                    + " Te paso el enlace para probar la demo gratuita de Callsagents:"
+                    + " https://callsagents-frontend-production.up.railway.app/landing";
+            }
+            return salutation + " He apuntado tu correo (" + data.get("email") + ")."
+                + " ¿Quieres que te pase el enlace para probar la demo gratuita de Callsagents?";
+        }
+
+        if (isAffirmative(lower)) {
+            return "¡Genial! ¿En qué más puedo ayudarte?";
+        }
+        if (isDecline(lower)) {
+            return "Entendido, no hay problema. Si necesitas algo más, aquí estoy.";
+        }
+        return "¿Podrías repetirme eso, por favor? No te he entendido bien.";
+    }
+
+    private static boolean isDecline(String text) {
+        String lower = text.toLowerCase();
+        return lower.equals("no") || lower.equals("no gracias") || lower.equals("no, gracias")
+            || lower.startsWith("no me interesa") || lower.startsWith("no quiero")
+            || lower.startsWith("no hace falta");
     }
 
     private void resetConversation(String key) {
@@ -277,11 +317,19 @@ public class ChatbotEngine {
         } else {
             String before = text.substring(0, emailMatcher.start()).trim().replaceAll("[^A-Za-zÁÉÍÓÚÑáéíóúñ ]", "");
             String firstToken = before.split(" ")[0];
-            if (!firstToken.isEmpty() && Character.isUpperCase(firstToken.charAt(0))) {
+            // Never treat filler words like "vale"/"ok"/"hola" as the lead's name.
+            if (!firstToken.isEmpty() && Character.isUpperCase(firstToken.charAt(0))
+                    && !isFillerWord(firstToken)) {
                 data.put("name", firstToken);
             }
         }
         return data;
+    }
+
+    private static boolean isFillerWord(String token) {
+        String lower = token.toLowerCase();
+        return Set.of("vale", "ok", "okey", "hola", "buenos", "buenas", "si", "sí", "no",
+            "claro", "perfecto", "genial", "entendido", "mira", "oye", "perdona").contains(lower);
     }
 
     private boolean saveLead(String key, Map<String, String> data, UUID businessId, Channel channel) {

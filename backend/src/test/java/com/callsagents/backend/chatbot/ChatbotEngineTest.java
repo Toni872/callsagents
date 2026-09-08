@@ -371,4 +371,68 @@ class ChatbotEngineTest {
         // and WhatsApp service tests. The helper recognizes: si, sí, confirmo,
         // adelante, dale, agenda, vale, ok, claro, perfecto
     }
+
+    @Test
+    @DisplayName("empty Groq response + captured email -> confirm data, never claim we didn't understand")
+    void emptyGroq_withCapturedEmail_confirmsData() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "Mi correo es juan@empresa.com", BUSINESS_ID, Channel.WHATSAPP);
+
+        assertThat(turn.reply()).contains("He apuntado tu correo");
+        assertThat(turn.reply()).contains("juan@empresa.com");
+        assertThat(turn.reply()).doesNotContain("repetirme");
+        assertThat(turn.leadCaptured()).isTrue();
+    }
+
+    @Test
+    @DisplayName("empty Groq response + affirmative with email -> close with demo link")
+    void emptyGroq_affirmativeWithEmail_closesWithDemo() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "Vale, asumo que puede funcionar. Mi correo es juan@empresa.com",
+            BUSINESS_ID, Channel.WHATSAPP);
+
+        assertThat(turn.reply()).contains("He apuntado tu correo (juan@empresa.com)");
+        assertThat(turn.reply()).contains("callsagents-frontend-production.up.railway.app/landing");
+        assertThat(turn.reply()).doesNotContain("repetirme");
+        assertThat(turn.leadCaptured()).isTrue();
+    }
+
+    @Test
+    @DisplayName("empty Groq response + bare affirmative -> natural continuation, not repeat message")
+    void emptyGroq_bareAffirmative_naturalContinuation() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "si", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).contains("¡Genial!");
+        assertThat(turn.reply()).doesNotContain("repetirme");
+    }
+
+    @Test
+    @DisplayName("empty Groq response + decline -> respectful goodbye, not repeat message")
+    void emptyGroq_decline_respectfulGoodbye() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "no gracias", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).contains("Entendido");
+        assertThat(turn.reply()).doesNotContain("repetirme");
+    }
+
+    @Test
+    @DisplayName("filler word in front of email is never captured as lead name")
+    void fillerWord_notCapturedAsName() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Perfecto!");
+        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+
+        engine.process(KEY, "Vale, mi correo es juan@test.com", BUSINESS_ID, Channel.WHATSAPP);
+
+        verify(leadRepository).save(argThat(leadArg -> {
+            Lead lead = (Lead) leadArg;
+            return "juan@test.com".equals(lead.getEmail())
+                && !"Vale".equals(lead.getFirstName());
+        }));
+    }
 }

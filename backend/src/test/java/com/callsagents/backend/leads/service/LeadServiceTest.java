@@ -238,7 +238,7 @@ class LeadServiceTest {
 
         assertThrows(ResourceNotFoundException.class,
             () -> leadService.delete(id, currentUserId, UserRole.AGENT));
-        verify(leadRepository, never()).deleteById(any());
+        verify(leadRepository, never()).save(any());
     }
 
     @Test
@@ -250,18 +250,37 @@ class LeadServiceTest {
 
         assertThrows(ForbiddenException.class,
             () -> leadService.delete(id, currentUserId, UserRole.AGENT));
-        verify(leadRepository, never()).deleteById(any());
+        verify(leadRepository, never()).save(any());
     }
 
     @Test
-    void deleteSucceedsAndAudits() {
+    void deleteSoftDeletesAndAudits() {
         UUID id = UUID.randomUUID();
         Lead lead = sampleLead(id);
         when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
 
         leadService.delete(id, currentUserId, UserRole.ADMIN);
 
-        verify(leadRepository).deleteById(id);
+        ArgumentCaptor<Lead> captor = ArgumentCaptor.forClass(Lead.class);
+        verify(leadRepository).save(captor.capture());
+        assertNotNull(captor.getValue().getDeletedAt());
+        verify(leadRepository, never()).deleteById(any());
+        verify(auditService).log(eq(currentUserId), eq("Lead"), eq(id), eq(com.callsagents.backend.audit.entity.AuditAction.DELETE));
+    }
+
+    @Test
+    void softDeleteSetsDeletedAtAndUpdatedAt() {
+        UUID id = UUID.randomUUID();
+        Lead lead = sampleLead(id);
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
+
+        leadService.delete(id, currentUserId, UserRole.ADMIN);
+
+        ArgumentCaptor<Lead> captor = ArgumentCaptor.forClass(Lead.class);
+        verify(leadRepository).save(captor.capture());
+        Lead saved = captor.getValue();
+        assertNotNull(saved.getDeletedAt());
+        assertNotNull(saved.getUpdatedAt());
         verify(auditService).log(eq(currentUserId), eq("Lead"), eq(id), eq(com.callsagents.backend.audit.entity.AuditAction.DELETE));
     }
 
@@ -347,17 +366,118 @@ class LeadServiceTest {
     }
 
     @Test
-    void deleteByIdIsCalledWithCorrectArgument() {
+    void restoreClearsDeletedAtAndAudits() {
+        UUID id = UUID.randomUUID();
+        Lead lead = sampleLead(id);
+        lead.setDeletedAt(Instant.now().minusSeconds(60));
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
+        when(leadRepository.save(any(Lead.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LeadResponse response = leadService.restore(id, currentUserId, UserRole.AGENT);
+
+        assertNull(response.deletedAt());
+        ArgumentCaptor<Lead> captor = ArgumentCaptor.forClass(Lead.class);
+        verify(leadRepository).save(captor.capture());
+        assertNull(captor.getValue().getDeletedAt());
+        verify(auditService).log(eq(currentUserId), eq("Lead"), eq(id), eq(com.callsagents.backend.audit.entity.AuditAction.UPDATE));
+    }
+
+    @Test
+    void restoreOnActiveLeadIsNoOp() {
         UUID id = UUID.randomUUID();
         Lead lead = sampleLead(id);
         when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
 
-        leadService.delete(id, currentUserId, UserRole.ADMIN);
+        LeadResponse response = leadService.restore(id, currentUserId, UserRole.AGENT);
 
-        ArgumentCaptor<UUID> captor = ArgumentCaptor.forClass(UUID.class);
-        verify(leadRepository).deleteById(captor.capture());
-        assertEquals(id, captor.getValue());
+        assertNull(response.deletedAt());
+        verify(leadRepository, never()).save(any());
+        verify(auditService, never()).log(any(), any(), any(), any());
+    }
+
+    @Test
+    void restoreThrowsNotFoundWhenMissing() {
+        UUID id = UUID.randomUUID();
+        when(leadRepository.findById(id)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+            () -> leadService.restore(id, currentUserId, UserRole.AGENT));
+    }
+
+    @Test
+    void restoreThrowsForbiddenWhenNotOwner() {
+        UUID id = UUID.randomUUID();
+        Lead existing = sampleLead(id);
+        existing.setCreatedBy(UUID.randomUUID());
+        existing.setDeletedAt(Instant.now());
+        when(leadRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        assertThrows(ForbiddenException.class,
+            () -> leadService.restore(id, currentUserId, UserRole.AGENT));
+    }
+
+    @Test
+    void hardDeleteDeletesAndAudits() {
+        UUID id = UUID.randomUUID();
+        Lead lead = sampleLead(id);
+        lead.setDeletedAt(Instant.now().minusSeconds(60));
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
+
+        leadService.hardDelete(id, currentUserId, UserRole.ADMIN);
+
+        verify(leadRepository).delete(lead);
         verify(auditService).log(eq(currentUserId), eq("Lead"), eq(id), eq(com.callsagents.backend.audit.entity.AuditAction.DELETE));
+    }
+
+    @Test
+    void hardDeleteThrowsNotFoundWhenLeadNotDeleted() {
+        UUID id = UUID.randomUUID();
+        Lead lead = sampleLead(id);
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
+
+        assertThrows(ResourceNotFoundException.class,
+            () -> leadService.hardDelete(id, currentUserId, UserRole.ADMIN));
+        verify(leadRepository, never()).delete(any(Lead.class));
+    }
+
+    @Test
+    void hardDeleteThrowsForbiddenWhenNotOwner() {
+        UUID id = UUID.randomUUID();
+        Lead existing = sampleLead(id);
+        existing.setCreatedBy(UUID.randomUUID());
+        existing.setDeletedAt(Instant.now());
+        when(leadRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        assertThrows(ForbiddenException.class,
+            () -> leadService.hardDelete(id, currentUserId, UserRole.AGENT));
+    }
+
+    @Test
+    void findTrashReturnsMappedPage() {
+        UUID id = UUID.randomUUID();
+        Lead trashed = sampleLead(id);
+        trashed.setDeletedAt(Instant.now().minusSeconds(60));
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Lead> page = new PageImpl<>(List.of(trashed), pageable, 1);
+        when(leadRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+
+        PageResponse<LeadResponse> result =
+            leadService.findTrash(new LeadFilter(null, null, null, null), pageable, currentUserId);
+
+        assertEquals(1, result.totalElements());
+        assertEquals(id, result.content().get(0).id());
+        assertNotNull(result.content().get(0).deletedAt());
+    }
+
+    @Test
+    void findByIdThrowsNotFoundWhenDeleted() {
+        UUID id = UUID.randomUUID();
+        Lead lead = sampleLead(id);
+        lead.setDeletedAt(Instant.now().minusSeconds(60));
+        when(leadRepository.findById(id)).thenReturn(Optional.of(lead));
+
+        assertThrows(ResourceNotFoundException.class,
+            () -> leadService.findById(id, currentUserId));
     }
 
     @Test

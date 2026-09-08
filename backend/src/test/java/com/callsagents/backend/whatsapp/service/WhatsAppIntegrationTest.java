@@ -64,7 +64,7 @@ class WhatsAppIntegrationTest {
     void emailCaptureAndAffirmative_escalationOnce() {
         Lead existingLead = new Lead();
         org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(existingLead));
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
         // Step 1: email captured deterministically + AI reply
@@ -93,7 +93,7 @@ class WhatsAppIntegrationTest {
     void emailCaptureAndNegative_noEscalation() {
         Lead existingLead = new Lead();
         org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(existingLead));
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("No te preocupes.");
 
         service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);
@@ -105,7 +105,7 @@ class WhatsAppIntegrationTest {
     @Test
     @DisplayName("end-to-end: reset after email capture clears state")
     void resetAfterEmailCapture() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Hola de nuevo");
 
         service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);

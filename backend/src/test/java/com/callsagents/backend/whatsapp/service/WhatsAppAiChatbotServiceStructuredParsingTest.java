@@ -57,7 +57,7 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
     @Test
     @DisplayName("email capture: deterministic save AND Groq reply in same turn")
     void emailCapture_savesLeadAndCallsGroq() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias Juan, te ayudo.");
 
         String result = service.processMessage(
@@ -89,7 +89,7 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
     @Test
     @DisplayName("[LEAD] tag from AI -> lead saved, tag stripped from visible text")
     void leadTag_savesLeadAndStripsTag() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString()))
             .thenReturn("Perfecto, gracias [LEAD:name=Juan|email=juan@test.com|service=ventas]");
 
@@ -105,7 +105,7 @@ class WhatsAppAiChatbotServiceStructuredParsingTest {
     @Test
     @DisplayName("multiple turns after email capture still work")
     void multipleTurns_afterEmailCapture() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entendido");
 
         service.processMessage(PHONE, "Me llamo Juan y mi email es juan@test.com", BUSINESS_ID);

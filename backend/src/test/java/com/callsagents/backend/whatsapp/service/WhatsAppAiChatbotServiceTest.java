@@ -60,7 +60,7 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     private void expectNoExistingLead() {
-        lenient().when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        lenient().when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -186,7 +186,7 @@ class WhatsAppAiChatbotServiceTest {
     void realTranscript_emailAndAffirmative_escalationFiresOnce() {
         Lead existingLead = new Lead();
         org.springframework.test.util.ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(existingLead));
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
         service.processMessage(PHONE, "Me llamo Antonio y mi correo es antohachi@gmail.com", BUSINESS_ID);

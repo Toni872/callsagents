@@ -2,6 +2,7 @@ package com.callsagents.backend.calendar.controller;
 
 import com.callsagents.backend.calendar.domain.CalendarIntegration;
 import com.callsagents.backend.calendar.domain.CalendarProviderType;
+import com.callsagents.backend.calendar.domain.CalendarConnectionStatus;
 import com.callsagents.backend.calendar.dto.CalendarIntegrationDto;
 import com.callsagents.backend.calendar.service.CalendarProvider;
 import com.callsagents.backend.calendar.service.CalendarSyncService;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -165,6 +168,8 @@ public class CalendarController {
             integration.setAccessTokenExpiresAt(tokens.accessTokenExpiresAt());
             integration.setScopes(tokens.scope());
             integration.setExternalCalendarId("primary");
+            // Fresh OAuth round-trip: the connection is healthy again.
+            integration.setConnectionStatus(CalendarConnectionStatus.ACTIVE);
             // Best-effort: resolve the connected Google account email (userinfo).
             // Display-only — failure to fetch never fails the connection.
             integration.setExternalAccountEmail(calProvider.fetchAccountEmail(tokens.accessToken()));
@@ -255,6 +260,61 @@ public class CalendarController {
         );
     }
 
+    /**
+     * List the calendars accessible with the user's integration token.
+     * Requires an active integration for the provider. On 401/403 the integration's
+     * connectionStatus is persisted so the SPA can show the reconnect banner.
+     */
+    @GetMapping("/integrations/{provider}/calendars")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
+    @Operation(summary = "Listar calendarios disponibles del proveedor")
+    public List<CalendarProvider.CalendarInfo> listCalendars(
+        @PathVariable String provider,
+        Authentication authentication
+    ) {
+        var type = parseProvider(provider);
+        UUID userId = resolveUserIdByEmail(authentication.getName());
+        if (userId == null) {
+            throw new ResourceNotFoundException("Integration not found");
+        }
+        var integration = integrationRepo.findByUserIdAndProvider(userId, type)
+            .orElseThrow(() -> new ResourceNotFoundException("Integration not found"));
+        String token = syncService.usableAccessToken(integration);
+        try {
+            return syncService.providerOf(type).listCalendars(token);
+        } catch (RuntimeException e) {
+            // Persist the connection health change so the SPA banner reacts.
+            applyConnectionStatus(integration, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Select the destination calendar + conflict-check calendars for an integration.
+     * Owner-checked like disconnect/toggle.
+     */
+    @PutMapping("/integrations/{id}/calendars")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
+    @Operation(summary = "Seleccionar calendario destino y calendarios de conflicto")
+    public CalendarIntegrationDto saveCalendars(
+        @PathVariable UUID id,
+        @RequestBody CalendarSelectionRequest body,
+        Authentication authentication
+    ) {
+        var integration = integrationRepo.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Integration not found"));
+        UUID userId = resolveUserIdByEmail(authentication.getName());
+        if (userId == null || !integration.getUserId().equals(userId)) {
+            throw new ResourceNotFoundException("Integration not found");
+        }
+        integration.setExternalCalendarId(body.destinationCalendarId());
+        integration.setConflictCalendarIds(body.conflictCalendarIds());
+        return CalendarIntegrationDto.from(integrationRepo.save(integration));
+    }
+
+    /** Request body for PUT /calendar/integrations/{id}/calendars. */
+    public record CalendarSelectionRequest(String destinationCalendarId, List<String> conflictCalendarIds) {}
+
     // -------- helpers --------
 
     /** Redirect the browser back to the SPA (/settings/calendar) after OAuth. */
@@ -272,6 +332,23 @@ public class CalendarController {
 
     private UUID resolveUserIdByEmail(String email) {
         return userRepository.findByEmail(email).map(u -> u.getId()).orElse(null);
+    }
+
+    /** Best-effort classification of a provider error → connectionStatus, persisted. */
+    private void applyConnectionStatus(CalendarIntegration integration, String error) {
+        if (error == null) return;
+        String msg = error.toLowerCase();
+        CalendarConnectionStatus status = null;
+        if (msg.contains("403") || msg.contains("insufficient permissions")) {
+            status = CalendarConnectionStatus.INSUFFICIENT_PERMISSIONS;
+        } else if (msg.contains("401") || msg.contains("rejected")
+            || msg.contains("must re-authenticate") || msg.contains("no refresh token")) {
+            status = CalendarConnectionStatus.NEEDS_REAUTH;
+        }
+        if (status != null) {
+            integration.setConnectionStatus(status);
+            integrationRepo.save(integration);
+        }
     }
 
     // -------- OAuth state signing (HMAC-SHA256) --------

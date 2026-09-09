@@ -13,6 +13,8 @@ import { CalendarApi } from '../../../core/api/calendar.api';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ErrorService } from '../../../core/errors/error.service';
 import {
+  CalendarConnectionStatus,
+  CalendarInfo,
   CalendarIntegration,
   CalendarSyncStatus
 } from '../../../shared/models/calendar.model';
@@ -41,6 +43,20 @@ import {
         </button>
       </header>
 
+      @if (needsReconnect()) {
+        <div class="card reconnect-banner" role="alert">
+          <span>Tu conexión con Google Calendar dejó de funcionar.</span>
+          <button
+            type="button"
+            class="btn btn--primary"
+            [disabled]="!googleConfigured()"
+            (click)="connectGoogle()"
+          >
+            Reconectar
+          </button>
+        </div>
+      }
+
       @if (!googleConfigured()) {
         <div class="card warning-panel" role="alert">
           <h3>Google Calendar no está configurado</h3>
@@ -65,14 +81,98 @@ import {
             </div>
           </div>
           @if (googleIntegration(); as g) {
-            <span class="badge badge--ok">Conectado</span>
-            <button
-              type="button"
-              class="btn btn--danger"
-              (click)="disconnect(g)"
-            >
-              Desconectar
-            </button>
+            <span class="badge" [class]="connectionStatusClass(g.connectionStatus)">
+              {{ connectionStatusLabel(g.connectionStatus) }}
+            </span>
+            <div class="provider-card__actions">
+              <button
+                type="button"
+                class="btn btn--danger"
+                (click)="disconnect(g)"
+              >
+                Desconectar
+              </button>
+            </div>
+            <div class="calendar-config">
+              <div class="calendar-config__head">
+                <div>
+                  <strong>Configurar calendarios</strong>
+                  <p class="muted calendar-config__dest">
+                    @if (destinationSummary(); as summary) {
+                      Destino actual: {{ summary }}
+                    } @else if (g.externalCalendarId) {
+                      Destino actual: {{ g.externalCalendarId }}
+                    } @else {
+                      Sin calendario de destino configurado
+                    }
+                  </p>
+                </div>
+                <button type="button" class="btn" (click)="toggleCalendarConfig()">
+                  {{ calendarPanelOpen() ? 'Cerrar' : 'Configurar' }}
+                </button>
+              </div>
+
+              @if (calendarPanelOpen()) {
+                <div class="calendar-config__body">
+                  @if (calendarsLoading()) {
+                    <p class="muted">Cargando calendarios...</p>
+                  } @else if (calendars().length === 0) {
+                    <p class="muted">No se encontraron calendarios disponibles.</p>
+                  } @else {
+                    <fieldset class="calendar-fieldset">
+                      <legend>Calendario de destino</legend>
+                      <div class="calendar-options">
+                        @for (cal of calendars(); track cal.id) {
+                          <label class="calendar-option">
+                            <input
+                              type="radio"
+                              name="destination-calendar"
+                              [value]="cal.id"
+                              [checked]="selectedDestination() === cal.id"
+                              (change)="selectedDestination.set(cal.id)"
+                            />
+                            <span>{{ cal.summary || cal.id }}</span>
+                            @if (cal.primary) {
+                              <em>(principal)</em>
+                            }
+                          </label>
+                        }
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="calendar-fieldset">
+                      <legend>Calendarios de conflicto</legend>
+                      <p class="muted">
+                        Las citas que colisionen con eventos de estos calendarios
+                        se marcarán como conflicto.
+                      </p>
+                      <div class="calendar-options">
+                        @for (cal of calendars(); track cal.id) {
+                          <label class="calendar-option">
+                            <input
+                              type="checkbox"
+                              [value]="cal.id"
+                              [checked]="isConflictChecked(cal.id)"
+                              (change)="toggleConflict(cal.id)"
+                            />
+                            <span>{{ cal.summary || cal.id }}</span>
+                          </label>
+                        }
+                      </div>
+                    </fieldset>
+
+                    <button
+                      type="button"
+                      class="btn btn--primary"
+                      [disabled]="savingCalendars() || !selectedDestination()"
+                      (click)="saveCalendarSelection()"
+                    >
+                      {{ savingCalendars() ? 'Guardando...' : 'Guardar' }}
+                    </button>
+                  }
+                </div>
+              }
+            </div>
           } @else {
             <button
               type="button"
@@ -116,6 +216,9 @@ import {
                   {{ integration.externalAccountEmail || '(sin email)' }}
                   <span class="badge" [class]="badgeClass(integration.lastSyncStatus)">
                     {{ integration.lastSyncStatus || 'NUNCA' }}
+                  </span>
+                  <span class="badge" [class]="connectionStatusClass(integration.connectionStatus)">
+                    {{ connectionStatusLabel(integration.connectionStatus) }}
                   </span>
                 </div>
                 <div class="integration-item__status">
@@ -207,6 +310,17 @@ import {
       .warning-panel p {
         margin: 0;
       }
+      .reconnect-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--spacing-4);
+        flex-wrap: wrap;
+        border-color: var(--color-warning);
+        background: #fef3c7;
+        color: #92400e;
+        font-weight: 500;
+      }
 
       .providers-grid {
         display: grid;
@@ -257,6 +371,76 @@ import {
         margin: 0;
         color: var(--color-text-muted);
         font-size: 0.875rem;
+      }
+      .provider-card__actions {
+        display: flex;
+        gap: var(--spacing-2);
+      }
+
+      .calendar-config {
+        border-top: 1px solid var(--color-border);
+        padding-top: var(--spacing-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-3);
+      }
+      .calendar-config__head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--spacing-3);
+      }
+      .calendar-config__dest {
+        margin: var(--spacing-1) 0 0;
+        font-size: 0.8rem;
+      }
+      .calendar-config strong {
+        font-size: 0.9rem;
+      }
+      .calendar-config__body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-3);
+      }
+      .calendar-fieldset {
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        padding: var(--spacing-3);
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-2);
+      }
+      .calendar-fieldset legend {
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 0 var(--spacing-1);
+      }
+      .calendar-fieldset p {
+        margin: 0;
+        font-size: 0.8rem;
+      }
+      .calendar-options {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-1);
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      .calendar-option {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-2);
+        font-size: 0.875rem;
+        cursor: pointer;
+      }
+      .calendar-option input {
+        flex-shrink: 0;
+      }
+      .calendar-option em {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        font-style: normal;
       }
 
       .integrations-list {
@@ -405,11 +589,33 @@ export class CalendarSettingsComponent implements OnInit {
   protected readonly backfilling = signal(false);
   protected readonly backfillResult = signal<{ scanned: number; created: number; failed: number } | null>(null);
 
+  protected readonly calendarPanelOpen = signal(false);
+  protected readonly calendarsLoading = signal(false);
+  protected readonly calendars = signal<CalendarInfo[]>([]);
+  protected readonly selectedDestination = signal<string | null>(null);
+  protected readonly conflictSelection = signal<string[]>([]);
+  protected readonly savingCalendars = signal(false);
+
   protected readonly isAdmin = computed(() => this.auth.currentRole() === 'ADMIN');
 
   protected readonly googleIntegration = computed(
     () => this.integrations().find((i) => i.provider === 'GOOGLE') ?? null
   );
+
+  protected readonly needsReconnect = computed(() =>
+    this.integrations().some(
+      (i) =>
+        i.connectionStatus === 'NEEDS_REAUTH' ||
+        i.connectionStatus === 'INSUFFICIENT_PERMISSIONS'
+    )
+  );
+
+  protected readonly destinationSummary = computed(() => {
+    const g = this.googleIntegration();
+    if (!g?.externalCalendarId) return null;
+    const cal = this.calendars().find((c) => c.id === g.externalCalendarId);
+    return cal?.summary ?? null;
+  });
 
   ngOnInit(): void {
     this.handleOAuthCallback();
@@ -524,6 +730,111 @@ export class CalendarSettingsComponent implements OnInit {
       default:
         return '';
     }
+  }
+
+  protected connectionStatusLabel(
+    status: CalendarConnectionStatus | string | null
+  ): string {
+    switch (status) {
+      case 'NEEDS_REAUTH':
+        return 'Reconexión requerida';
+      case 'INSUFFICIENT_PERMISSIONS':
+        return 'Permisos insuficientes';
+      case 'ACTIVE':
+      default:
+        return 'Conectado';
+    }
+  }
+
+  protected connectionStatusClass(
+    status: CalendarConnectionStatus | string | null
+  ): string {
+    switch (status) {
+      case 'NEEDS_REAUTH':
+        return 'badge--warn';
+      case 'INSUFFICIENT_PERMISSIONS':
+        return 'badge--err';
+      case 'ACTIVE':
+      default:
+        return 'badge--ok';
+    }
+  }
+
+  protected toggleCalendarConfig(): void {
+    this.calendarPanelOpen.update((open) => !open);
+    if (this.calendarPanelOpen()) {
+      this.loadCalendars();
+    }
+  }
+
+  protected loadCalendars(): void {
+    const g = this.googleIntegration();
+    if (!g) {
+      return;
+    }
+    this.calendarsLoading.set(true);
+    this.api.listCalendars('GOOGLE').subscribe({
+      next: (list) => {
+        this.calendarsLoading.set(false);
+        this.calendars.set(list);
+        const current = g.externalCalendarId;
+        this.selectedDestination.set(
+          current && list.some((c) => c.id === current)
+            ? current
+            : (list.find((c) => c.primary)?.id ?? list[0]?.id ?? null)
+        );
+        this.conflictSelection.set(
+          (g.conflictCalendarIds ?? []).filter((id) =>
+            list.some((c) => c.id === id)
+          )
+        );
+      },
+      error: () => {
+        this.calendarsLoading.set(false);
+        // El backend pudo marcar la conexión como no saludable (401/403);
+        // recargamos para que el banner de reconexión aparezca.
+        this.api.list().subscribe({
+          next: (list) => this.integrations.set(list)
+        });
+      }
+    });
+  }
+
+  protected isConflictChecked(id: string): boolean {
+    return this.conflictSelection().includes(id);
+  }
+
+  protected toggleConflict(id: string): void {
+    this.conflictSelection.update((sel) =>
+      sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]
+    );
+  }
+
+  protected saveCalendarSelection(): void {
+    const g = this.googleIntegration();
+    const destination = this.selectedDestination();
+    if (!g || !destination) {
+      return;
+    }
+    this.savingCalendars.set(true);
+    this.api
+      .saveCalendars(g.id, {
+        destinationCalendarId: destination,
+        conflictCalendarIds: this.conflictSelection()
+      })
+      .subscribe({
+        next: (updated) => {
+          this.savingCalendars.set(false);
+          this.integrations.update((list) =>
+            list.map((i) => (i.id === updated.id ? updated : i))
+          );
+          this.error.success('Calendarios actualizados');
+        },
+        error: () => {
+          this.savingCalendars.set(false);
+          // errorInterceptor maneja el toast de error
+        }
+      });
   }
 
   private handleOAuthCallback(): void {

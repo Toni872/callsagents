@@ -88,8 +88,19 @@ public interface CalendarProvider {
         return null;
     }
 
+    /**
+     * List the calendars accessible with the given token.
+     * Default throws UnsupportedOperationException so Outlook placeholder stays untouched.
+     */
+    default List<CalendarInfo> listCalendars(String accessToken) {
+        throw new UnsupportedOperationException("listCalendars not implemented for " + provider());
+    }
+
     /** True if OAuth credentials for this provider are configured in env. */
     boolean isConfigured();
+
+    /** DTO for calendar list metadata from the provider. */
+    record CalendarInfo(String id, String summary, boolean primary, String accessRole) {}
 
     /** DTOs exchanged across the boundary. */
 

@@ -1,9 +1,11 @@
 package com.callsagents.backend.calendar.dto;
 
+import com.callsagents.backend.calendar.domain.CalendarConnectionStatus;
 import com.callsagents.backend.calendar.domain.CalendarIntegration;
 import com.callsagents.backend.calendar.domain.CalendarProviderType;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,6 +23,8 @@ public record CalendarIntegrationDto(
     Instant lastSyncAt,
     String lastSyncStatus,
     String lastSyncError,
+    String connectionStatus,
+    List<String> conflictCalendarIds,
     Instant createdAt
 ) {
     public static CalendarIntegrationDto from(CalendarIntegration e) {
@@ -35,6 +39,8 @@ public record CalendarIntegrationDto(
             e.getLastSyncAt(),
             e.getLastSyncStatus() != null ? e.getLastSyncStatus().name() : null,
             e.getLastSyncError(),
+            e.getConnectionStatus() != null ? e.getConnectionStatus().name() : "ACTIVE",
+            e.getConflictCalendarIds() != null ? e.getConflictCalendarIds() : List.of(),
             e.getCreatedAt()
         );
     }

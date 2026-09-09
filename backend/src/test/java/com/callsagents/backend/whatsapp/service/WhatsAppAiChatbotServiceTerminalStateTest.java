@@ -62,7 +62,7 @@ class WhatsAppAiChatbotServiceTerminalStateTest {
     private void stubExistingLead() {
         Lead lead = org.mockito.Mockito.mock(Lead.class);
         lenient().when(lead.getId()).thenReturn(UUID.randomUUID());
-        lenient().when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(lead));
+        lenient().when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(lead));
     }
 
     @Test

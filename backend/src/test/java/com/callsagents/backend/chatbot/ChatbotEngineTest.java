@@ -107,7 +107,7 @@ class ChatbotEngineTest {
     @Test
     @DisplayName("email in message -> deterministic lead capture AND Groq reply in same turn")
     void emailCapture_stillCallsGroq() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias Antonio, te ayudo.");
 
         ChatTurn turn = engine.process(KEY, "Me llamo Antonio y mi email es antonio@test.com",
@@ -127,7 +127,7 @@ class ChatbotEngineTest {
     @Test
     @DisplayName("[LEAD:...] tag extracted from AI response, stripped from visible text")
     void leadTag_extractedAndStripped() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString()))
             .thenReturn("Perfecto, gracias por tus datos. [LEAD:name=Juan|email=juan@test.com|service=ventas]");
 
@@ -144,7 +144,7 @@ class ChatbotEngineTest {
     void whatsapp_escalationFiresOnce() {
         Lead existingLead = new Lead();
         ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(existingLead));
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
         engine.process(KEY, "Me llamo Antonio y mi email es antonio@test.com", BUSINESS_ID, Channel.WHATSAPP);
@@ -157,7 +157,7 @@ class ChatbotEngineTest {
     @Test
     @DisplayName("WEB channel: escalation never fires even with email + affirmative")
     void web_noEscalationEver() {
-        when(leadRepository.countByCreatedBy(BUSINESS_ID)).thenReturn(0L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(BUSINESS_ID)).thenReturn(0L);
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Genial!");
 
         engine.process(KEY, "Me llamo Laura y mi email es laura@test.com", BUSINESS_ID, Channel.WEB);
@@ -268,7 +268,7 @@ class ChatbotEngineTest {
         UUID profileId = UUID.randomUUID();
         UUID ownerUserId = UUID.randomUUID();
         when(businessService.resolveOwnerUserId(profileId)).thenReturn(ownerUserId);
-        when(leadRepository.countByCreatedBy(ownerUserId)).thenReturn(0L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(ownerUserId)).thenReturn(0L);
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
 
         engine.process("session-widget", "Me llamo Laura y mi email es laura@test.com",
@@ -295,7 +295,7 @@ class ChatbotEngineTest {
     @Test
     @DisplayName("lead data persisted: WhatsApp lead created with correct fields")
     void whatsapp_leadCreated() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Perfecto!");
 
         engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com", BUSINESS_ID, Channel.WHATSAPP);
@@ -314,7 +314,7 @@ class ChatbotEngineTest {
     void whatsapp_existingLeadUpdated() {
         Lead existingLead = new Lead();
         ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.of(existingLead));
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(existingLead));
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
 
         engine.process(KEY, "Mi email es nuevo@test.com", BUSINESS_ID, Channel.WHATSAPP);
@@ -328,7 +328,7 @@ class ChatbotEngineTest {
     @Test
     @DisplayName("WEB lead creation respects trial limit")
     void web_trialLimit() {
-        when(leadRepository.countByCreatedBy(BUSINESS_ID)).thenReturn(50L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(BUSINESS_ID)).thenReturn(50L);
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
 
         ChatTurn turn = engine.process("session-web", "Me llamo Pedro y mi email es pedro@test.com",
@@ -340,7 +340,7 @@ class ChatbotEngineTest {
     @Test
     @DisplayName("state context includes name, email, and captured status")
     void stateContext_includesAll() {
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
 
         engine.process(KEY, "Me llamo Antonio y mi email es antonio@test.com", BUSINESS_ID, Channel.WHATSAPP);
@@ -425,7 +425,7 @@ class ChatbotEngineTest {
     @DisplayName("filler word in front of email is never captured as lead name")
     void fillerWord_notCapturedAsName() {
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Perfecto!");
-        when(leadRepository.findByPhone(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
 
         engine.process(KEY, "Vale, mi correo es juan@test.com", BUSINESS_ID, Channel.WHATSAPP);
 

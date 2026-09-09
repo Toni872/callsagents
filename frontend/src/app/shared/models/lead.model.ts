@@ -7,7 +7,7 @@ export type LeadStatus =
   | 'CONVERTED'
   | 'DISQUALIFIED';
 
-export type LeadSource = 'MANUAL' | 'IMPORT' | 'API';
+export type LeadSource = 'MANUAL' | 'IMPORT' | 'API' | 'WHATSAPP' | 'WEB_CHAT';
 
 export interface LeadAssignedUser {
   id: string;
@@ -32,6 +32,8 @@ export interface LeadResponse {
   dataRetentionUntil: string | null;
   createdAt: string;
   updatedAt: string;
+  createdBy: string;
+  deletedAt: string | null;
 }
 
 export interface CreateLeadRequest {

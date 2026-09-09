@@ -36,6 +36,36 @@ export class LeadApi {
     return this.http.get<PageResponse<LeadResponse>>(apiUrl('/leads'), { params });
   }
 
+  trash(filter: LeadFilter = {}): Observable<PageResponse<LeadResponse>> {
+    let params = new HttpParams()
+      .set('page', String(filter.page ?? 0))
+      .set('size', String(filter.size ?? 20))
+      .set('sort', filter.sort ?? 'createdAt,desc');
+
+    if (filter.status) {
+      params = params.set('status', filter.status);
+    }
+    if (filter.source) {
+      params = params.set('source', filter.source);
+    }
+    if (filter.assignedToId) {
+      params = params.set('assignedToId', filter.assignedToId);
+    }
+    if (filter.search) {
+      params = params.set('search', filter.search);
+    }
+
+    return this.http.get<PageResponse<LeadResponse>>(apiUrl('/leads/trash'), { params });
+  }
+
+  restore(id: string): Observable<LeadResponse> {
+    return this.http.post<LeadResponse>(apiUrl(`/leads/${id}/restore`), null);
+  }
+
+  hardDelete(id: string): Observable<void> {
+    return this.http.delete<void>(apiUrl(`/leads/${id}/hard`));
+  }
+
   getById(id: string): Observable<LeadResponse> {
     return this.http.get<LeadResponse>(apiUrl(`/leads/${id}`));
   }

@@ -10,6 +10,12 @@ export const LEADS_ROUTES: Routes = [
     loadComponent: () => import('./form/lead-form.component').then((m) => m.LeadFormComponent)
   },
   {
+    path: 'trash',
+    loadComponent: () =>
+      import('./trash/lead-trash.component').then((m) => m.LeadTrashComponent),
+    title: 'Papelera'
+  },
+  {
     path: ':id',
     loadComponent: () =>
       import('./detail/lead-detail.component').then((m) => m.LeadDetailComponent)

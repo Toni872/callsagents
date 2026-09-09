@@ -47,8 +47,8 @@ class DashboardServiceTest {
     @Test
     @DisplayName("summary: aggregates per-user repository counts and computes connection rate")
     void summary_happyPath() {
-        when(leadRepository.countByCreatedBy(currentUserId)).thenReturn(120L);
-        when(leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId)).thenReturn(80L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId)).thenReturn(120L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNullAndAssignedToIsNotNull(currentUserId)).thenReturn(80L);
         when(campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId)).thenReturn(3L);
 
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
@@ -77,8 +77,8 @@ class DashboardServiceTest {
     @Test
     @DisplayName("summary: 100% connection rate when everything today connected")
     void summary_fullConnectionRate() {
-        when(leadRepository.countByCreatedBy(currentUserId)).thenReturn(10L);
-        when(leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId)).thenReturn(5L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId)).thenReturn(10L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNullAndAssignedToIsNotNull(currentUserId)).thenReturn(5L);
         when(campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId)).thenReturn(0L);
 
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
@@ -97,8 +97,8 @@ class DashboardServiceTest {
     @Test
     @DisplayName("summary: connection rate is 0 when no calls today (not divide by zero)")
     void summary_zeroCallsRate() {
-        when(leadRepository.countByCreatedBy(currentUserId)).thenReturn(0L);
-        when(leadRepository.countByCreatedByAndAssignedToIsNotNull(currentUserId)).thenReturn(0L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId)).thenReturn(0L);
+        when(leadRepository.countByCreatedByAndDeletedAtIsNullAndAssignedToIsNotNull(currentUserId)).thenReturn(0L);
         when(campaignRepository.countByStatusAndCreatedBy(CampaignStatus.RUNNING, currentUserId)).thenReturn(0L);
 
         Instant startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);

@@ -32,6 +32,14 @@ public final class LeadSpecifications {
         return (root, query, cb) -> userId == null ? cb.conjunction() : cb.equal(root.get("createdBy"), userId);
     }
 
+    public static Specification<Lead> isNotDeleted() {
+        return (root, query, cb) -> cb.isNull(root.get("deletedAt"));
+    }
+
+    public static Specification<Lead> isDeleted() {
+        return (root, query, cb) -> cb.isNotNull(root.get("deletedAt"));
+    }
+
     public static Specification<Lead> searchText(String q) {
         return (root, query, cb) -> {
             if (q == null || q.isBlank()) {
@@ -49,14 +57,15 @@ public final class LeadSpecifications {
 
     public static Specification<Lead> build(LeadFilter filter) {
         if (filter == null) {
-            return null;
+            return isNotDeleted();
         }
         List<Specification<Lead>> specs = new ArrayList<>();
+        specs.add(isNotDeleted());
         specs.add(hasStatus(filter.status()));
         specs.add(hasSource(filter.source()));
         specs.add(isAssignedTo(filter.assignedToId()));
         specs.add(searchText(filter.search()));
-        return specs.stream().reduce(Specification::and).orElse(null);
+        return specs.stream().reduce(Specification::and).orElse(isNotDeleted());
     }
 
     public static Predicate toPredicate(LeadFilter filter, jakarta.persistence.criteria.Root<Lead> root,

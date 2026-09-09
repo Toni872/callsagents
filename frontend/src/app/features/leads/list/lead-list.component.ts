@@ -67,7 +67,7 @@ import { LeadResponse } from '../../../shared/models/lead.model';
                 <td>{{ lead.source }}</td>
                 <td>{{ lead.assignedTo?.fullName || '—' }}</td>
                 <td class="actions-col">
-                  <a [routerLink]="['/leads', lead.id]">Ver</a>
+                  <a class="view-btn" [routerLink]="['/leads', lead.id]">Ver</a>
                   @if (canDelete(lead)) {
                     <button
                       type="button"
@@ -154,9 +154,24 @@ import { LeadResponse } from '../../../shared/models/lead.model';
       .actions-col a + button {
         margin-left: var(--spacing-2);
       }
-      .danger {
-        background: var(--color-error);
+      .view-btn {
+        display: inline-block;
+        background: var(--color-primary);
         color: white;
+        border-radius: 0.375rem;
+        padding: 0.35rem 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .view-btn:hover {
+        background: var(--color-primary-hover);
+        text-decoration: none;
+      }
+      .danger {
+        background: transparent;
+        color: var(--color-error);
+        border: 1px solid var(--color-error);
       }
       .danger:hover:not(:disabled) {
         background: var(--color-error-bg);

@@ -23,6 +23,7 @@ import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -98,6 +99,14 @@ public class CalendarIntegration {
     @Column(name = "last_sync_error", columnDefinition = "text")
     private String lastSyncError;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "connection_status", nullable = false, length = 32)
+    private CalendarConnectionStatus connectionStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "conflict_calendar_ids", columnDefinition = "jsonb")
+    private List<String> conflictCalendarIds;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -116,6 +125,7 @@ public class CalendarIntegration {
         this.createdAt = now;
         this.updatedAt = now;
         if (this.syncEnabled == null) this.syncEnabled = true;
+        if (this.connectionStatus == null) this.connectionStatus = CalendarConnectionStatus.ACTIVE;
     }
 
     @PreUpdate

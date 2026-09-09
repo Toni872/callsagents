@@ -15,6 +15,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Google Calendar provider — Google OAuth + calendar.events.insert.
@@ -40,6 +42,7 @@ public class GoogleCalendarProvider implements CalendarProvider {
     private static final String REVOKE_URL = "https://oauth2.googleapis.com/revoke";
     private static final String EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/%s/events";
     private static final String EVENT_URL = "https://www.googleapis.com/calendar/v3/calendars/%s/events/%s";
+    private static final String CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList";
     private static final String USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo";
 
     /** Calendar API scope: read + write events to primary calendar. */
@@ -177,6 +180,53 @@ public class GoogleCalendarProvider implements CalendarProvider {
             log.info("Google refresh token revoked (best-effort)");
         } catch (Exception e) {
             log.warn("Google revoke failed (non-fatal): {}", e.getMessage());
+        }
+    }
+
+    /** Error phrase reused so token-rejection classification stays consistent across call sites. */
+    private static final String TOKEN_ERR_401 = "Google access token rejected (401)";
+
+    @Override
+    public List<CalendarInfo> listCalendars(String accessToken) {
+        if (!isConfigured()) throw new IllegalStateException("Google OAuth not configured");
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new IllegalArgumentException("Access token is empty — user must re-authenticate");
+        }
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(CALENDAR_LIST_URL))
+                .header("Authorization", "Bearer " + accessToken)
+                .timeout(Duration.ofSeconds(15))
+                .GET()
+                .build();
+
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 401) {
+                throw new RuntimeException(TOKEN_ERR_401 + " — user must re-authenticate");
+            }
+            if (resp.statusCode() == 403) {
+                throw new RuntimeException("Google calendar access denied (403) — insufficient permissions");
+            }
+            if (resp.statusCode() / 100 != 2) {
+                throw new RuntimeException("Google calendarList failed: HTTP "
+                    + resp.statusCode() + " — " + resp.body());
+            }
+            JsonNode json = mapper.readTree(resp.body());
+            List<CalendarInfo> out = new ArrayList<>();
+            JsonNode items = json.path("items");
+            if (items.isArray()) {
+                for (JsonNode item : items) {
+                    out.add(new CalendarInfo(
+                        item.path("id").asText(null),
+                        item.path("summary").asText(null),
+                        item.path("primary").asBoolean(false),
+                        item.path("accessRole").asText("freeBusyReader")
+                    ));
+                }
+            }
+            return out;
+        } catch (Exception e) {
+            throw new RuntimeException("Google listCalendars failed: " + e.getMessage(), e);
         }
     }
 

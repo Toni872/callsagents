@@ -3,6 +3,7 @@ package com.callsagents.backend.calendar.service;
 import com.callsagents.backend.appointments.entity.Appointment;
 import com.callsagents.backend.appointments.entity.AppointmentStatus;
 import com.callsagents.backend.appointments.repository.AppointmentRepository;
+import com.callsagents.backend.calendar.domain.CalendarConnectionStatus;
 import com.callsagents.backend.calendar.domain.CalendarIntegration;
 import com.callsagents.backend.calendar.domain.CalendarProviderType;
 import com.callsagents.backend.calendar.domain.CalendarSyncStatus;
@@ -81,6 +82,14 @@ public class CalendarSyncService {
         }
         var integration = integrationOpt.get();
 
+        if (!isConnectionHealthy(integration)) {
+            log.debug("syncAppointment: skipping — connection {} for integration {}",
+                integration.getConnectionStatus(), integration.getId());
+            markFailure(integration, "Sync skipped: connection " + integration.getConnectionStatus()
+                + " — user must re-authorize on the settings page");
+            return;
+        }
+
         var provider = providerOf(integration.getProvider());
         if (!provider.isConfigured()) {
             log.warn("syncAppointment: provider {} not configured in env", provider.provider());
@@ -125,6 +134,14 @@ public class CalendarSyncService {
         }
         var integration = integrationOpt.get();
 
+        if (!isConnectionHealthy(integration)) {
+            log.debug("updateAppointment: skipping — connection {} for integration {}",
+                integration.getConnectionStatus(), integration.getId());
+            markFailure(integration, "Sync skipped: connection " + integration.getConnectionStatus()
+                + " — user must re-authorize on the settings page");
+            return;
+        }
+
         var provider = providerOf(integration.getProvider());
         if (!provider.isConfigured()) {
             log.warn("updateAppointment: provider {} not configured in env", provider.provider());
@@ -167,6 +184,13 @@ public class CalendarSyncService {
             return;
         }
         var integration = integrationOpt.get();
+        if (!isConnectionHealthy(integration)) {
+            log.debug("deleteAppointmentEvent: skipping — connection {} for integration {}",
+                integration.getConnectionStatus(), integration.getId());
+            markFailure(integration, "Sync skipped: connection " + integration.getConnectionStatus()
+                + " — user must re-authorize on the settings page");
+            return;
+        }
         try {
             runWithRefresh(integration,
                 t -> {
@@ -219,6 +243,16 @@ public class CalendarSyncService {
     // -------- token lifecycle --------
 
     /**
+     * Public entry point to obtain a usable (decrypted, refreshed-if-expired)
+     * access token for an integration. Used by callers that need direct provider
+     * access (e.g. CalendarController → listCalendars) without going through the
+     * appointment sync flow.
+     */
+    public String usableAccessToken(CalendarIntegration integration) {
+        return usableToken(integration);
+    }
+
+    /**
      * Decrypt the access token, refreshing it when it is expired or about to
      * expire (5-min safety margin). Null expiry means "unknown" → use as-is.
      */
@@ -235,19 +269,28 @@ public class CalendarSyncService {
     private String refresh(CalendarIntegration integration) {
         String refreshToken = encryption.decrypt(integration.getRefreshTokenEncrypted());
         if (refreshToken == null || refreshToken.isBlank()) {
+            integration.setConnectionStatus(CalendarConnectionStatus.NEEDS_REAUTH);
+            integrationRepo.save(integration);
             throw new IllegalStateException("No refresh token stored — user must re-authenticate");
         }
         var provider = providerOf(integration.getProvider());
-        var refreshed = provider.refreshAccessToken(refreshToken);
-        integration.setAccessTokenEncrypted(encryption.encrypt(refreshed.accessToken()));
-        integration.setAccessTokenExpiresAt(refreshed.accessTokenExpiresAt());
-        if (refreshed.refreshToken() != null) {
-            integration.setRefreshTokenEncrypted(encryption.encrypt(refreshed.refreshToken()));
+        try {
+            var refreshed = provider.refreshAccessToken(refreshToken);
+            integration.setAccessTokenEncrypted(encryption.encrypt(refreshed.accessToken()));
+            integration.setAccessTokenExpiresAt(refreshed.accessTokenExpiresAt());
+            if (refreshed.refreshToken() != null) {
+                integration.setRefreshTokenEncrypted(encryption.encrypt(refreshed.refreshToken()));
+            }
+            integration.setConnectionStatus(CalendarConnectionStatus.ACTIVE);
+            integrationRepo.save(integration);
+            log.info("Refreshed access token for integration {} (provider {})",
+                integration.getId(), integration.getProvider());
+            return refreshed.accessToken();
+        } catch (RuntimeException e) {
+            applyProviderErrorStatus(integration, e.getMessage());
+            integrationRepo.save(integration);
+            throw e;
         }
-        integrationRepo.save(integration);
-        log.info("Refreshed access token for integration {} (provider {})",
-            integration.getId(), integration.getProvider());
-        return refreshed.accessToken();
     }
 
     /**
@@ -291,6 +334,7 @@ public class CalendarSyncService {
         integration.setLastSyncAt(Instant.now());
         integration.setLastSyncStatus(CalendarSyncStatus.SYNCED);
         integration.setLastSyncError(null);
+        integration.setConnectionStatus(CalendarConnectionStatus.ACTIVE);
         integrationRepo.save(integration);
     }
 
@@ -300,6 +344,28 @@ public class CalendarSyncService {
         // Cap error string to fit in DB column
         integration.setLastSyncError(error != null && error.length() > 500
             ? error.substring(0, 500) : error);
+        applyProviderErrorStatus(integration, error);
         integrationRepo.save(integration);
+    }
+
+    /** True when the token is believed valid — sync should be attempted. */
+    private boolean isConnectionHealthy(CalendarIntegration integration) {
+        CalendarConnectionStatus status = integration.getConnectionStatus();
+        return status == null || status == CalendarConnectionStatus.ACTIVE;
+    }
+
+    /**
+     * Classify a provider/token error into a connection health state.
+     * 401 → NEEDS_REAUTH; 403 → INSUFFICIENT_PERMISSIONS; otherwise leave as-is.
+     */
+    private void applyProviderErrorStatus(CalendarIntegration integration, String error) {
+        if (error == null) return;
+        String msg = error.toLowerCase();
+        if (msg.contains("403") || msg.contains("insufficient permissions")) {
+            integration.setConnectionStatus(CalendarConnectionStatus.INSUFFICIENT_PERMISSIONS);
+        } else if (msg.contains("401") || msg.contains("rejected")
+            || msg.contains("must re-authenticate") || msg.contains("no refresh token")) {
+            integration.setConnectionStatus(CalendarConnectionStatus.NEEDS_REAUTH);
+        }
     }
 }

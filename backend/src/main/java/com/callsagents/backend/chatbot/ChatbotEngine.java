@@ -391,10 +391,12 @@ public class ChatbotEngine {
                 log.warn("Skip WhatsApp lead creation for {}: no business profile resolved (created_by NOT NULL)", phoneE164);
                 return false;
             }
-            long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
-            if (totalLeads >= TRIAL_LEAD_LIMIT) {
-                log.warn("WhatsApp lead limit reached ({}) — skipping lead creation for phone {}", TRIAL_LEAD_LIMIT, phoneE164);
-                return false;
+            if (!businessService.isAdminOwner(businessId)) {
+                long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
+                if (totalLeads >= TRIAL_LEAD_LIMIT) {
+                    log.warn("WhatsApp lead limit reached ({}) — skipping lead creation for phone {}", TRIAL_LEAD_LIMIT, phoneE164);
+                    return false;
+                }
             }
             Lead lead = Lead.builder()
                 .firstName(firstName)
@@ -416,10 +418,13 @@ public class ChatbotEngine {
 
     private boolean saveWebLead(String sessionId, String firstName, String lastName,
                                 String email, String service, UUID businessId) {
-        long totalLeads = businessId == null ? 0 : leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
-        if (businessId == null || totalLeads >= TRIAL_LEAD_LIMIT) {
-            log.warn("Lead limit reached ({}) — skipping web lead creation for session {}", TRIAL_LEAD_LIMIT, sessionId);
-            return false;
+        boolean adminOwner = businessId != null && businessService.isAdminOwner(businessId);
+        if (!adminOwner) {
+            long totalLeads = businessId == null ? 0 : leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
+            if (businessId == null || totalLeads >= TRIAL_LEAD_LIMIT) {
+                log.warn("Lead limit reached ({}) — skipping web lead creation for session {}", TRIAL_LEAD_LIMIT, sessionId);
+                return false;
+            }
         }
 
         String safeService = service == null || service.isBlank() ? "web-chat" : service;

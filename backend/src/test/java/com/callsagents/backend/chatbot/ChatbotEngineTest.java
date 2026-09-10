@@ -340,6 +340,21 @@ class ChatbotEngineTest {
     }
 
     @Test
+    @DisplayName("WEB admin owner can create leads beyond the trial limit")
+    void web_adminBypassesTrialLimit() {
+        when(businessService.isAdminOwner(BUSINESS_ID)).thenReturn(true);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
+
+        ChatTurn turn = engine.process("session-web-admin", "Me llamo Pedro y mi email es pedro@test.com",
+            BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.leadCaptured()).isTrue();
+        verify(leadRepository).save(argThat(leadArg ->
+            "pedro@test.com".equals(((Lead) leadArg).getEmail())));
+        verify(leadRepository, never()).countByCreatedByAndDeletedAtIsNull(any());
+    }
+
+    @Test
     @DisplayName("state context includes name, email, and captured status")
     void stateContext_includesAll() {
         when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
@@ -463,6 +478,19 @@ class ChatbotEngineTest {
         engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com", BUSINESS_ID, Channel.WHATSAPP);
 
         verify(leadRepository).save(argThat(leadArg -> "carlos@test.com".equals(((Lead) leadArg).getEmail())));
+    }
+
+    @Test
+    @DisplayName("WhatsApp admin owner can create new leads beyond the trial limit")
+    void whatsapp_adminBypassesTrialLimit() {
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
+        when(businessService.isAdminOwner(BUSINESS_ID)).thenReturn(true);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Perfecto!");
+
+        engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com", BUSINESS_ID, Channel.WHATSAPP);
+
+        verify(leadRepository).save(argThat(leadArg -> "carlos@test.com".equals(((Lead) leadArg).getEmail())));
+        verify(leadRepository, never()).countByCreatedByAndDeletedAtIsNull(any());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.callsagents.backend.business.service;
 
 import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.business.dto.BusinessProfileRequest;
 import com.callsagents.backend.business.dto.BusinessProfileResponse;
@@ -94,6 +95,21 @@ public class BusinessService {
         return profileRepository.findById(businessOrUserId)
             .map(profile -> profile.getUser().getId())
             .orElse(null);
+    }
+
+    /**
+     * Whether the tenant owner for a business profile id or user id has the
+     * ADMIN role. Used to exempt admins from trial limits.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAdminOwner(UUID businessOrUserId) {
+        UUID ownerId = resolveOwnerUserId(businessOrUserId);
+        if (ownerId == null) {
+            return false;
+        }
+        return userRepository.findById(ownerId)
+            .map(user -> user.getRole() == UserRole.ADMIN)
+            .orElse(false);
     }
 
     @Transactional(readOnly = true)

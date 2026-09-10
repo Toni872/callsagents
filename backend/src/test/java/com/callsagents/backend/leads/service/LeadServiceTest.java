@@ -182,6 +182,51 @@ class LeadServiceTest {
     }
 
     @Test
+    void createAllowsAdminToExceedTrialLimit() {
+        User admin = User.builder()
+            .id(currentUserId)
+            .email("admin@example.com")
+            .fullName("Admin User")
+            .role(UserRole.ADMIN)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(admin));
+        when(leadRepository.save(any(Lead.class))).thenAnswer(inv -> {
+            Lead arg = inv.getArgument(0);
+            arg.setId(UUID.randomUUID());
+            return arg;
+        });
+
+        CreateLeadRequest req = new CreateLeadRequest("Ana", "Lopez", "ana@x.com", null, null, "MANUAL", null, null);
+
+        LeadResponse response = leadService.create(req, currentUserId);
+
+        assertNotNull(response.id());
+        assertEquals("Ana", response.firstName());
+        verify(leadRepository, never()).countByCreatedByAndDeletedAtIsNull(any());
+    }
+
+    @Test
+    void createBlocksNonAdminAtTrialLimit() {
+        User agent = User.builder()
+            .id(currentUserId)
+            .email("agent@example.com")
+            .fullName("Agent User")
+            .role(UserRole.AGENT)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(agent));
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId)).thenReturn(50L);
+
+        CreateLeadRequest req = new CreateLeadRequest("Ana", "Lopez", "ana@x.com", null, null, "MANUAL", null, null);
+
+        assertThrows(BadRequestException.class, () -> leadService.create(req, currentUserId));
+        verify(leadRepository, never()).save(any());
+    }
+
+    @Test
     void updateThrowsNotFoundWhenMissing() {
         UUID id = UUID.randomUUID();
         UpdateLeadRequest req = new UpdateLeadRequest("Other", null, null, null, null, null, null, null, null, null);

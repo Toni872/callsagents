@@ -84,13 +84,15 @@ public class LeadService {
 
     @Transactional
     public LeadResponse create(CreateLeadRequest req, UUID currentUserId) {
-        // Trial lead limit check (per tenant)
-        long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId);
-        if (totalLeads >= TRIAL_LEAD_LIMIT) {
-            throw new BadRequestException(
-                "Límite de leads alcanzado (" + TRIAL_LEAD_LIMIT + "). " +
-                "Contacta soporte para ampliar tu plan."
-            );
+        // Trial lead limit check (per tenant) — admins are exempt.
+        if (!isAdmin(currentUserId)) {
+            long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId);
+            if (totalLeads >= TRIAL_LEAD_LIMIT) {
+                throw new BadRequestException(
+                    "Límite de leads alcanzado (" + TRIAL_LEAD_LIMIT + "). " +
+                    "Contacta soporte para ampliar tu plan."
+                );
+            }
         }
 
         validateContact(req.email(), req.phone());
@@ -204,6 +206,12 @@ public class LeadService {
             throw new ForbiddenException("You can only delete your own leads");
         }
         return lead;
+    }
+
+    private boolean isAdmin(UUID userId) {
+        return userRepository.findById(userId)
+            .map(user -> user.getRole() == UserRole.ADMIN)
+            .orElse(false);
     }
 
     @Transactional

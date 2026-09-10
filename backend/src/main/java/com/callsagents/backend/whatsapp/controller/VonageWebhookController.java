@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -88,6 +89,15 @@ public class VonageWebhookController {
         String text = extractText(payload, messageType);
         log.info("Vonage extracted text: '{}'", text);
 
+        // Non-text message (audio, image, video, etc.): respond with a friendly
+        // "text only" notice without passing empty content to the AI engine.
+        if (text == null) {
+            vonageMessageService.sendText(from,
+                "He recibido tu mensaje multimedia, pero por ahora solo puedo leer mensajes de texto. "
+                    + "Escríbeme tu consulta y te ayudo enseguida.");
+            return ResponseEntity.ok().build();
+        }
+
         // Try AI chatbot first — resolve business profile from "to" number
         UUID businessId = null;
         if (!to.isBlank()) {
@@ -111,6 +121,8 @@ public class VonageWebhookController {
 
     /**
      * Extract text content from various message types.
+     * Returns null for non-text message types (audio, image, video, document,
+     * location, sticker) so the controller can respond with a friendly notice.
      */
     @SuppressWarnings("unchecked")
     private String extractText(Map<String, Object> payload, String messageType) {
@@ -153,6 +165,14 @@ public class VonageWebhookController {
                     return id;
                 }
             }
+        }
+
+        // Non-text types (audio, image, video, document, location, sticker):
+        // return null so the controller sends a friendly "text only" notice.
+        if (messageType != null && !messageType.isBlank()
+                && !Set.of("text", "reply", "interactive").contains(messageType)) {
+            log.info("Non-text message type received: {}", messageType);
+            return null;
         }
 
         return (String) payload.getOrDefault("text", "");

@@ -41,6 +41,17 @@ public class EscalationScheduledTask {
         synchronized (lock) {
             try {
                 Instant now = Instant.now();
+
+                // 1) Scheduled WhatsApp follow-ups whose delay elapsed: send the
+                //    message and open the WAITING_REPLY window (if the lead has
+                //    not already replied, handleReply resolves the escalation).
+                List<Escalation> followUpsDue = escalationRepository
+                    .findByStageAndWaitingUntilBefore(EscalationStage.FOLLOWUP_SENT, now);
+                for (Escalation escalation : followUpsDue) {
+                    escalationService.sendFollowupAndAwaitReply(escalation.getId());
+                }
+
+                // 2) WAITING_REPLY escalations past their window: voice fallback.
                 List<Escalation> due = escalationRepository
                     .findByStageAndWaitingUntilBefore(EscalationStage.WAITING_REPLY, now);
                 if (due.isEmpty()) {

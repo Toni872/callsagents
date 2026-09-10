@@ -57,6 +57,7 @@ public class EscalationService {
     );
 
     private static final int DEFAULT_REPLY_TIMEOUT_MINUTES = 30;
+    private static final int DEFAULT_FOLLOWUP_DELAY_MINUTES = 60;
     private static final String DEFAULT_FOLLOWUP_MESSAGE =
         "Hola {name}, vi que estuviste consultando sobre nuestros servicios. "
             + "¿Te gustaría que agendemos una llamada rápida para contarte más?";
@@ -103,7 +104,6 @@ public class EscalationService {
             }
 
             BusinessProfile profile = businessService.getProfileEntityByUserId(userId);
-            int timeoutMinutes = replyTimeoutMinutesOf(profile);
             boolean enabled = profile == null || Boolean.TRUE.equals(profile.getEscalationEnabled());
 
             Escalation escalation = Escalation.builder()
@@ -134,22 +134,16 @@ public class EscalationService {
                 return;
             }
 
-            String message = buildFollowupMessage(profile, lead.getFirstName());
-            boolean sent = vonageMessageService.sendText(lead.getPhone(), message);
-            if (!sent) {
-                // Follow-up did not go out — do NOT arm the wait/voice escalation
-                // on a message the lead may never have received.
-                repository.save(escalation);
-                log.warn("WhatsApp followup send failed; escalation stays QUALIFIED leadId={}", leadId);
-                return;
-            }
-
+            // The follow-up is NOT sent here: it is scheduled with a delay so the
+            // lead's immediate AI reply (already being composed by the chatbot)
+            // goes out first — no double message. The scheduler sends the
+            // follow-up only if the lead has not replied during the delay.
             Instant now = Instant.now();
             escalation.setStage(EscalationStage.FOLLOWUP_SENT);
-            escalation.setFollowupSentAt(now);
-            escalation.setWaitingUntil(now.plus(Duration.ofMinutes(timeoutMinutes)));
+            escalation.setWaitingUntil(now.plus(Duration.ofMinutes(followupDelayMinutesOf(profile))));
             repository.save(escalation);
-            log.info("Escalation qualified + followup sent leadId={} timeoutMinutes={}", leadId, timeoutMinutes);
+            log.info("Escalation qualified; follow-up scheduled leadId={} delayMinutes={}", leadId,
+                followupDelayMinutesOf(profile));
         } catch (Exception e) {
             log.error("Escalation qualify failed: leadId={} userId={}", leadId, userId, e);
         }
@@ -175,6 +169,55 @@ public class EscalationService {
             log.info("Escalation RESOLVED on lead reply: leadId={} escalationId={}", leadId, escalation.getId());
         } catch (Exception e) {
             log.error("Escalation handleReply failed: leadId={}", leadId, e);
+        }
+    }
+
+    /**
+     * Called by the scheduler once the scheduled follow-up delay has elapsed.
+     * Sends the WhatsApp follow-up message (if the lead has not replied) and
+     * starts the WAITING_REPLY window that arms the voice-call fallback.
+     * Idempotent: only acts on FOLLOWUP_SENT escalations.
+     */
+    @Transactional
+    public void sendFollowupAndAwaitReply(UUID escalationId) {
+        try {
+            Escalation escalation = repository.findById(escalationId).orElse(null);
+            if (escalation == null) {
+                log.warn("Escalation follow-up skipped: not found escalationId={}", escalationId);
+                return;
+            }
+            if (escalation.getStage() != EscalationStage.FOLLOWUP_SENT) {
+                log.info("Escalation not FOLLOWUP_SENT; skip follow-up stage={} escalationId={}",
+                    escalation.getStage(), escalationId);
+                return;
+            }
+            Lead lead = escalation.getLead();
+            if (lead == null || isBlank(lead.getPhone())) {
+                escalation.setStage(EscalationStage.ABANDONED);
+                repository.save(escalation);
+                log.warn("Escalation lead not messagable; ABANDONED escalationId={}", escalationId);
+                return;
+            }
+            BusinessProfile profile = businessService.getProfileEntityByUserId(escalation.getUserId());
+            String message = buildFollowupMessage(profile, lead.getFirstName());
+            boolean sent = vonageMessageService.sendText(lead.getPhone(), message);
+            Instant now = Instant.now();
+            if (!sent) {
+                // Message did not go out — do not arm the voice escalation on a
+                // follow-up the lead may never have received.
+                escalation.setStage(EscalationStage.ABANDONED);
+                escalation.setVoiceOutcome("FOLLOWUP_SEND_FAILED");
+                repository.save(escalation);
+                log.warn("WhatsApp followup send failed; escalation ABANDONED escalationId={}", escalationId);
+                return;
+            }
+            escalation.setStage(EscalationStage.WAITING_REPLY);
+            escalation.setFollowupSentAt(now);
+            escalation.setWaitingUntil(now.plus(Duration.ofMinutes(replyTimeoutMinutesOf(profile))));
+            repository.save(escalation);
+            log.info("Escalation follow-up sent; waiting for reply escalationId={}", escalationId);
+        } catch (Exception e) {
+            log.error("Escalation sendFollowupAndAwaitReply failed: escalationId={}", escalationId, e);
         }
     }
 
@@ -296,6 +339,12 @@ public class EscalationService {
             return profile.getReplyTimeoutMinutes();
         }
         return DEFAULT_REPLY_TIMEOUT_MINUTES;
+    }
+
+    private static int followupDelayMinutesOf(BusinessProfile profile) {
+        // No per-business config field exists yet; the fixed delay keeps the
+        // follow-up from colliding with the AI reply without a DB migration.
+        return DEFAULT_FOLLOWUP_DELAY_MINUTES;
     }
 
     private static String buildFollowupMessage(BusinessProfile profile, String firstName) {

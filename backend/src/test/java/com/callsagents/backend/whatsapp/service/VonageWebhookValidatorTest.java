@@ -142,10 +142,10 @@ class VonageWebhookValidatorTest {
     }
 
     @Test
-    @DisplayName("Vonage: fails open when the secret is not configured")
-    void failsOpenWhenSecretNotConfigured() {
+    @DisplayName("Vonage: fails closed when the secret is not configured")
+    void failsClosedWhenSecretNotConfigured() {
         VonageWebhookValidator unconfigured = new VonageWebhookValidator("");
-        assertThat(unconfigured.verify(RAW_BODY, null)).isTrue();
-        assertThat(unconfigured.verify(RAW_BODY, "Bearer garbage")).isTrue();
+        assertThat(unconfigured.verify(RAW_BODY, null)).isFalse();
+        assertThat(unconfigured.verify(RAW_BODY, "Bearer garbage")).isFalse();
     }
 }

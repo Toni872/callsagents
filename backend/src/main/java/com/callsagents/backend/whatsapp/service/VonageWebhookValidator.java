@@ -37,8 +37,9 @@ import java.util.HexFormat;
  *   <li>compare {@code payload_hash} to SHA-256 of the raw body</li>
  * </ol>
  *
- * <p>Verification is FAIL-OPEN when no secret is configured (so dev/prod keep
- * working before the secret is set), and FAIL-CLOSED once the secret is set.
+ * <p>Verification is FAIL-CLOSED when no secret is configured (public endpoint
+ * is protected against spoofed requests), and continues FAIL-CLOSED once the
+ * secret is set.
  */
 @Component
 public class VonageWebhookValidator {
@@ -58,13 +59,13 @@ public class VonageWebhookValidator {
     /**
      * Verifies the {@code Authorization: Bearer <JWT>} header against the raw
      * request body. When the secret is not configured, logs a warning and
-     * accepts (fail-open).
+     * rejects (fail-closed) to prevent abuse of the public endpoint.
      */
     public boolean verify(byte[] rawBody, String authorizationHeader) {
         if (signatureSecret == null || signatureSecret.isBlank()) {
-            log.warn("VONAGE_SIGNATURE_SECRET is not configured — accepting Vonage webhook without "
-                + "signature verification (fail open). Set the secret to enable fail-closed verification.");
-            return true;
+            log.warn("VONAGE_SIGNATURE_SECRET is not configured — rejecting Vonage webhook "
+                + "(fail closed). Set the secret to enable signature verification.");
+            return false;
         }
         if (rawBody == null || authorizationHeader == null || authorizationHeader.isBlank()) {
             return false;

@@ -68,7 +68,7 @@ class ChatbotEngineTest {
     void greeting_freeTextNoButtons() {
         ChatTurn turn = engine.greeting(KEY, BUSINESS_ID);
 
-        assertThat(turn.reply()).contains("¡Hola! Soy Naiara de Script9.");
+        assertThat(turn.reply()).contains("¡Hola! Soy Naiara, tu asistente de IA de Script9.");
         assertThat(turn.buttons()).isNull();
         assertThat(stepOf(KEY)).isEqualTo("initial");
         assertThat(turn.leadCaptured()).isFalse();
@@ -87,7 +87,7 @@ class ChatbotEngineTest {
 
         ChatTurn turn = engine.greeting(KEY, BUSINESS_ID);
 
-        assertThat(turn.reply()).contains("Soy Luca de Acme Corp");
+        assertThat(turn.reply()).contains("Soy Luca, tu asistente de IA de Acme Corp.");
         assertThat(turn.buttons()).isNull();
     }
 
@@ -226,13 +226,15 @@ class ChatbotEngineTest {
     }
 
     @Test
-    @DisplayName("null Groq response -> friendly technical error, not empty bubble")
+    @DisplayName("null Groq response -> friendly retry message, no internal jargon")
     void nullGroqResponse_friendlyError() {
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn(null);
 
         ChatTurn turn = engine.process(KEY, "test", BUSINESS_ID, Channel.WEB);
 
-        assertThat(turn.reply()).contains("problema técnico");
+        assertThat(turn.reply()).contains("no he podido procesar");
+        assertThat(turn.reply()).doesNotContain("problema técnico");
+        assertThat(turn.reply()).doesNotContain("callsagents-frontend-production");
         assertThat(turn.buttons()).isNull();
     }
 
@@ -386,15 +388,16 @@ class ChatbotEngineTest {
     }
 
     @Test
-    @DisplayName("empty Groq response + affirmative with email -> close with demo link")
-    void emptyGroq_affirmativeWithEmail_closesWithDemo() {
+    @DisplayName("empty Groq response + affirmative with email -> confirm data, no demo upsell in fallback")
+    void emptyGroq_affirmativeWithEmail_confirmsData_noDemo() {
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
 
         ChatTurn turn = engine.process(KEY, "Vale, asumo que puede funcionar. Mi correo es juan@empresa.com",
             BUSINESS_ID, Channel.WHATSAPP);
 
-        assertThat(turn.reply()).contains("He apuntado tu correo (juan@empresa.com)");
-        assertThat(turn.reply()).contains("callsagents-frontend-production.up.railway.app/landing");
+        assertThat(turn.reply()).contains("He anotado tu correo (juan@empresa.com)");
+        assertThat(turn.reply()).doesNotContain("demo");
+        assertThat(turn.reply()).doesNotContain("railway");
         assertThat(turn.reply()).doesNotContain("repetirme");
         assertThat(turn.leadCaptured()).isTrue();
     }
@@ -434,5 +437,107 @@ class ChatbotEngineTest {
             return "juan@test.com".equals(lead.getEmail())
                 && !"Vale".equals(lead.getFirstName());
         }));
+    }
+
+    @Test
+    @DisplayName("WhatsApp lead creation respects the trial limit")
+    void whatsapp_trialLimitBlocksCreation() {
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(BUSINESS_ID)).thenReturn(50L);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
+
+        ChatTurn turn = engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com",
+            BUSINESS_ID, Channel.WHATSAPP);
+
+        assertThat(turn.leadCaptured()).isFalse();
+        verify(leadRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("WhatsApp lead creation under the trial limit still succeeds")
+    void whatsapp_trialLimitBelow_savesLead() {
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(BUSINESS_ID)).thenReturn(49L);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Perfecto!");
+
+        engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com", BUSINESS_ID, Channel.WHATSAPP);
+
+        verify(leadRepository).save(argThat(leadArg -> "carlos@test.com".equals(((Lead) leadArg).getEmail())));
+    }
+
+    @Test
+    @DisplayName("WhatsApp lead update is NOT blocked by the trial limit")
+    void whatsapp_trialLimitDoesNotBlockUpdates() {
+        Lead existingLead = new Lead();
+        ReflectionTestUtils.setField(existingLead, "id", UUID.randomUUID());
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(existingLead));
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
+
+        engine.process(KEY, "Mi correo ahora es nuevo@test.com", BUSINESS_ID, Channel.WHATSAPP);
+
+        verify(leadRepository).save(existingLead);
+    }
+
+    @Test
+    @DisplayName("WhatsApp: explicit human handoff triggers escalation once even without email")
+    void whatsapp_humanHandoff_triggersEscalation() {
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entendido, lo dejo anotado.");
+
+        engine.process(KEY, "Quiero hablar con una persona", BUSINESS_ID, Channel.WHATSAPP);
+        engine.process(KEY, "quiero asistencia de un agente humano", BUSINESS_ID, Channel.WHATSAPP);
+
+        verify(escalationService, times(1)).qualify(any(), any());
+    }
+
+    @Test
+    @DisplayName("WhatsApp: handoff requests do not fire for the web channel")
+    void web_humanHandoff_noEscalation() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Entiendo que quieres un humano.");
+
+        engine.process(KEY, "Quiero hablar con una persona", BUSINESS_ID, Channel.WEB);
+
+        verify(escalationService, never()).qualify(any(), any());
+    }
+
+    @Test
+    @DisplayName("isAffirmative uses word boundaries: 'sigo' is NOT affirmative")
+    void emptyGroq_wordBoundary_sigoIsNotAffirmative() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "sigo", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).doesNotContain("¡Genial!");
+        assertThat(turn.reply()).contains("repetirme");
+    }
+
+    @Test
+    @DisplayName("isAffirmative uses word boundaries: 'silla' is NOT affirmative")
+    void emptyGroq_wordBoundary_sillaIsNotAffirmative() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "La silla se ve bien", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).doesNotContain("¡Genial!");
+    }
+
+    @Test
+    @DisplayName("isAffirmative still matches a standalone 'si'")
+    void emptyGroq_wordBoundary_standaloneSiIsAffirmative() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "si", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).contains("¡Genial!");
+    }
+
+    @Test
+    @DisplayName("isAffirmative matches accented standalone 'sí' (Unicode word boundary)")
+    void emptyGroq_wordBoundary_accentedSiIsAffirmative() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("");
+
+        ChatTurn turn = engine.process(KEY, "Sí", BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.reply()).contains("¡Genial!");
     }
 }

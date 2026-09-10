@@ -138,14 +138,15 @@ class WhatsAppAiChatbotServiceTest {
     }
 
     @Test
-    @DisplayName("null Groq response -> technical error message")
+    @DisplayName("null Groq response -> friendly retry message, no mention of technical problem")
     void nullGroqResponse_technicalMessage() {
         expectNoExistingLead();
         when(groqService.chat(anyString(), anyList(), anyString())).thenReturn(null);
 
         String result = service.processMessage(PHONE, "Me llamo Antonio", BUSINESS_ID);
 
-        assertThat(result).contains("problema técnico");
+        assertThat(result).contains("no he podido procesar tu mensaje");
+        assertThat(result).doesNotContain("problema técnico");
         verify(leadRepository, never()).save(any(Lead.class));
     }
 

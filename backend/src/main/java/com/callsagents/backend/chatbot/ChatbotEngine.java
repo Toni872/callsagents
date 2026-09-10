@@ -68,6 +68,16 @@ public class ChatbotEngine {
         java.util.regex.Pattern.compile("(?:mi nombre es|me llamo|soy)\\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
+    private static final java.util.regex.Pattern HUMAN_HANDOFF_PATTERN =
+        java.util.regex.Pattern.compile(
+            "\\b(?:hablar con (?:una )?(?:persona|humano|gente|alguien|asesor|agente)|" +
+            "(?:persona|humano|asesor|agente) (?:real|humano)|" +
+            "atenci[oó]n humana|" +
+            "quiero (?:hablar|contactar) con|" +
+            "\\bhumano\\b)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE
+                | java.util.regex.Pattern.UNICODE_CHARACTER_CLASS);
+
     public ChatbotEngine(GroqService groqService, LeadRepository leadRepository,
                          BusinessService businessService, BusinessPromptComposer promptComposer,
                          EscalationService escalationService) {
@@ -147,7 +157,8 @@ public class ChatbotEngine {
         }
         if (aiResponse == null) {
             log.warn("Groq returned null for key={}", sessionKey);
-            return ChatTurn.text("Disculpa, tuve un problema técnico. ¿Podrías repetir tu mensaje?");
+            return ChatTurn.text("Perdona, no he podido procesar tu mensaje en este momento. "
+                + "¿Podrías intentarlo de nuevo?");
         }
 
         LeadExtractionResult extraction = extractLead(sessionKey, text, aiResponse, businessId, channel);
@@ -176,6 +187,16 @@ public class ChatbotEngine {
             }
         }
 
+        // Human handoff (WhatsApp only): when the user explicitly asks for a
+        // human agent, trigger escalation even without email capture so the
+        // business is notified. Only fires once per session.
+        if (channel == Channel.WHATSAPP && isHumanHandoffIntent(text)) {
+            if (!hasEscalationFired(sessionKey)) {
+                triggerEscalation(sessionKey, businessId);
+                leadData.get(sessionKey, k -> new HashMap<>()).put("escalationFired", "true");
+            }
+        }
+
         log.info("AI chatbot [{}]: step={} input='{}' response='{}'", sessionKey, step, text, cleanResponse);
         return ChatTurn.text(cleanResponse, extraction.leadCaptured());
     }
@@ -195,24 +216,21 @@ public class ChatbotEngine {
         return data != null && "true".equals(data.get("escalationFired"));
     }
 
-    private static boolean isAffirmative(String text) {
-        String lower = text.toLowerCase();
-        return containsAny(lower, "si", "sí", "confirmo", "adelante", "dale", "agenda", "vale", "ok", "claro", "perfecto");
-    }
+    private static final java.util.regex.Pattern AFFIRMATIVE_PATTERN = java.util.regex.Pattern.compile(
+        "\\b(?:si|sí|confirmo|adelante|dale|agenda|vale|ok|claro|perfecto)\\b",
+        java.util.regex.Pattern.CASE_INSENSITIVE
+            | java.util.regex.Pattern.UNICODE_CHARACTER_CLASS);
 
-    private static boolean containsAny(String text, String... terms) {
-        for (String term : terms) {
-            if (text.contains(term)) {
-                return true;
-            }
-        }
-        return false;
+    private static boolean isAffirmative(String text) {
+        String lower = text == null ? "" : text.toLowerCase();
+        return AFFIRMATIVE_PATTERN.matcher(lower).find();
     }
 
     /**
      * Deterministic reply used when Groq returns an empty response. Never claims
      * "I didn't understand" when contact data was actually captured — it confirms
-     * the captured data and hands over the real next step.
+     * the captured data and hands over the real next step. No demo link is pushed
+     * here: technical/empty fallbacks must not force the sale.
      */
     private String buildFallbackReply(String userText, Map<String, String> data) {
         String lower = (userText == null ? "" : userText).toLowerCase();
@@ -222,12 +240,11 @@ public class ChatbotEngine {
             String name = data.get("name") == null ? "" : data.get("name");
             String salutation = name.isBlank() ? "¡Gracias!" : "¡Gracias, " + name + "!";
             if (isAffirmative(lower)) {
-                return salutation + " He apuntado tu correo (" + data.get("email") + ")."
-                    + " Te paso el enlace para probar la demo gratuita de Callsagents:"
-                    + " https://callsagents-frontend-production.up.railway.app/landing";
+                return salutation + " He anotado tu correo (" + data.get("email") + ")."
+                    + " En breve seguimos desde aquí.";
             }
             return salutation + " He apuntado tu correo (" + data.get("email") + ")."
-                + " ¿Quieres que te pase el enlace para probar la demo gratuita de Callsagents?";
+                + " ¿En qué más puedo ayudarte?";
         }
 
         if (isAffirmative(lower)) {
@@ -237,6 +254,11 @@ public class ChatbotEngine {
             return "Entendido, no hay problema. Si necesitas algo más, aquí estoy.";
         }
         return "¿Podrías repetirme eso, por favor? No te he entendido bien.";
+    }
+
+    private static boolean isHumanHandoffIntent(String text) {
+        if (text == null) return false;
+        return HUMAN_HANDOFF_PATTERN.matcher(text).find();
     }
 
     private static boolean isDecline(String text) {
@@ -369,6 +391,11 @@ public class ChatbotEngine {
                 log.warn("Skip WhatsApp lead creation for {}: no business profile resolved (created_by NOT NULL)", phoneE164);
                 return false;
             }
+            long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
+            if (totalLeads >= TRIAL_LEAD_LIMIT) {
+                log.warn("WhatsApp lead limit reached ({}) — skipping lead creation for phone {}", TRIAL_LEAD_LIMIT, phoneE164);
+                return false;
+            }
             Lead lead = Lead.builder()
                 .firstName(firstName)
                 .lastName(lastName)
@@ -415,7 +442,8 @@ public class ChatbotEngine {
 
     /**
      * Trigger escalation after a lead with email has been captured and the user
-     * confirms affirmatively. WhatsApp only. Fire-and-forget.
+     * confirms affirmatively, or when the user explicitly asks for a human.
+     * WhatsApp only. Fire-and-forget.
      */
     private void triggerEscalation(String phone, UUID businessId) {
         if (businessId == null) {
@@ -424,9 +452,26 @@ public class ChatbotEngine {
         }
         try {
             String phoneE164 = phone.startsWith("+") ? phone : "+" + phone;
-            leadRepository.findByPhoneAndDeletedAtIsNull(phoneE164).ifPresent(lead ->
-                escalationService.qualify(lead.getId(), businessId)
-            );
+            Optional<Lead> existing = leadRepository.findByPhoneAndDeletedAtIsNull(phoneE164);
+            if (existing.isPresent()) {
+                escalationService.qualify(existing.get().getId(), businessId);
+                return;
+            }
+            // No lead captured yet (e.g. handoff requested before email): create a
+            // minimal phone-only lead so the escalation pipeline has a target and
+            // the business is notified.
+            Lead lead = Lead.builder()
+                .firstName("Cliente WhatsApp")
+                .lastName("")
+                .phone(phoneE164)
+                .status(LeadStatus.NEW)
+                .source(LeadSource.WHATSAPP)
+                .notes("Petición de contacto con asesor humano")
+                .doNotCall(false)
+                .createdBy(businessId)
+                .build();
+            leadRepository.save(lead);
+            escalationService.qualify(lead.getId(), businessId);
         } catch (Exception e) {
             log.error("Failed to trigger escalation: phone={} businessId={}", phone, businessId, e);
         }

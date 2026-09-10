@@ -101,7 +101,7 @@ public class ChatbotEngine {
                 }
             }
         }
-        String body = String.format("¡Hola! Soy %s de %s. ¿En qué puedo ayudarte?", botName, companyName);
+        String body = String.format("¡Hola! Soy %s, tu asistente de IA de %s. ¿En qué puedo ayudarte?", botName, companyName);
         conversationStep.put(sessionKey, "initial");
         return ChatTurn.text(body);
     }

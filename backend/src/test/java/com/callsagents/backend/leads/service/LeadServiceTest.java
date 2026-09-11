@@ -567,6 +567,74 @@ class LeadServiceTest {
         assertTrue(response.customFields() == null);
     }
 
+    @Test
+    void importCsvBlocksNonAdminAtTrialLimit() {
+        User agent = User.builder()
+            .id(currentUserId)
+            .email("agent@example.com")
+            .fullName("Agent User")
+            .role(UserRole.AGENT)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(agent));
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId)).thenReturn(50L);
+
+        String content = "firstName,lastName,email,phone,company,source\n"
+            + "Ana,Lopez,ana@x.com,,Acme,MANUAL\n";
+        MockMultipartFile file = new MockMultipartFile("file", "leads.csv", "text/csv", content.getBytes());
+
+        assertThrows(BadRequestException.class, () -> leadService.importCsv(file, currentUserId));
+        verify(leadRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void importCsvBlocksWhenRowsExceedRemainingSlots() {
+        User agent = User.builder()
+            .id(currentUserId)
+            .email("agent@example.com")
+            .fullName("Agent User")
+            .role(UserRole.AGENT)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(agent));
+        when(leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId)).thenReturn(48L);
+
+        String content = "firstName,lastName,email,phone,company,source\n"
+            + "Ana,Lopez,ana@x.com,,Acme,MANUAL\n"
+            + "Bob,Smith,bob@x.com,,Acme,MANUAL\n"
+            + "Carol,Diaz,carol@x.com,,Acme,MANUAL\n";
+        MockMultipartFile file = new MockMultipartFile("file", "leads.csv", "text/csv", content.getBytes());
+
+        assertThrows(BadRequestException.class, () -> leadService.importCsv(file, currentUserId));
+        verify(leadRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void importCsvAllowsAdminToImportUnlimited() {
+        User admin = User.builder()
+            .id(currentUserId)
+            .email("admin@example.com")
+            .fullName("Admin User")
+            .role(UserRole.ADMIN)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(admin));
+        when(leadRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        String content = "firstName,lastName,email,phone,company,source\n"
+            + "Ana,Lopez,ana@x.com,,Acme,MANUAL\n";
+        MockMultipartFile file = new MockMultipartFile("file", "leads.csv", "text/csv", content.getBytes());
+
+        ImportResultDto result = leadService.importCsv(file, currentUserId);
+
+        assertEquals(1, result.successCount());
+        verify(leadRepository, never()).countByCreatedByAndDeletedAtIsNull(any());
+        verify(leadRepository, times(1)).saveAll(any());
+    }
+
     private Lead sampleLead(UUID id) {
         return Lead.builder()
             .id(id)

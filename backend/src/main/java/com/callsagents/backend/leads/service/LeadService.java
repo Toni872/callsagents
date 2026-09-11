@@ -84,16 +84,7 @@ public class LeadService {
 
     @Transactional
     public LeadResponse create(CreateLeadRequest req, UUID currentUserId) {
-        // Trial lead limit check (per tenant) — admins are exempt.
-        if (!isAdmin(currentUserId)) {
-            long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId);
-            if (totalLeads >= TRIAL_LEAD_LIMIT) {
-                throw new BadRequestException(
-                    "Límite de leads alcanzado (" + TRIAL_LEAD_LIMIT + "). " +
-                    "Contacta soporte para ampliar tu plan."
-                );
-            }
-        }
+        ensureTrialSlotsAvailable(1, currentUserId);
 
         validateContact(req.email(), req.phone());
         LeadSource source = parseSource(req.source());
@@ -214,6 +205,28 @@ public class LeadService {
             .orElse(false);
     }
 
+    /**
+     * Remaining trial lead slots for a user. Admins are exempt (always
+     * effectively unlimited).
+     */
+    private int remainingTrialSlots(UUID userId) {
+        if (isAdmin(userId)) {
+            return Integer.MAX_VALUE;
+        }
+        long total = leadRepository.countByCreatedByAndDeletedAtIsNull(userId);
+        return (int) Math.max(0L, TRIAL_LEAD_LIMIT - total);
+    }
+
+    /** Throws BadRequestException when fewer than {@code needed} trial slots remain. */
+    private void ensureTrialSlotsAvailable(int needed, UUID userId) {
+        int remaining = remainingTrialSlots(userId);
+        if (remaining < needed) {
+            throw new BadRequestException(
+                "Límite de leads alcanzado (" + TRIAL_LEAD_LIMIT + "). " +
+                "Contacta soporte para ampliar tu plan.");
+        }
+    }
+
     @Transactional
     public ImportResultDto importCsv(MultipartFile file, UUID currentUserId) {
         if (file == null || file.isEmpty()) {
@@ -288,6 +301,8 @@ public class LeadService {
         } catch (IOException ex) {
             throw new BadRequestException("Failed to read CSV file: " + ex.getMessage());
         }
+
+        ensureTrialSlotsAvailable(toSave.size(), currentUserId);
 
         if (!toSave.isEmpty()) {
             leadRepository.saveAll(toSave);

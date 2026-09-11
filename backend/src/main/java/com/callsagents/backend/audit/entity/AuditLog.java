@@ -42,7 +42,7 @@ public class AuditLog {
     @Column(name = "entity_type", nullable = false, length = 100)
     private String entityType;
 
-    @Column(name = "entity_id", nullable = false)
+    @Column(name = "entity_id", nullable = true)
     private UUID entityId;
 
     @Enumerated(EnumType.STRING)

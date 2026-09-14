@@ -140,6 +140,7 @@ public class BusinessService {
         if (request.followupMessage() != null) profile.setFollowupMessage(request.followupMessage());
         if (request.voiceAgentId() != null) profile.setVoiceAgentId(request.voiceAgentId());
         if (request.whatsappNumber() != null) profile.setWhatsappNumber(request.whatsappNumber());
+        if (request.allowedDomains() != null) profile.setAllowedDomains(request.allowedDomains());
 
         profile.setOnboardingComplete(true);
 

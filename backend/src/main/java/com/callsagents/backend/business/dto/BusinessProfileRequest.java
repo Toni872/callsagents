@@ -32,6 +32,8 @@ public record BusinessProfileRequest(
 
     @Size(max = 100) String voiceAgentId,
 
-    @Size(max = 20) String whatsappNumber
+    @Size(max = 20) String whatsappNumber,
+
+    @Size(max = 2000) String allowedDomains
 ) {
 }

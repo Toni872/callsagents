@@ -23,6 +23,7 @@ public record BusinessProfileResponse(
     String voiceAgentId,
     String whatsappNumber,
     Boolean onboardingComplete,
+    String allowedDomains,
     Instant createdAt,
     Instant updatedAt
 ) {
@@ -45,6 +46,7 @@ public record BusinessProfileResponse(
             profile.getVoiceAgentId(),
             profile.getWhatsappNumber(),
             profile.getOnboardingComplete(),
+            profile.getAllowedDomains(),
             profile.getCreatedAt(),
             profile.getUpdatedAt()
         );

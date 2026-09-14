@@ -82,6 +82,9 @@ public class BusinessProfile {
     @Column(name = "followup_message", columnDefinition = "text")
     private String followupMessage;
 
+    @Column(name = "allowed_domains", columnDefinition = "text")
+    private String allowedDomains;
+
     @Column(name = "voice_agent_id", length = 100)
     private String voiceAgentId;
 

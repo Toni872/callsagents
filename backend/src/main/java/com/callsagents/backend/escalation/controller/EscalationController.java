@@ -89,6 +89,7 @@ public class EscalationController {
             request.replyTimeoutMinutes(),
             request.followupMessage(),
             request.voiceAgentId(),
+            null,
             null
         );
         BusinessProfileResponse profile = businessService.update(userId, profileRequest);

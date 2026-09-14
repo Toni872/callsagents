@@ -119,7 +119,8 @@ class BusinessServiceTest {
         BusinessProfileRequest req = new BusinessProfileRequest(
             "New Corp", "https://new.com", null, "Tech", "Web dev",
             "amigable", "Botty", "Hola!", "#FF0000",
-            null, null, null, null, "14157386102"
+            null, null, null, null, "14157386102",
+            "script9.com, cliente.example.com"
         );
 
         BusinessProfileResponse response = businessService.update(userId, req);
@@ -129,6 +130,7 @@ class BusinessServiceTest {
         assertEquals("amigable", response.tone());
         assertEquals("#FF0000", response.chatColor());
         assertEquals("14157386102", response.whatsappNumber());
+        assertEquals("script9.com, cliente.example.com", response.allowedDomains());
         assertTrue(response.onboardingComplete());
     }
 
@@ -136,7 +138,7 @@ class BusinessServiceTest {
     void updateThrowsWhenNotFound() {
         when(profileRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
-        BusinessProfileRequest req = new BusinessProfileRequest("X", null, null, null, null, null, null, null, null, null, null, null, null, null);
+        BusinessProfileRequest req = new BusinessProfileRequest("X", null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         assertThrows(ResourceNotFoundException.class, () -> businessService.update(userId, req));
     }
 

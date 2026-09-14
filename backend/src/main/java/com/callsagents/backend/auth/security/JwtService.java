@@ -15,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.text.ParseException;
@@ -38,6 +40,8 @@ public class JwtService {
 
     private final JwtProperties properties;
     private final SecureRandom secureRandom = new SecureRandom();
+    @Value("${spring.profiles.active:}")
+    private String activeProfile;
 
     private byte[] secretBytes;
 
@@ -48,16 +52,18 @@ public class JwtService {
     @PostConstruct
     void init() {
         String configured = properties.getSecret();
+        boolean isDev = activeProfile != null && activeProfile.contains("dev");
+
         if (configured == null || configured.isBlank()) {
+            if (!isDev) {
+                throw new IllegalStateException(
+                    "JWT_SECRET is not configured. Production requires a stable JWT_SECRET env var (>=32 bytes). "
+                    + "Set it and restart — the application will NOT start without it.");
+            }
             byte[] generated = new byte[MIN_SECRET_BYTES];
             secureRandom.nextBytes(generated);
             this.secretBytes = generated;
-            log.warn("=========================================================");
-            log.warn("JWT_SECRET is NOT configured. Generated an EPHEMERAL random secret.");
-            log.warn("This is acceptable ONLY for local dev. All tokens become");
-            log.warn("invalid on restart. Set JWT_SECRET env var (>=32 bytes) for any");
-            log.warn("non-dev environment.");
-            log.warn("=========================================================");
+            log.warn("JWT_SECRET is not configured; using ephemeral secret (dev only).");
         } else {
             byte[] bytes = configured.getBytes(StandardCharsets.UTF_8);
             if (bytes.length < MIN_SECRET_BYTES) {

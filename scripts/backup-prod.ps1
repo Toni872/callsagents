@@ -20,64 +20,82 @@ if (-not (Test-Path $backupDir)) {
 }
 
 $port = 15432  # puerto fijo para el túnel local
+$railwayProjectId     = "5d126558-22c4-4955-b7b4-a57e6a61baf9"   # proyecto renewed-reverence
+$railwayEnvironmentId = "d56cb7b3-96a9-4c39-99ac-ef46ae0ee66e"   # production
+$railwayServiceId     = "09c8085c-f5fa-4adc-a50f-73677665acef"   # servicio Postgres
 
 Write-Host "Abriendo túnel SSH a Postgres de Railway en puerto $port..."
-# railway connect --tunnel-only necesita el nombre del servicio de BD
-$proc = Start-Process -FilePath "railway.exe" `
-    -ArgumentList "connect", "postgres", "--tunnel-only", "--port", $port `
-    -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\railway_tunnel.log"
+$job = Start-Job -ScriptBlock {
+    param($p, $projId, $envId, $svcId)
+    $env:RAILWAY_PROJECT_ID     = $projId
+    $env:RAILWAY_ENVIRONMENT_ID = $envId
+    $env:RAILWAY_SERVICE_ID     = $svcId
+    railway connect Postgres --tunnel-only --port $p
+} -ArgumentList $port, $railwayProjectId, $railwayEnvironmentId, $railwayServiceId
 
-Start-Sleep -Seconds 6  # esperar a que el túnel se establezca
+try {
+    # Esperar a que el túnel se establezca
+    $tunnelUp = $false
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Seconds 2
+        try {
+            $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction Stop
+            if ($conn) { $tunnelUp = $true; break }
+        } catch {}
+    }
 
-# Verificar que el túnel está activo
-$tunnelUp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-if (-not $tunnelUp) {
-    Write-Host "ERROR: Túnel no se pudo establecer en puerto $port"
-    Write-Host "Log: $(Get-Content "$env:TEMP\railway_tunnel.log" -ErrorAction SilentlyContinue)"
-    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-    exit 1
-}
-Write-Host "Túnel abierto en localhost:$port"
-
-# Detectar pg_dump (local o via Docker)
-$pgDump = Get-Command pg_dump.exe -ErrorAction SilentlyContinue
-$useDocker = $false
-if (-not $pgDump) {
-    $useDocker = $true
-    Write-Host "pg_dump local no encontrado, usando Docker..."
-}
-
-# Ejecutar pg_dump
-Write-Host "Descargando dump de producción..."
-if ($useDocker) {
-    docker run --rm --network host -v "${backupDir}:/backup" postgres:16-alpine `
-        pg_dump -h host.docker.internal -p $port -U postgres -d railway -Fc -f "/backup/callsagents_prod_$timestamp.dump" 2>&1
-} else {
-    & $pgDump.Source -h localhost -p $port -U postgres -d railway -Fc -f $dumpFile 2>&1
-}
-
-$exitCode = $LASTEXITCODE
-
-# Cerrar túnel
-Write-Host "Cerrando túnel..."
-Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-
-if ($exitCode -ne 0) {
-    Write-Host "ERROR: pg_dump fallo con codigo $exitCode"
-    exit $exitCode
-}
-
-if (Test-Path $dumpFile) {
-    $sizeMB = [math]::Round((Get-Item $dumpFile).Length / 1MB, 2)
-    Write-Host "Backup completado: $dumpFile ($sizeMB MB)"
-} else {
-    # Si usamos Docker con volumen, buscar en backupDir
-    $dockerDump = Join-Path $backupDir "callsagents_prod_$timestamp.dump"
-    if (Test-Path $dockerDump) {
-        $sizeMB = [math]::Round((Get-Item $dockerDump).Length / 1MB, 2)
-        Write-Host "Backup completado: $dockerDump ($sizeMB MB)"
-    } else {
-        Write-Host "ERROR: dump no encontrado tras pg_dump"
+    if (-not $tunnelUp) {
+        Write-Host "ERROR: Túnel no se pudo establecer en puerto $port"
+        $jobOutput = Receive-Job $job -Keep 2>&1
+        Write-Host "Detalle del túnel: $jobOutput"
         exit 1
     }
+    Write-Host "Túnel abierto en localhost:$port"
+
+    # Detectar pg_dump (local o via Docker)
+    $pgDump = Get-Command pg_dump.exe -ErrorAction SilentlyContinue
+    $useDocker = $false
+    if (-not $pgDump) {
+        $useDocker = $true
+        Write-Host "pg_dump local no encontrado, usando Docker (imagen postgres:18-alpine)..."
+    }
+
+    # Ejecutar pg_dump
+    Write-Host "Descargando dump de producción..."
+    if ($useDocker) {
+        $containerName = "callsagents-pgdump-$timestamp"
+        docker run --rm --name $containerName -v "${backupDir}:/backup" postgres:18-alpine `
+            pg_dump -h host.docker.internal -p $port -U postgres -d railway -Fc -f "/backup/callsagents_prod_$timestamp.dump" 2>&1
+        $exitCode = $LASTEXITCODE
+    } else {
+        & $pgDump.Source -h localhost -p $port -U postgres -d railway -Fc -f $dumpFile 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+
+    if ($exitCode -ne 0) {
+        Write-Host "ERROR: pg_dump fallo con codigo $exitCode"
+        $dockerDump = Join-Path $backupDir "callsagents_prod_$timestamp.dump"
+        if (Test-Path $dockerDump) { Remove-Item $dockerDump -ErrorAction SilentlyContinue }
+        exit $exitCode
+    }
+
+    if (Test-Path $dumpFile) {
+        $sizeMB = [math]::Round((Get-Item $dumpFile).Length / 1MB, 2)
+        Write-Host "Backup completado: $dumpFile ($sizeMB MB)"
+    } else {
+        $dockerDump = Join-Path $backupDir "callsagents_prod_$timestamp.dump"
+        if (Test-Path $dockerDump) {
+            $sizeMB = [math]::Round((Get-Item $dockerDump).Length / 1MB, 2)
+            Write-Host "Backup completado: $dockerDump ($sizeMB MB)"
+        } else {
+            Write-Host "ERROR: dump no encontrado tras pg_dump"
+            exit 1
+        }
+    }
+}
+finally {
+    # Cerrar túnel siempre
+    Write-Host "Cerrando túnel..."
+    Stop-Job $job -ErrorAction SilentlyContinue | Out-Null
+    Remove-Job $job -Force -ErrorAction SilentlyContinue | Out-Null
 }

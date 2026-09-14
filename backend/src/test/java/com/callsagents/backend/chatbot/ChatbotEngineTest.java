@@ -1,5 +1,6 @@
 package com.callsagents.backend.chatbot;
 
+import com.callsagents.backend.auth.service.TrialEnforcementService;
 import com.callsagents.backend.business.service.BusinessPromptComposer;
 import com.callsagents.backend.business.service.BusinessService;
 import com.callsagents.backend.escalation.service.EscalationService;
@@ -39,6 +40,7 @@ class ChatbotEngineTest {
     @Mock BusinessService businessService;
     @Mock BusinessPromptComposer promptComposer;
     @Mock EscalationService escalationService;
+    @Mock TrialEnforcementService trialEnforcementService;
 
     private ChatbotEngine engine;
 
@@ -49,11 +51,13 @@ class ChatbotEngineTest {
     void setUp() {
         engine = new ChatbotEngine(
             groqService, leadRepository,
-            businessService, promptComposer, escalationService
+            businessService, promptComposer, escalationService,
+            trialEnforcementService
         );
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
         lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(trialEnforcementService.isBusinessOwnerTrialExpired(any())).thenReturn(false);
     }
 
     private String stepOf(String key) {
@@ -567,5 +571,55 @@ class ChatbotEngineTest {
         ChatTurn turn = engine.process(KEY, "Sí", BUSINESS_ID, Channel.WEB);
 
         assertThat(turn.reply()).contains("¡Genial!");
+    }
+
+    @Test
+    @DisplayName("WEB lead creation is blocked when the business owner's trial has expired")
+    void web_trialExpiredBlocksLeadCreation() {
+        when(trialEnforcementService.isBusinessOwnerTrialExpired(BUSINESS_ID)).thenReturn(true);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
+
+        ChatTurn turn = engine.process("session-web", "Me llamo Pedro y mi email es pedro@test.com",
+            BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.leadCaptured()).isFalse();
+        verify(leadRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("WEB lead creation succeeds when the business owner's trial is active")
+    void web_trialActiveAllowsLeadCreation() {
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
+
+        ChatTurn turn = engine.process("session-web", "Me llamo Pedro y mi email es pedro@test.com",
+            BUSINESS_ID, Channel.WEB);
+
+        assertThat(turn.leadCaptured()).isTrue();
+        verify(leadRepository).save(argThat(leadArg -> "pedro@test.com".equals(((Lead) leadArg).getEmail())));
+    }
+
+    @Test
+    @DisplayName("WhatsApp lead creation is blocked when the business owner's trial has expired")
+    void whatsapp_trialExpiredBlocksLeadCreation() {
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
+        when(trialEnforcementService.isBusinessOwnerTrialExpired(BUSINESS_ID)).thenReturn(true);
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("Gracias");
+
+        ChatTurn turn = engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com",
+            BUSINESS_ID, Channel.WHATSAPP);
+
+        assertThat(turn.leadCaptured()).isFalse();
+        verify(leadRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("WhatsApp lead creation succeeds when the business owner's trial is active")
+    void whatsapp_trialActiveAllowsLeadCreation() {
+        when(leadRepository.findByPhoneAndDeletedAtIsNull(anyString())).thenReturn(Optional.empty());
+        when(groqService.chat(anyString(), anyList(), anyString())).thenReturn("¡Perfecto!");
+
+        engine.process(KEY, "Soy Carlos y mi correo es carlos@test.com", BUSINESS_ID, Channel.WHATSAPP);
+
+        verify(leadRepository).save(argThat(leadArg -> "carlos@test.com".equals(((Lead) leadArg).getEmail())));
     }
 }

@@ -4,6 +4,8 @@ import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.entity.UserStatus;
 import com.callsagents.backend.auth.repository.UserRepository;
+import com.callsagents.backend.auth.service.TrialEnforcementService;
+import com.callsagents.backend.business.service.BusinessService;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
@@ -22,7 +24,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -34,6 +35,7 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -60,8 +63,9 @@ class LeadServiceTest {
     private UserRepository userRepository;
     @Mock
     private AuditService auditService;
+    @Mock
+    private BusinessService businessService;
 
-    @InjectMocks
     private LeadService leadService;
 
     private UUID currentUserId;
@@ -78,6 +82,9 @@ class LeadServiceTest {
             .status(UserStatus.ACTIVE)
             .passwordHash("x")
             .build();
+        TrialEnforcementService trialEnforcementService =
+            new TrialEnforcementService(userRepository, businessService);
+        leadService = new LeadService(leadRepository, userRepository, auditService, trialEnforcementService);
     }
 
     @Test
@@ -650,5 +657,71 @@ class LeadServiceTest {
             .createdAt(Instant.now())
             .updatedAt(Instant.now())
             .build();
+    }
+
+    @Test
+    void createBlocksNonAdminWithExpiredTrial() {
+        User agent = User.builder()
+            .id(currentUserId)
+            .email("agent@example.com")
+            .fullName("Agent User")
+            .role(UserRole.AGENT)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .trialEndsAt(Instant.now().minus(1, ChronoUnit.DAYS))
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(agent));
+        lenient().when(leadRepository.countByCreatedByAndDeletedAtIsNull(currentUserId)).thenReturn(0L);
+
+        CreateLeadRequest req = new CreateLeadRequest("Ana", "Lopez", "ana@x.com", null, null, "MANUAL", null, null);
+
+        assertThrows(ForbiddenException.class, () -> leadService.create(req, currentUserId));
+        verify(leadRepository, never()).save(any());
+    }
+
+    @Test
+    void createAllowsNonAdminWithActiveTrial() {
+        User agent = User.builder()
+            .id(currentUserId)
+            .email("agent@example.com")
+            .fullName("Agent User")
+            .role(UserRole.AGENT)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .trialEndsAt(Instant.now().plus(1, ChronoUnit.DAYS))
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(agent));
+        when(leadRepository.save(any(Lead.class))).thenAnswer(inv -> {
+            Lead arg = inv.getArgument(0);
+            arg.setId(UUID.randomUUID());
+            return arg;
+        });
+
+        CreateLeadRequest req = new CreateLeadRequest("Ana", "Lopez", "ana@x.com", null, null, "MANUAL", null, null);
+
+        LeadResponse response = leadService.create(req, currentUserId);
+
+        assertNotNull(response.id());
+    }
+
+    @Test
+    void importCsvBlocksNonAdminWithExpiredTrial() {
+        User agent = User.builder()
+            .id(currentUserId)
+            .email("agent@example.com")
+            .fullName("Agent User")
+            .role(UserRole.AGENT)
+            .status(UserStatus.ACTIVE)
+            .passwordHash("x")
+            .trialEndsAt(Instant.now().minus(1, ChronoUnit.DAYS))
+            .build();
+        when(userRepository.findById(currentUserId)).thenReturn(Optional.of(agent));
+
+        String content = "firstName,lastName,email,phone,company,source\n"
+            + "Ana,Lopez,ana@x.com,,Acme,MANUAL\n";
+        MockMultipartFile file = new MockMultipartFile("file", "leads.csv", "text/csv", content.getBytes());
+
+        assertThrows(ForbiddenException.class, () -> leadService.importCsv(file, currentUserId));
+        verify(leadRepository, never()).saveAll(any());
     }
 }

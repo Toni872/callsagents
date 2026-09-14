@@ -1,5 +1,6 @@
 package com.callsagents.backend.chatbot;
 
+import com.callsagents.backend.auth.service.TrialEnforcementService;
 import com.callsagents.backend.business.entity.BusinessProfile;
 import com.callsagents.backend.business.service.BusinessPromptComposer;
 import com.callsagents.backend.business.service.BusinessService;
@@ -44,6 +45,7 @@ public class ChatbotEngine {
     private final BusinessService businessService;
     private final BusinessPromptComposer promptComposer;
     private final EscalationService escalationService;
+    private final TrialEnforcementService trialEnforcementService;
 
     private final Cache<String, List<Map<String, String>>> conversationHistory = Caffeine.newBuilder()
         .maximumSize(2_000)
@@ -78,14 +80,15 @@ public class ChatbotEngine {
             java.util.regex.Pattern.CASE_INSENSITIVE
                 | java.util.regex.Pattern.UNICODE_CHARACTER_CLASS);
 
-    public ChatbotEngine(GroqService groqService, LeadRepository leadRepository,
+public ChatbotEngine(GroqService groqService, LeadRepository leadRepository,
                          BusinessService businessService, BusinessPromptComposer promptComposer,
-                         EscalationService escalationService) {
+                         EscalationService escalationService, TrialEnforcementService trialEnforcementService) {
         this.groqService = groqService;
         this.leadRepository = leadRepository;
         this.businessService = businessService;
         this.promptComposer = promptComposer;
         this.escalationService = escalationService;
+        this.trialEnforcementService = trialEnforcementService;
     }
 
     public void reset(String sessionKey) {
@@ -392,6 +395,10 @@ public class ChatbotEngine {
                 return false;
             }
             if (!businessService.isAdminOwner(businessId)) {
+                if (trialEnforcementService.isBusinessOwnerTrialExpired(businessId)) {
+                    log.warn("Trial expired — skipping lead creation for phone {}", phoneE164);
+                    return false;
+                }
                 long totalLeads = leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
                 if (totalLeads >= TRIAL_LEAD_LIMIT) {
                     log.warn("WhatsApp lead limit reached ({}) — skipping lead creation for phone {}", TRIAL_LEAD_LIMIT, phoneE164);
@@ -420,6 +427,10 @@ public class ChatbotEngine {
                                 String email, String service, UUID businessId) {
         boolean adminOwner = businessId != null && businessService.isAdminOwner(businessId);
         if (!adminOwner) {
+            if (businessId != null && trialEnforcementService.isBusinessOwnerTrialExpired(businessId)) {
+                log.warn("Trial expired — skipping web lead creation for session {}", sessionId);
+                return false;
+            }
             long totalLeads = businessId == null ? 0 : leadRepository.countByCreatedByAndDeletedAtIsNull(businessId);
             if (businessId == null || totalLeads >= TRIAL_LEAD_LIMIT) {
                 log.warn("Lead limit reached ({}) — skipping web lead creation for session {}", TRIAL_LEAD_LIMIT, sessionId);

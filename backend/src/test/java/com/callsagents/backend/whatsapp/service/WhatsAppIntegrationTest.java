@@ -1,5 +1,6 @@
 package com.callsagents.backend.whatsapp.service;
 
+import com.callsagents.backend.auth.service.TrialEnforcementService;
 import com.callsagents.backend.business.service.BusinessPromptComposer;
 import com.callsagents.backend.business.service.BusinessService;
 import com.callsagents.backend.chatbot.ChatbotEngine;
@@ -36,6 +37,7 @@ class WhatsAppIntegrationTest {
     @Mock BusinessService businessService;
     @Mock BusinessPromptComposer promptComposer;
     @Mock EscalationService escalationService;
+    @Mock TrialEnforcementService trialEnforcementService;
 
     private ChatbotEngine engine;
     private WhatsAppAiChatbotService service;
@@ -47,7 +49,8 @@ class WhatsAppIntegrationTest {
     void setUp() {
         engine = new ChatbotEngine(
             groqService, leadRepository,
-            businessService, promptComposer, escalationService
+            businessService, promptComposer, escalationService,
+            trialEnforcementService
         );
         service = new WhatsAppAiChatbotService(
             groqService, vonageMessageService,
@@ -57,6 +60,7 @@ class WhatsAppIntegrationTest {
         lenient().when(promptComposer.compose(any())).thenReturn("Eres Naiara de Script9.");
         lenient().when(promptComposer.composeDefault()).thenReturn("Eres Naiara de Script9.");
         lenient().when(businessService.resolveOwnerUserId(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(trialEnforcementService.isBusinessOwnerTrialExpired(any())).thenReturn(false);
     }
 
     @Test

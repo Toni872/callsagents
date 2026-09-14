@@ -5,6 +5,7 @@ import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.entity.UserStatus;
 import com.callsagents.backend.auth.repository.UserRepository;
+import com.callsagents.backend.auth.service.TrialEnforcementService;
 import com.callsagents.backend.campaigns.dto.CampaignFilter;
 import com.callsagents.backend.campaigns.dto.CampaignResponse;
 import com.callsagents.backend.campaigns.dto.CreateCampaignRequest;
@@ -17,6 +18,7 @@ import com.callsagents.backend.campaigns.repository.CampaignRepository;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.voice.domain.CampaignVoiceConfig;
 import com.callsagents.backend.voice.service.PromptComposer;
@@ -47,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,6 +66,8 @@ class CampaignServiceTest {
     private AuditService auditService;
     @Mock
     private PromptComposer promptComposer;
+    @Mock
+    private TrialEnforcementService trialEnforcementService;
 
     @InjectMocks
     private CampaignService campaignService;
@@ -331,6 +336,37 @@ class CampaignServiceTest {
         CampaignResponse response = campaignService.launch(id, currentUserId, UserRole.ADMIN);
 
         assertEquals(CampaignStatus.RUNNING, response.status());
+    }
+
+    @Test
+    void createBlocksNonAdminWithExpiredTrial() {
+        when(trialEnforcementService.isTrialExpired(currentUserId)).thenReturn(true);
+        doThrow(new ForbiddenException("Tu período de prueba (7 días) ha finalizado. Contacta soporte para ampliar tu plan."))
+            .when(trialEnforcementService).ensureTrialActive(currentUserId);
+
+        CreateCampaignRequest req = new CreateCampaignRequest("Promo Q1", "Outbound push", null, null, "Hello, this is...",
+            null, null, null, null, null);
+
+        assertThrows(ForbiddenException.class, () -> campaignService.create(req, currentUserId));
+        verify(campaignRepository, never()).save(any());
+    }
+
+    @Test
+    void createAllowsNonAdminWithActiveTrial() {
+        CreateCampaignRequest req = new CreateCampaignRequest("Promo Q1", "Outbound push", null, null, "Hello, this is...",
+            null, null, null, null, null);
+        when(campaignRepository.save(any(Campaign.class))).thenAnswer(inv -> {
+            Campaign c = inv.getArgument(0);
+            c.setId(UUID.randomUUID());
+            c.setCreatedAt(Instant.now());
+            c.setUpdatedAt(Instant.now());
+            return c;
+        });
+
+        CampaignResponse response = campaignService.create(req, currentUserId);
+
+        assertNotNull(response.id());
+        assertEquals("Promo Q1", response.name());
     }
 
     private static Campaign sampleCampaign(UUID id, CampaignStatus status) {

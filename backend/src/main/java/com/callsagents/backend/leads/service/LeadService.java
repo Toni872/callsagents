@@ -5,6 +5,7 @@ import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
+import com.callsagents.backend.auth.service.TrialEnforcementService;
 import com.callsagents.backend.common.audit.AuditService;
 import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
@@ -52,11 +53,14 @@ public class LeadService {
     private final LeadRepository leadRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final TrialEnforcementService trialEnforcementService;
 
-    public LeadService(LeadRepository leadRepository, UserRepository userRepository, AuditService auditService) {
+    public LeadService(LeadRepository leadRepository, UserRepository userRepository, AuditService auditService,
+                       TrialEnforcementService trialEnforcementService) {
         this.leadRepository = leadRepository;
         this.userRepository = userRepository;
         this.auditService = auditService;
+        this.trialEnforcementService = trialEnforcementService;
     }
 
     @Transactional(readOnly = true)
@@ -84,6 +88,7 @@ public class LeadService {
 
     @Transactional
     public LeadResponse create(CreateLeadRequest req, UUID currentUserId) {
+        trialEnforcementService.ensureTrialActive(currentUserId);
         ensureTrialSlotsAvailable(1, currentUserId);
 
         validateContact(req.email(), req.phone());
@@ -302,6 +307,7 @@ public class LeadService {
             throw new BadRequestException("Failed to read CSV file: " + ex.getMessage());
         }
 
+        trialEnforcementService.ensureTrialActive(currentUserId);
         ensureTrialSlotsAvailable(toSave.size(), currentUserId);
 
         if (!toSave.isEmpty()) {

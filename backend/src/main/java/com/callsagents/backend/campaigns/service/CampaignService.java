@@ -5,6 +5,7 @@ import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
+import com.callsagents.backend.auth.service.TrialEnforcementService;
 import com.callsagents.backend.campaigns.dto.CampaignFilter;
 import com.callsagents.backend.campaigns.dto.CampaignResponse;
 import com.callsagents.backend.campaigns.dto.CreateCampaignRequest;
@@ -39,13 +40,16 @@ public class CampaignService {
     private final UserRepository userRepository;
     private final AuditService auditService;
     private final PromptComposer promptComposer;
+    private final TrialEnforcementService trialEnforcementService;
 
     public CampaignService(CampaignRepository campaignRepository, UserRepository userRepository,
-                           AuditService auditService, PromptComposer promptComposer) {
+                           AuditService auditService, PromptComposer promptComposer,
+                           TrialEnforcementService trialEnforcementService) {
         this.campaignRepository = campaignRepository;
         this.userRepository = userRepository;
         this.auditService = auditService;
         this.promptComposer = promptComposer;
+        this.trialEnforcementService = trialEnforcementService;
     }
 
     @Transactional(readOnly = true)
@@ -68,6 +72,7 @@ public class CampaignService {
 
     @Transactional
     public CampaignResponse create(CreateCampaignRequest req, UUID currentUserId) {
+        trialEnforcementService.ensureTrialActive(currentUserId);
         validateSchedule(req.startAt(), req.endAt());
 
         Campaign campaign = Campaign.builder()

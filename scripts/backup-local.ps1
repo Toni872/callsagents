@@ -16,20 +16,27 @@ if (-not (Test-Path $backupDir)) {
     Write-Host "Directorio de backups creado: $backupDir"
 }
 
-$pgDump = Get-Command pg_dump.exe -ErrorAction SilentlyContinue
-if (-not $pgDump) {
-    Write-Host "ERROR: pg_dump.exe no encontrado. Instala PostgreSQL (psql) y añadelo al PATH."
-    Write-Host "       https://www.postgresql.org/download/windows/"
+$container = "callsagents-postgres"
+$running = docker ps --format "{{.Names}}" | Select-String -Pattern "^$container$"
+if (-not $running) {
+    Write-Host "ERROR: contenedor '$container' no esta corriendo."
+    Write-Host "       Arrancalo primero (docker compose up -d) y reintenta."
     exit 1
 }
 
 Write-Host "Respaldando BD local (localhost:5433/callsagents)..."
-& $pgDump.Source -h localhost -p 5433 -U callsagents -d callsagents -Fc -f $dumpFile 2>&1
-
+docker exec $container pg_dump -h localhost -p 5432 -U callsagents -d callsagents -Fc -f /tmp/callsagents.dump
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: pg_dump fallo con codigo $LASTEXITCODE"
+    Write-Host "ERROR: pg_dump dentro del contenedor fallo con codigo $LASTEXITCODE"
     exit $LASTEXITCODE
 }
+
+docker cp "$($container):/tmp/callsagents.dump" $dumpFile | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: docker cp fallo con codigo $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+docker exec $container rm -f /tmp/callsagents.dump
 
 $sizeMB = [math]::Round((Get-Item $dumpFile).Length / 1MB, 2)
 Write-Host "Backup completado: $dumpFile ($sizeMB MB)"

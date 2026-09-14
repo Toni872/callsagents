@@ -1,6 +1,7 @@
 package com.callsagents.backend.voice.controller;
 
 import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.auth.repository.UserRepository;
 import com.callsagents.backend.auth.security.JwtService;
 import com.callsagents.backend.voice.domain.VoiceCall;
@@ -80,10 +81,10 @@ class VoiceControllerTest {
     @DisplayName("startCall: agent without campaignId delegates with null campaignId")
     @WithMockUser(username = "agent@callsagents.com", roles = "AGENT")
     void startCall_withoutCampaignId() throws Exception {
-        User user = User.builder().id(USER_ID).email("agent@callsagents.com").build();
+        User user = User.builder().id(USER_ID).email("agent@callsagents.com").role(UserRole.AGENT).build();
         when(userRepository.findByEmail("agent@callsagents.com")).thenReturn(Optional.of(user));
         when(service.placeCall(eq(VoiceProviderType.VAPI), any(VoiceProvider.StartCallRequest.class),
-            eq(USER_ID), isNull())).thenReturn(call());
+            eq(USER_ID), isNull(), eq(UserRole.AGENT))).thenReturn(call());
 
         mvc.perform(post("/voice/calls/start")
                 .param("provider", "VAPI")
@@ -92,7 +93,7 @@ class VoiceControllerTest {
             .andExpect(jsonPath("$.providerCallId").value("vapi-call-1"));
 
         verify(service).placeCall(eq(VoiceProviderType.VAPI), any(VoiceProvider.StartCallRequest.class),
-            eq(USER_ID), isNull());
+            eq(USER_ID), isNull(), eq(UserRole.AGENT));
     }
 
     @Test
@@ -100,10 +101,10 @@ class VoiceControllerTest {
     @WithMockUser(username = "agent@callsagents.com", roles = "AGENT")
     void startCall_withCampaignId() throws Exception {
         UUID campaignId = UUID.randomUUID();
-        User user = User.builder().id(USER_ID).email("agent@callsagents.com").build();
+        User user = User.builder().id(USER_ID).email("agent@callsagents.com").role(UserRole.AGENT).build();
         when(userRepository.findByEmail("agent@callsagents.com")).thenReturn(Optional.of(user));
         when(service.placeCall(eq(VoiceProviderType.RETELL), any(VoiceProvider.StartCallRequest.class),
-            eq(USER_ID), eq(campaignId))).thenReturn(call());
+            eq(USER_ID), eq(campaignId), eq(UserRole.AGENT))).thenReturn(call());
 
         mvc.perform(post("/voice/calls/start")
                 .param("provider", "RETELL")
@@ -113,7 +114,7 @@ class VoiceControllerTest {
             .andExpect(jsonPath("$.providerCallId").value("vapi-call-1"));
 
         verify(service).placeCall(eq(VoiceProviderType.RETELL), any(VoiceProvider.StartCallRequest.class),
-            eq(USER_ID), eq(campaignId));
+            eq(USER_ID), eq(campaignId), eq(UserRole.AGENT));
     }
 
     private static VoiceCall call() {

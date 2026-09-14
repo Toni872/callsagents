@@ -95,7 +95,7 @@ public class AppointmentController {
             && current.getRole() != UserRole.ADMIN && current.getRole() != UserRole.SUPERVISOR) {
             throw new ForbiddenException("You can only assign appointments to yourself");
         }
-        AppointmentResponse created = appointmentService.create(req, current.getId());
+        AppointmentResponse created = appointmentService.create(req, current.getId(), current.getRole());
         return ResponseEntity.created(URI.create("/api/appointments/" + created.id())).body(created);
     }
 
@@ -117,8 +117,8 @@ public class AppointmentController {
         @PathVariable UUID id,
         @AuthenticationPrincipal UserDetails user
     ) {
-        UUID userId = resolveUserId(user);
-        appointmentService.delete(id, userId);
+        User current = resolveUser(user);
+        appointmentService.delete(id, current.getId(), current.getRole());
         return ResponseEntity.noContent().build();
     }
 
@@ -132,9 +132,5 @@ public class AppointmentController {
         }
         return userRepository.findByEmail(user.getUsername())
             .orElseThrow(() -> new UnauthorizedException("Current user not found"));
-    }
-
-    private UUID resolveUserId(UserDetails user) {
-        return resolveUser(user).getId();
     }
 }

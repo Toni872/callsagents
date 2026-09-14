@@ -76,6 +76,7 @@ public class CampaignLeadService {
 
         Lead lead = leadRepository.findById(req.leadId())
             .orElseThrow(() -> new ResourceNotFoundException("Lead not found: " + req.leadId()));
+        requireLeadOwner(lead, campaign, role);
 
         // Idempotent add: return existing assignment if already present
         Optional<CampaignLead> existing = campaignLeadRepository.findById(
@@ -125,6 +126,14 @@ public class CampaignLeadService {
     private static void requireOwner(Campaign campaign, UUID userId, UserRole role) {
         if (!isOwnerOrAdmin(campaign, userId, role)) {
             throw new ForbiddenException("You can only manage your own campaigns");
+        }
+    }
+
+    private static void requireLeadOwner(Lead lead, Campaign campaign, UserRole role) {
+        boolean sameOwner = lead.getCreatedBy() != null
+            && lead.getCreatedBy().equals(campaign.getCreatedBy());
+        if (!sameOwner && role != UserRole.ADMIN) {
+            throw new ForbiddenException("You can only manage your own leads");
         }
     }
 

@@ -1,5 +1,7 @@
 package com.callsagents.backend.voice.controller;
 
+import com.callsagents.backend.auth.entity.User;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.voice.domain.VoiceCall;
 import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import com.callsagents.backend.voice.domain.VoiceProviderType;
@@ -101,7 +103,7 @@ public class VoiceController {
         if (userId == null) return ResponseEntity.status(403).build();
 
         var req = new VoiceProvider.StartCallRequest(phoneNumber, null, Map.of(), null);
-        VoiceCall call = service.placeCall(provider, req, userId, campaignId);
+        VoiceCall call = service.placeCall(provider, req, userId, campaignId, resolveRole(auth.getName()));
         return ResponseEntity.ok(VoiceCallDto.from(call));
     }
 
@@ -205,5 +207,9 @@ public class VoiceController {
 
     private UUID resolveUserId(String email) {
         return userRepository.findByEmail(email).map(u -> u.getId()).orElse(null);
+    }
+
+    private UserRole resolveRole(String email) {
+        return userRepository.findByEmail(email).map(User::getRole).orElse(null);
     }
 }

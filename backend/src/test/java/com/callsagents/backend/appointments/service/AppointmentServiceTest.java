@@ -15,6 +15,9 @@ import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
+import com.callsagents.backend.leads.entity.Lead;
+import com.callsagents.backend.leads.entity.LeadSource;
+import com.callsagents.backend.leads.entity.LeadStatus;
 import com.callsagents.backend.leads.repository.LeadRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,7 +64,7 @@ class AppointmentServiceTest {
     @Test
     void createBuildsAndSavesAppointmentWithPendingDefault() {
         UUID id = UUID.randomUUID();
-        when(leadRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.findById(any())).thenReturn(Optional.of(sampleLead(UUID.randomUUID(), currentUserId)));
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment arg = inv.getArgument(0);
             arg.setId(id);
@@ -74,7 +77,7 @@ class AppointmentServiceTest {
         CreateAppointmentRequest req = new CreateAppointmentRequest(
             UUID.randomUUID(), UUID.randomUUID(), scheduledAt, 30, null, "Initial consult");
 
-        AppointmentResponse response = appointmentService.create(req, currentUserId);
+        AppointmentResponse response = appointmentService.create(req, currentUserId, UserRole.AGENT);
 
         assertEquals(id, response.id());
         assertEquals(AppointmentStatus.PENDING, response.status());
@@ -84,7 +87,7 @@ class AppointmentServiceTest {
     @Test
     void createAcceptsAnyPositiveDuration() {
         UUID id = UUID.randomUUID();
-        when(leadRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.findById(any())).thenReturn(Optional.of(sampleLead(UUID.randomUUID(), currentUserId)));
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment arg = inv.getArgument(0);
             arg.setId(id);
@@ -96,7 +99,7 @@ class AppointmentServiceTest {
         CreateAppointmentRequest req = new CreateAppointmentRequest(
             UUID.randomUUID(), UUID.randomUUID(), Instant.now().plusSeconds(3600), 1, null, null);
 
-        AppointmentResponse response = appointmentService.create(req, currentUserId);
+        AppointmentResponse response = appointmentService.create(req, currentUserId, UserRole.AGENT);
 
         assertEquals(1, response.durationMinutes());
     }
@@ -104,7 +107,7 @@ class AppointmentServiceTest {
     @Test
     void createWithExplicitStatus() {
         UUID id = UUID.randomUUID();
-        when(leadRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.findById(any())).thenReturn(Optional.of(sampleLead(UUID.randomUUID(), currentUserId)));
         when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
             Appointment arg = inv.getArgument(0);
             arg.setId(id);
@@ -117,29 +120,61 @@ class AppointmentServiceTest {
             UUID.randomUUID(), UUID.randomUUID(), Instant.now().plusSeconds(3600),
             60, "CONFIRMED", null);
 
-        AppointmentResponse response = appointmentService.create(req, currentUserId);
+        AppointmentResponse response = appointmentService.create(req, currentUserId, UserRole.AGENT);
 
         assertEquals(AppointmentStatus.CONFIRMED, response.status());
     }
 
     @Test
     void createRejectsInvalidStatus() {
-        when(leadRepository.existsById(any())).thenReturn(true);
+        when(leadRepository.findById(any())).thenReturn(Optional.of(sampleLead(UUID.randomUUID(), currentUserId)));
         CreateAppointmentRequest req = new CreateAppointmentRequest(
             UUID.randomUUID(), UUID.randomUUID(), Instant.now().plusSeconds(3600),
             30, "INVALID_STATUS", null);
-        assertThrows(BadRequestException.class, () -> appointmentService.create(req, currentUserId));
+        assertThrows(BadRequestException.class, () -> appointmentService.create(req, currentUserId, UserRole.AGENT));
     }
 
     @Test
     void createRejectsUnknownLead() {
         UUID leadId = UUID.randomUUID();
-        when(leadRepository.existsById(leadId)).thenReturn(false);
+        when(leadRepository.findById(leadId)).thenReturn(Optional.empty());
         CreateAppointmentRequest req = new CreateAppointmentRequest(
             leadId, UUID.randomUUID(), Instant.now().plusSeconds(3600), 30, null, null);
-        BadRequestException ex = assertThrows(BadRequestException.class, () -> appointmentService.create(req, currentUserId));
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> appointmentService.create(req, currentUserId, UserRole.AGENT));
         assertEquals("Lead not found: " + leadId, ex.getMessage());
         verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void createRejectsForeignLead() {
+        UUID leadId = UUID.randomUUID();
+        when(leadRepository.findById(leadId)).thenReturn(Optional.of(sampleLead(leadId, UUID.randomUUID())));
+        CreateAppointmentRequest req = new CreateAppointmentRequest(
+            leadId, UUID.randomUUID(), Instant.now().plusSeconds(3600), 30, null, null);
+        ForbiddenException ex = assertThrows(ForbiddenException.class,
+            () -> appointmentService.create(req, currentUserId, UserRole.AGENT));
+        assertEquals("You can only create appointments with your own leads", ex.getMessage());
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void createAllowsAdminToUseForeignLead() {
+        UUID id = UUID.randomUUID();
+        UUID leadId = UUID.randomUUID();
+        when(leadRepository.findById(leadId)).thenReturn(Optional.of(sampleLead(leadId, UUID.randomUUID())));
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
+            Appointment arg = inv.getArgument(0);
+            arg.setId(id);
+            return arg;
+        });
+
+        CreateAppointmentRequest req = new CreateAppointmentRequest(
+            leadId, UUID.randomUUID(), Instant.now().plusSeconds(3600), 30, null, null);
+
+        AppointmentResponse response = appointmentService.create(req, currentUserId, UserRole.ADMIN);
+
+        assertEquals(id, response.id());
+        verify(appointmentRepository).save(any(Appointment.class));
     }
 
     @Test
@@ -169,21 +204,54 @@ class AppointmentServiceTest {
     }
 
     @Test
+    void updateThrowsForbiddenWhenSupervisorEditsOtherUserAppointment() {
+        UUID id = UUID.randomUUID();
+        Appointment existing = sampleAppointment(id);
+        when(appointmentRepository.findById(id)).thenReturn(Optional.of(existing));
+
+        UpdateAppointmentRequest req = new UpdateAppointmentRequest(null, null, "CONFIRMED", null);
+
+        assertThrows(ForbiddenException.class, () -> appointmentService.update(id, req, currentUserId, UserRole.SUPERVISOR));
+    }
+
+    @Test
     void deleteThrowsNotFoundWhenMissing() {
         UUID id = UUID.randomUUID();
-        // delete() resolves via findById (and syncs the calendar event before deleting)
         when(appointmentRepository.findById(id)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> appointmentService.delete(id, currentUserId));
+        assertThrows(ResourceNotFoundException.class, () -> appointmentService.delete(id, currentUserId, UserRole.ADMIN));
         verify(appointmentRepository, never()).deleteById(any());
     }
 
     @Test
-    void deleteSucceedsAndAudits() {
+    void deleteSucceedsWhenOwnedByCurrentUser() {
         UUID id = UUID.randomUUID();
-        // delete() resolves via findById (then best-effort calendar sync + row delete)
+        Appointment appointment = sampleAppointment(id);
+        appointment.setUserId(currentUserId);
+        when(appointmentRepository.findById(id)).thenReturn(Optional.of(appointment));
+
+        appointmentService.delete(id, currentUserId, UserRole.AGENT);
+
+        verify(appointmentRepository).deleteById(id);
+        verify(auditService).log(eq(currentUserId), eq("Appointment"), eq(id), eq(AuditAction.DELETE));
+    }
+
+    @Test
+    void deleteRejectsForeignAppointment() {
+        UUID id = UUID.randomUUID();
         when(appointmentRepository.findById(id)).thenReturn(Optional.of(sampleAppointment(id)));
 
-        appointmentService.delete(id, currentUserId);
+        assertThrows(ResourceNotFoundException.class, () -> appointmentService.delete(id, currentUserId, UserRole.AGENT));
+
+        verify(calendarSync, never()).deleteAppointmentEvent(any());
+        verify(appointmentRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteAllowsAdminForForeignAppointment() {
+        UUID id = UUID.randomUUID();
+        when(appointmentRepository.findById(id)).thenReturn(Optional.of(sampleAppointment(id)));
+
+        appointmentService.delete(id, currentUserId, UserRole.ADMIN);
 
         verify(appointmentRepository).deleteById(id);
         verify(auditService).log(eq(currentUserId), eq("Appointment"), eq(id), eq(AuditAction.DELETE));
@@ -230,6 +298,19 @@ class AppointmentServiceTest {
         UpdateAppointmentRequest req = new UpdateAppointmentRequest(null, null, "CONFIRMED", null);
 
         assertThrows(ForbiddenException.class, () -> appointmentService.update(id, req, currentUserId, UserRole.AGENT));
+    }
+
+    private static Lead sampleLead(UUID id, UUID createdBy) {
+        return Lead.builder()
+            .id(id)
+            .firstName("John")
+            .lastName("Doe")
+            .status(LeadStatus.NEW)
+            .source(LeadSource.MANUAL)
+            .createdBy(createdBy)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build();
     }
 
     private static Appointment sampleAppointment(UUID id) {

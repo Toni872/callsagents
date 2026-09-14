@@ -3,6 +3,7 @@ package com.callsagents.backend.voice.service;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.campaigns.entity.Campaign;
 import com.callsagents.backend.campaigns.entity.CampaignStatus;
 import com.callsagents.backend.campaigns.repository.CampaignRepository;
@@ -68,7 +69,7 @@ class VoiceCallServiceTest {
 
         var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of(), null);
 
-        assertThatThrownBy(() -> service.placeCall(VoiceProviderType.VAPI, req, USER_ID, null))
+        assertThatThrownBy(() -> service.placeCall(VoiceProviderType.VAPI, req, USER_ID, null, UserRole.AGENT))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("VAPI");
     }
@@ -81,7 +82,7 @@ class VoiceCallServiceTest {
             .thenReturn(new VoiceProvider.StartCallResult("vapi-call-999", VoiceCallStatus.RINGING));
 
         var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of("campaign", "Q4"), null);
-        VoiceCall saved = service.placeCall(VoiceProviderType.VAPI, req, USER_ID, null);
+        VoiceCall saved = service.placeCall(VoiceProviderType.VAPI, req, USER_ID, null, UserRole.AGENT);
 
         ArgumentCaptor<VoiceCall> captor = ArgumentCaptor.forClass(VoiceCall.class);
         verify(repo).save(captor.capture());
@@ -103,7 +104,7 @@ class VoiceCallServiceTest {
         when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of("campaign", "Q4"), null);
-        service.placeCall(VoiceProviderType.VAPI, req, USER_ID, null);
+        service.placeCall(VoiceProviderType.VAPI, req, USER_ID, null, UserRole.AGENT);
 
         ArgumentCaptor<VoiceProvider.StartCallRequest> captor =
             ArgumentCaptor.forClass(VoiceProvider.StartCallRequest.class);
@@ -121,7 +122,7 @@ class VoiceCallServiceTest {
 
         var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of(), null);
 
-        assertThatThrownBy(() -> service.placeCall(VoiceProviderType.VAPI, req, USER_ID, campaignId))
+        assertThatThrownBy(() -> service.placeCall(VoiceProviderType.VAPI, req, USER_ID, campaignId, UserRole.AGENT))
             .isInstanceOf(ResourceNotFoundException.class);
         verify(vapiProvider, never()).startCall(any());
         verify(repo, never()).save(any());
@@ -137,10 +138,48 @@ class VoiceCallServiceTest {
 
         var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of(), null);
 
-        assertThatThrownBy(() -> service.placeCall(VoiceProviderType.VAPI, req, USER_ID, campaignId))
+        assertThatThrownBy(() -> service.placeCall(VoiceProviderType.VAPI, req, USER_ID, campaignId, UserRole.AGENT))
             .isInstanceOf(BadRequestException.class);
         verify(vapiProvider, never()).startCall(any());
         verify(repo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("placeCall: campaign belongs to another user and caller is not ADMIN → 404, no provider call")
+    void placeCall_campaignForeignByAgent_rejected() {
+        when(vapiProvider.isConfigured()).thenReturn(true);
+        UUID campaignId = UUID.randomUUID();
+        Campaign foreign = campaignWithVoiceConfig(campaignId);
+        foreign.setCreatedBy(UUID.randomUUID());
+        when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(foreign));
+
+        var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of(), null);
+
+        assertThatThrownBy(() -> service.placeCall(VoiceProviderType.VAPI, req, USER_ID, campaignId, UserRole.AGENT))
+            .isInstanceOf(ResourceNotFoundException.class)
+            .hasMessageContaining("Campaign not found");
+        verify(vapiProvider, never()).startCall(any());
+        verify(repo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("placeCall: ADMIN can place a call on a campaign owned by another user")
+    void placeCall_foreignCampaignByAdmin_ok() {
+        when(retellProvider.isConfigured()).thenReturn(true);
+        UUID campaignId = UUID.randomUUID();
+        Campaign foreign = campaignWithVoiceConfig(campaignId);
+        foreign.setCreatedBy(UUID.randomUUID());
+        when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(foreign));
+        when(promptComposer.buildVariables(any(CampaignVoiceConfig.class))).thenReturn(Map.of());
+        when(retellProvider.startCall(any()))
+            .thenReturn(new VoiceProvider.StartCallResult("r-1", VoiceCallStatus.SCHEDULED));
+        when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of(), null);
+        service.placeCall(VoiceProviderType.RETELL, req, USER_ID, campaignId, UserRole.ADMIN);
+
+        verify(retellProvider).startCall(any());
+        verify(repo).save(any(VoiceCall.class));
     }
 
     @Test
@@ -159,7 +198,7 @@ class VoiceCallServiceTest {
         when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of("campaign", "Q4"), null);
-        service.placeCall(VoiceProviderType.RETELL, req, USER_ID, campaignId);
+        service.placeCall(VoiceProviderType.RETELL, req, USER_ID, campaignId, UserRole.AGENT);
 
         ArgumentCaptor<VoiceProvider.StartCallRequest> reqCaptor =
             ArgumentCaptor.forClass(VoiceProvider.StartCallRequest.class);
@@ -187,7 +226,7 @@ class VoiceCallServiceTest {
         when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of(), null);
-        service.placeCall(VoiceProviderType.RETELL, req, USER_ID, campaignId);
+        service.placeCall(VoiceProviderType.RETELL, req, USER_ID, campaignId, UserRole.AGENT);
 
         ArgumentCaptor<VoiceProvider.StartCallRequest> captor =
             ArgumentCaptor.forClass(VoiceProvider.StartCallRequest.class);
@@ -216,7 +255,7 @@ class VoiceCallServiceTest {
         logger.addAppender(appender);
         try {
             var req = new VoiceProvider.StartCallRequest("+5491112345678", null, Map.of(), null);
-            service.placeCall(VoiceProviderType.RETELL, req, USER_ID, campaignId);
+            service.placeCall(VoiceProviderType.RETELL, req, USER_ID, campaignId, UserRole.AGENT);
 
             assertThat(appender.list)
                 .anyMatch(e -> e.getLevel() == Level.WARN
@@ -311,7 +350,7 @@ class VoiceCallServiceTest {
             .industry("SaaS")
             .services("CRM")
             .tone("cercano")
-            .createdBy(UUID.randomUUID())
+            .createdBy(USER_ID)
             .createdAt(Instant.now())
             .updatedAt(Instant.now())
             .build();
@@ -322,7 +361,7 @@ class VoiceCallServiceTest {
             .id(id)
             .name("Campaign")
             .status(CampaignStatus.DRAFT)
-            .createdBy(UUID.randomUUID())
+            .createdBy(USER_ID)
             .createdAt(Instant.now())
             .updatedAt(Instant.now())
             .build();

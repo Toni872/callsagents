@@ -3,6 +3,7 @@ package com.callsagents.backend.voice.service;
 import com.callsagents.backend.business.entity.BusinessProfile;
 import com.callsagents.backend.campaigns.entity.Campaign;
 import com.callsagents.backend.campaigns.repository.CampaignRepository;
+import com.callsagents.backend.auth.entity.UserRole;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
 import com.callsagents.backend.voice.domain.CampaignVoiceConfig;
@@ -64,7 +65,7 @@ public class VoiceCallService {
      */
     @Transactional
     public VoiceCall placeCall(VoiceProviderType type, VoiceProvider.StartCallRequest req,
-                               UUID userId, UUID campaignId) {
+                               UUID userId, UUID campaignId, UserRole role) {
         var provider = providerOf(type);
         if (!provider.isConfigured()) {
             throw new IllegalStateException(
@@ -74,6 +75,10 @@ public class VoiceCallService {
         if (campaignId != null) {
             Campaign campaign = campaignRepository.findById(campaignId)
                 .orElseThrow(() -> new ResourceNotFoundException("Campaign not found: " + campaignId));
+            if ((campaign.getCreatedBy() == null || !campaign.getCreatedBy().equals(userId))
+                && role != UserRole.ADMIN) {
+                throw new ResourceNotFoundException("Campaign not found: " + campaignId);
+            }
             if (type == VoiceProviderType.VAPI) {
                 throw new BadRequestException(
                     "Voice configuration is only supported for the RETELL provider");

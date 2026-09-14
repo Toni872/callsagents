@@ -267,6 +267,7 @@ public class EscalationService {
                 VoiceProviderType.RETELL,
                 new VoiceProvider.StartCallRequest(lead.getPhone(), agentId, metadata, dynamicVars),
                 escalation.getUserId(),
+                null,
                 null
             );
 

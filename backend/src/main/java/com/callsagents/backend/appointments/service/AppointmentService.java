@@ -16,6 +16,7 @@ import com.callsagents.backend.common.dto.PageResponse;
 import com.callsagents.backend.common.exception.BadRequestException;
 import com.callsagents.backend.common.exception.ForbiddenException;
 import com.callsagents.backend.common.exception.ResourceNotFoundException;
+import com.callsagents.backend.leads.entity.Lead;
 import com.callsagents.backend.leads.repository.LeadRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -66,9 +67,14 @@ public class AppointmentService {
     }
 
     @Transactional
-    public AppointmentResponse create(CreateAppointmentRequest req, UUID currentUserId) {
-        if (req.leadId() != null && !leadRepository.existsById(req.leadId())) {
-            throw new BadRequestException("Lead not found: " + req.leadId());
+    public AppointmentResponse create(CreateAppointmentRequest req, UUID currentUserId, UserRole role) {
+        if (req.leadId() != null) {
+            Lead lead = leadRepository.findById(req.leadId())
+                .orElseThrow(() -> new BadRequestException("Lead not found: " + req.leadId()));
+            if ((lead.getCreatedBy() == null || !lead.getCreatedBy().equals(currentUserId))
+                && role != UserRole.ADMIN) {
+                throw new ForbiddenException("You can only create appointments with your own leads");
+            }
         }
 
         Appointment appointment = Appointment.builder()
@@ -95,7 +101,7 @@ public class AppointmentService {
             .orElseThrow(() -> new ResourceNotFoundException("Appointment not found: " + id));
 
         if (appointment.getUserId() != null && !appointment.getUserId().equals(currentUserId)
-            && role != UserRole.ADMIN && role != UserRole.SUPERVISOR) {
+            && role != UserRole.ADMIN) {
             throw new ForbiddenException("You can only update your own appointments");
         }
 
@@ -123,9 +129,13 @@ public class AppointmentService {
     }
 
     @Transactional
-    public void delete(UUID id, UUID currentUserId) {
+    public void delete(UUID id, UUID currentUserId, UserRole role) {
         Appointment appointment = appointmentRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Appointment not found: " + id));
+        if ((appointment.getUserId() == null || !appointment.getUserId().equals(currentUserId))
+            && role != UserRole.ADMIN) {
+            throw new ResourceNotFoundException("Appointment not found: " + id);
+        }
         // Best-effort: remove the Google event before the row is gone.
         calendarSync.deleteAppointmentEvent(appointment);
         appointmentRepository.deleteById(id);

@@ -40,3 +40,6 @@ backend/*.log
 
 # Engram local data
 .engram/
+# Backup dumps
+backups/
+*.dump

@@ -1,0 +1,4 @@
+# Backup dumps — nunca subir al repo (contienen datos sensibles)
+backups/
+*.dump
+*.sql.gz

@@ -66,6 +66,19 @@ import { FormsModule } from '@angular/forms';
             <span class="color-value">{{ chatColor() }}</span>
           </div>
         </div>
+
+        <div class="field">
+          <label class="field__label" for="allowedDomains">Dominios permitidos</label>
+          <input
+            id="allowedDomains"
+            class="field__input"
+            type="text"
+            placeholder="tudominio.com"
+            [ngModel]="allowedDomains()"
+            (ngModelChange)="allowedDomains.set($event)"
+          />
+          <span class="field__hint">Solo estos dominios podran usar el chatbot. Separa varios con comas. Dejalo vacio para permitir cualquier sitio.</span>
+        </div>
       </div>
 
       <div class="step__actions">
@@ -90,6 +103,7 @@ import { FormsModule } from '@angular/forms';
     .field__input--error { border-color: #ef4444; }
     .field__textarea { resize: vertical; min-height: 80px; }
     .field__error { font-size: 0.75rem; color: #ef4444; }
+    .field__hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 2px; }
     .color-row { display: flex; align-items: center; gap: var(--spacing-3); }
     .color-picker { width: 48px; height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius); cursor: pointer; padding: 2px; background: var(--color-surface); }
     .color-value { font-size: 0.85rem; color: var(--color-text-muted); font-family: monospace; }
@@ -109,6 +123,7 @@ export class ChatbotConfigStepComponent {
   readonly tone = signal('profesional');
   readonly greeting = signal('');
   readonly chatColor = signal('#25D366');
+  readonly allowedDomains = signal('');
   readonly showError = signal(false);
 
   @Output() next = new EventEmitter<void>();
@@ -119,7 +134,8 @@ export class ChatbotConfigStepComponent {
       botName: this.botName(),
       tone: this.tone(),
       greeting: this.greeting(),
-      chatColor: this.chatColor()
+      chatColor: this.chatColor(),
+      allowedDomains: this.allowedDomains()
     };
   }
 

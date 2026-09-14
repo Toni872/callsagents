@@ -155,7 +155,8 @@ export class OnboardingWizardComponent {
       tone: data['tone'] || 'profesional',
       botName: data['botName'] || 'Naiara',
       greeting: data['greeting'] || undefined,
-      chatColor: data['chatColor'] || '#25D366'
+      chatColor: data['chatColor'] || '#25D366',
+      allowedDomains: data['allowedDomains'] || undefined
     };
 
     this.businessApi.updateProfile(request).subscribe({

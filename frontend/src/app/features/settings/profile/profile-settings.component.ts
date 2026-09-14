@@ -94,6 +94,12 @@ import { CardComponent } from '../../../shared/components/card.component';
             </div>
           </div>
 
+          <div class="field">
+            <label class="field__label" for="allowedDomains">Dominios permitidos</label>
+            <input id="allowedDomains" class="field__input" type="text" placeholder="tudominio.com" [ngModel]="allowedDomains()" (ngModelChange)="allowedDomains.set($event)" />
+            <p class="field__hint">Solo estos dominios podran usar el chatbot en su web. Separa varios con comas (ej: tudominio.com, api.tudominio.com). Dejalo vacio para permitir cualquier sitio.</p>
+          </div>
+
           <h3 class="settings-form__section">Configuración de voz</h3>
 
           <div class="field">
@@ -192,6 +198,7 @@ export class ProfileSettingsComponent implements OnInit {
   readonly tone = signal('profesional');
   readonly greeting = signal('');
   readonly chatColor = signal('#25D366');
+  readonly allowedDomains = signal('');
   readonly voiceAgentId = signal('');
   readonly businessId = signal('');
 
@@ -210,6 +217,7 @@ export class ProfileSettingsComponent implements OnInit {
         this.tone.set(p.tone);
         this.greeting.set(p.greeting || '');
         this.chatColor.set(p.chatColor);
+        this.allowedDomains.set(p.allowedDomains || '');
         this.voiceAgentId.set(p.voiceAgentId || '');
         this.businessId.set(p.id || '');
         this.generateEmbedCode(p.id || '');
@@ -247,6 +255,7 @@ export class ProfileSettingsComponent implements OnInit {
       botName: this.botName(),
       greeting: this.greeting() || undefined,
       chatColor: this.chatColor(),
+      allowedDomains: this.allowedDomains() || undefined,
       voiceAgentId: this.voiceAgentId() || undefined
     };
 

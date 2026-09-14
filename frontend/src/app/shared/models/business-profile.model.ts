@@ -11,6 +11,7 @@ export interface BusinessProfile {
   chatColor: string;
   voiceAgentId: string | null;
   onboardingComplete: boolean;
+  allowedDomains: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,6 +26,7 @@ export interface BusinessProfileRequest {
   greeting?: string;
   chatColor?: string;
   voiceAgentId?: string;
+  allowedDomains?: string;
 }
 
 export interface WidgetConfigResponse {

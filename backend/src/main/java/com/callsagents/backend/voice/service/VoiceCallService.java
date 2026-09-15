@@ -1,6 +1,7 @@
 package com.callsagents.backend.voice.service;
 
 import com.callsagents.backend.business.entity.BusinessProfile;
+import com.callsagents.backend.business.repository.BusinessProfileRepository;
 import com.callsagents.backend.campaigns.entity.Campaign;
 import com.callsagents.backend.campaigns.repository.CampaignRepository;
 import com.callsagents.backend.auth.entity.UserRole;
@@ -37,13 +38,16 @@ public class VoiceCallService {
     private final List<VoiceProvider> providers;
     private final CampaignRepository campaignRepository;
     private final PromptComposer promptComposer;
+    private final BusinessProfileRepository businessProfileRepository;
 
     public VoiceCallService(VoiceCallRepository repo, List<VoiceProvider> providers,
-                            CampaignRepository campaignRepository, PromptComposer promptComposer) {
+                            CampaignRepository campaignRepository, PromptComposer promptComposer,
+                            BusinessProfileRepository businessProfileRepository) {
         this.repo = repo;
         this.providers = providers;
         this.campaignRepository = campaignRepository;
         this.promptComposer = promptComposer;
+        this.businessProfileRepository = businessProfileRepository;
     }
 
     public VoiceProvider providerOf(VoiceProviderType type) {
@@ -171,6 +175,56 @@ public class VoiceCallService {
         if (call.getDirection() == null) call.setDirection("OUTBOUND");
         if (call.getProvider() == null) call.setProvider(null);
         return repo.save(call);
+    }
+
+    /**
+     * Persist a browser-based web call (WebRTC) after Retell created it.
+     * Web calls have no phone number and start in SCHEDULED; later webhooks
+     * (matched by provider + provider_call_id) drive them to ENDED etc.
+     *
+     * <p>Attribution: when {@code businessId} is given and resolves to a
+     * BusinessProfile, the row is owned by that profile's user; otherwise the
+     * first business profile in the repository is used (keeps the public demo
+     * widget working). Returns {@code Optional.empty()} without failing when no
+     * business profile exists at all — the caller still returns the access token.
+     */
+    @Transactional
+    public Optional<VoiceCall> recordWebCall(String businessId, String providerCallId,
+                                             Map<String, Object> metadata) {
+        UUID userId = resolveWebCallUserId(businessId);
+        if (userId == null) {
+            log.warn("Web call not persisted: no business profile found to attribute it "
+                + "(providerCallId={})", providerCallId);
+            return Optional.empty();
+        }
+        VoiceCall call = VoiceCall.builder()
+            .userId(userId)
+            .provider(VoiceProviderType.RETELL)
+            .providerCallId(providerCallId)
+            .phoneNumber(null)
+            .status(VoiceCallStatus.SCHEDULED)
+            .direction("WEB")
+            .metadata(metadata != null ? metadata : Map.of())
+            .build();
+        return Optional.of(repo.save(call));
+    }
+
+    private UUID resolveWebCallUserId(String businessId) {
+        BusinessProfile profile = null;
+        if (businessId != null && !businessId.isBlank()) {
+            try {
+                profile = businessProfileRepository.findById(UUID.fromString(businessId)).orElse(null);
+            } catch (IllegalArgumentException e) {
+                log.warn("Web call: invalid business_id '{}' ignored", businessId);
+            }
+        }
+        if (profile == null) {
+            profile = businessProfileRepository.findAll().stream().findFirst().orElse(null);
+        }
+        if (profile == null || profile.getUser() == null) {
+            return null;
+        }
+        return profile.getUser().getId();
     }
 
     /** Apply a webhook update from the provider. Idempotent (re-applying same status is fine). */

@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -134,34 +135,47 @@ public class VoiceController {
         }
         try {
             JsonNode json = mapper.readTree(rawBody);
-            String status = json.path("status").asText();
             boolean isRetell = provider.equalsIgnoreCase("retell");
 
-            // Provider-specific field names. Vapi uses 'id', Retell uses 'call_id'.
+            // Retell nests the call payload under a top-level "call" node (current
+            // webhook shape). Older Retell payloads and Vapi keep every field at
+            // the root, so fall back to the whole body when no nested node exists.
+            JsonNode node = json;
+            if (isRetell && json.get("call") != null && json.get("call").isObject()) {
+                node = json.get("call");
+            }
+
+            // Provider-specific field names. Vapi uses 'status'/'id', Retell uses
+            // 'call_status' (legacy 'status') and 'call_id'.
+            String status = isRetell
+                ? firstText(node, "call_status", "status")
+                : firstText(node, "status");
             String callId = isRetell
-                ? json.path("call_id").asText()
-                : json.path("id").asText();
+                ? node.path("call_id").asText()
+                : node.path("id").asText();
             // Vapi uses 'duration' (seconds), Retell uses 'duration_ms' (milliseconds).
             Integer duration = null;
             if (isRetell) {
-                Integer ms = json.path("duration_ms").isMissingNode() ? null : json.path("duration_ms").asInt();
+                Integer ms = node.path("duration_ms").isMissingNode() ? null : node.path("duration_ms").asInt();
                 duration = ms != null ? ms / 1000 : null;
             } else {
-                duration = json.path("duration").isMissingNode() ? null : json.path("duration").asInt();
+                duration = node.path("duration").isMissingNode() ? null : node.path("duration").asInt();
             }
-            // Retell uses 'recording_url' and 'end_reason'; Vapi uses 'recordingUrl' and 'endedReason'.
-            String transcript = json.path("transcript").asText(null);
+            // Retell uses 'recording_url' and 'disconnection_reason' (legacy
+            // 'end_reason'); Vapi uses 'recordingUrl' and 'endedReason'.
+            String transcript = node.path("transcript").asText(null);
             String recordingUrl = isRetell
-                ? json.path("recording_url").asText(null)
-                : json.path("recordingUrl").asText(null);
+                ? node.path("recording_url").asText(null)
+                : node.path("recordingUrl").asText(null);
             String errorMessage = isRetell
-                ? json.path("end_reason").asText(null)
-                : json.path("endedReason").asText(null);
-            // Retell nests cost under call_cost.total_cost; Vapi uses 'cost'.
+                ? firstText(node, "disconnection_reason", "end_reason")
+                : node.path("endedReason").asText(null);
+            // Retell nests cost under call_cost.combined_cost (legacy
+            // call_cost.total_cost); Vapi uses 'cost'.
             BigDecimal cost = null;
             String costStr = isRetell
-                ? json.path("call_cost").path("total_cost").asText(null)
-                : json.path("cost").asText(null);
+                ? firstText(node.path("call_cost"), "combined_cost", "total_cost")
+                : node.path("cost").asText(null);
             if (costStr != null) {
                 try { cost = new BigDecimal(costStr); } catch (NumberFormatException ignored) {}
             }
@@ -190,19 +204,42 @@ public class VoiceController {
     /**
      * Create a browser-based web call (WebRTC). No auth required — used by the
      * public demo page. Returns a short-lived access_token for the Retell Web SDK.
+     * The created call is persisted so provider webhooks can update it; when no
+     * business profile exists to attribute it, the token is still returned.
      */
     @PostMapping("/web-call")
     public ResponseEntity<Map<String, String>> createWebCall(
         @RequestBody(required = false) Map<String, String> body
     ) {
         String agentId = body != null ? body.getOrDefault("agent_id", null) : null;
+        String businessId = body != null ? body.get("business_id") : null;
         try {
-            String accessToken = retellProvider.createWebCall(agentId);
-            return ResponseEntity.ok(Map.of("access_token", accessToken));
+            RetellProvider.WebCallResult result = retellProvider.createWebCall(agentId);
+            Map<String, Object> metadata = (agentId != null && !agentId.isBlank())
+                ? Map.of("agentId", agentId)
+                : Map.of();
+            Map<String, String> response = new LinkedHashMap<>();
+            response.put("access_token", result.accessToken());
+            response.put("call_id", result.callId());
+            service.recordWebCall(businessId, result.callId(), metadata)
+                .ifPresent(call -> response.put("voice_call_id", call.getId().toString()));
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.warn("Web call creation failed: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private static String firstText(JsonNode node, String primary, String fallback) {
+        String value = node.path(primary).asText();
+        if (!value.isEmpty()) {
+            return value;
+        }
+        return fallback != null ? node.path(fallback).asText() : "";
+    }
+
+    private static String firstText(JsonNode node, String field) {
+        return firstText(node, field, null);
     }
 
     private UUID resolveUserId(String email) {

@@ -1,5 +1,6 @@
 package com.callsagents.backend.voice.service;
 
+import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,16 @@ class RetellProviderTest {
         assertThatThrownBy(() -> provider.startCall(req))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("RETELL_API_KEY");
+    }
+
+    @Test
+    @DisplayName("mapRetellStatus: web-call statuses registered and ongoing map to SCHEDULED and IN_PROGRESS")
+    void mapRetellStatus_webCallStatuses() {
+        assertThat(RetellProvider.mapRetellStatus("registered")).isEqualTo(VoiceCallStatus.SCHEDULED);
+        assertThat(RetellProvider.mapRetellStatus("REGISTERED")).isEqualTo(VoiceCallStatus.SCHEDULED);
+        assertThat(RetellProvider.mapRetellStatus("ongoing")).isEqualTo(VoiceCallStatus.IN_PROGRESS);
+        assertThat(RetellProvider.mapRetellStatus("not_connected")).isEqualTo(VoiceCallStatus.NO_ANSWER);
+        assertThat(RetellProvider.mapRetellStatus(null)).isEqualTo(VoiceCallStatus.SCHEDULED);
     }
 
     @Test

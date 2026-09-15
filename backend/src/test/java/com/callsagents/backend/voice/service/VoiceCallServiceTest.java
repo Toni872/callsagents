@@ -3,7 +3,10 @@ package com.callsagents.backend.voice.service;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
+import com.callsagents.backend.business.entity.BusinessProfile;
+import com.callsagents.backend.business.repository.BusinessProfileRepository;
 import com.callsagents.backend.campaigns.entity.Campaign;
 import com.callsagents.backend.campaigns.entity.CampaignStatus;
 import com.callsagents.backend.campaigns.repository.CampaignRepository;
@@ -48,6 +51,7 @@ class VoiceCallServiceTest {
     @Mock private RetellProvider retellProvider;
     @Mock private CampaignRepository campaignRepository;
     @Mock private PromptComposer promptComposer;
+    @Mock private BusinessProfileRepository businessProfileRepository;
 
     private VoiceCallService service;
 
@@ -57,7 +61,7 @@ class VoiceCallServiceTest {
     @BeforeEach
     void setUp() {
         service = new VoiceCallService(repo, List.of(vapiProvider, retellProvider),
-            campaignRepository, promptComposer);
+            campaignRepository, promptComposer, businessProfileRepository);
         when(vapiProvider.provider()).thenReturn(VoiceProviderType.VAPI);
         when(retellProvider.provider()).thenReturn(VoiceProviderType.RETELL);
     }
@@ -340,6 +344,72 @@ class VoiceCallServiceTest {
         assertThat(result.getDirection()).isEqualTo("OUTBOUND");
     }
 
+    @Test
+    @DisplayName("recordWebCall: uses the business profile's user and persists a WEB/SCHEDULED row with null phone")
+    void recordWebCall_attributesToBusinessUser() {
+        UUID businessId = UUID.randomUUID();
+        User owner = User.builder().id(USER_ID).email("owner@acme.com").role(UserRole.ADMIN).build();
+        when(businessProfileRepository.findById(businessId))
+            .thenReturn(Optional.of(businessProfile(businessId, owner)));
+        when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.recordWebCall(businessId.toString(), "call_retell_1", Map.of("agentId", "agent_x"));
+
+        assertThat(result).isPresent();
+        ArgumentCaptor<VoiceCall> captor = ArgumentCaptor.forClass(VoiceCall.class);
+        verify(repo).save(captor.capture());
+        VoiceCall persisted = captor.getValue();
+        assertThat(persisted.getUserId()).isEqualTo(USER_ID);
+        assertThat(persisted.getProvider()).isEqualTo(VoiceProviderType.RETELL);
+        assertThat(persisted.getProviderCallId()).isEqualTo("call_retell_1");
+        assertThat(persisted.getPhoneNumber()).isNull();
+        assertThat(persisted.getDirection()).isEqualTo("WEB");
+        assertThat(persisted.getStatus()).isEqualTo(VoiceCallStatus.SCHEDULED);
+        assertThat(persisted.getMetadata()).containsEntry("agentId", "agent_x");
+    }
+
+    @Test
+    @DisplayName("recordWebCall: unknown business_id falls back to the first business profile")
+    void recordWebCall_unknownBusinessId_fallsBackToFirstProfile() {
+        UUID otherId = UUID.randomUUID();
+        User owner = User.builder().id(otherId).email("owner@acme.com").role(UserRole.AGENT).build();
+        when(businessProfileRepository.findById(any())).thenReturn(Optional.empty());
+        when(businessProfileRepository.findAll())
+            .thenReturn(List.of(businessProfile(UUID.randomUUID(), owner)));
+        when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.recordWebCall(UUID.randomUUID().toString(), "call_retell_2", Map.of());
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getUserId()).isEqualTo(otherId);
+    }
+
+    @Test
+    @DisplayName("recordWebCall: invalid business_id is tolerated and falls back")
+    void recordWebCall_invalidBusinessId_tolerated() {
+        User owner = User.builder().id(USER_ID).email("owner@acme.com").role(UserRole.ADMIN).build();
+        when(businessProfileRepository.findAll())
+            .thenReturn(List.of(businessProfile(UUID.randomUUID(), owner)));
+        when(repo.save(any(VoiceCall.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.recordWebCall("not-a-uuid", "call_retell_3", null);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getUserId()).isEqualTo(USER_ID);
+        assertThat(result.get().getMetadata()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("recordWebCall: no business profile at all -> empty result, nothing persisted")
+    void recordWebCall_noBusinessProfile_returnsEmpty() {
+        when(businessProfileRepository.findAll()).thenReturn(List.of());
+
+        var result = service.recordWebCall(null, "call_retell_4", Map.of());
+
+        assertThat(result).isEmpty();
+        verify(repo, never()).save(any());
+    }
+
     private static Campaign campaignWithVoiceConfig(UUID id) {
         return Campaign.builder()
             .id(id)
@@ -362,6 +432,16 @@ class VoiceCallServiceTest {
             .name("Campaign")
             .status(CampaignStatus.DRAFT)
             .createdBy(USER_ID)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build();
+    }
+
+    private static BusinessProfile businessProfile(UUID id, User user) {
+        return BusinessProfile.builder()
+            .id(id)
+            .user(user)
+            .companyName("Acme")
             .createdAt(Instant.now())
             .updatedAt(Instant.now())
             .build();

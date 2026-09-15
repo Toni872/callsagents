@@ -198,9 +198,9 @@ public class RetellProvider implements VoiceProvider {
             return VoiceCallStatus.SCHEDULED;
         }
         return switch (retellStatus.toLowerCase()) {
-            case "queued" -> VoiceCallStatus.SCHEDULED;
+            case "queued", "registered" -> VoiceCallStatus.SCHEDULED;
             case "ringing" -> VoiceCallStatus.RINGING;
-            case "in_progress" -> VoiceCallStatus.IN_PROGRESS;
+            case "in_progress", "ongoing" -> VoiceCallStatus.IN_PROGRESS;
             case "not_connected" -> VoiceCallStatus.NO_ANSWER;
             case "completed", "ended" -> VoiceCallStatus.ENDED;
             case "error", "failed" -> VoiceCallStatus.FAILED;
@@ -214,10 +214,11 @@ public class RetellProvider implements VoiceProvider {
 
     /**
      * Create a browser-based web call (WebRTC). Returns a short-lived access_token
-     * that the frontend uses to start the call via the Retell Web SDK.
+     * that the frontend uses to start the call via the Retell Web SDK, together
+     * with the provider call_id so the call can be attributed to a VoiceCall row.
      * No phone number required, no telephony cost.
      */
-    public String createWebCall(String agentId) {
+    public WebCallResult createWebCall(String agentId) {
         if (!isConfigured()) {
             throw new IllegalStateException("Retell is not configured. Set RETELL_API_KEY in .env.");
         }
@@ -241,11 +242,19 @@ public class RetellProvider implements VoiceProvider {
                     + resp.statusCode() + " - " + resp.body());
             }
             JsonNode root = mapper.readTree(resp.body());
+            String callId = root.path("call_id").asText();
             String accessToken = root.path("access_token").asText();
-            log.info("Retell web call created, agent={}", resolvedAgentId);
-            return accessToken;
+            log.info("Retell web call created, call_id={}, agent={}", callId, resolvedAgentId);
+            return new WebCallResult(callId, accessToken);
         } catch (Exception e) {
             throw new RuntimeException("Retell createWebCall error: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * Result of creating a browser-based web call: the Retell call_id (used to
+     * persist and later update the VoiceCall row) and the short-lived
+     * access_token handed to the Retell Web SDK.
+     */
+    public record WebCallResult(String callId, String accessToken) {}
 }

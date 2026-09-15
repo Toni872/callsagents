@@ -70,7 +70,7 @@ public class VoiceCall {
     @Column(name = "provider_call_id", length = 255)
     private String providerCallId;
 
-    @Column(name = "phone_number", nullable = false, length = 32)
+    @Column(name = "phone_number", length = 32)
     private String phoneNumber;
 
     @Enumerated(EnumType.STRING)

@@ -2,6 +2,8 @@ package com.callsagents.backend.voice.controller;
 
 import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
+import com.callsagents.backend.common.exception.BadRequestException;
+import com.callsagents.backend.common.exception.UnauthorizedException;
 import com.callsagents.backend.voice.domain.VoiceCall;
 import com.callsagents.backend.voice.domain.VoiceCallStatus;
 import com.callsagents.backend.voice.domain.VoiceProviderType;
@@ -27,12 +29,14 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Voice call management.
@@ -103,17 +107,42 @@ public class VoiceController {
         UUID userId = resolveUserId(auth.getName());
         if (userId == null) return ResponseEntity.status(403).build();
 
-        var req = new VoiceProvider.StartCallRequest(phoneNumber, null, Map.of(), null);
+        // Only allow providers the platform actually integrates. The enum is
+        // open-ended, so keep the deployable set explicit.
+        if (provider != VoiceProviderType.RETELL && provider != VoiceProviderType.VAPI) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        String normalized = normalizePhoneNumber(phoneNumber);
+        if (normalized == null) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        var req = new VoiceProvider.StartCallRequest(normalized, null, Map.of(), null);
         VoiceCall call = service.placeCall(provider, req, userId, campaignId, resolveRole(auth.getName()));
         return ResponseEntity.ok(VoiceCallDto.from(call));
     }
 
     @PostMapping("/calls/log")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERVISOR','AGENT')")
-    public VoiceCallDto logCall(@RequestBody VoiceCall call, Authentication auth) {
+    public VoiceCallDto logCall(@RequestBody @Valid LogCallRequest req, Authentication auth) {
         UUID userId = resolveUserId(auth.getName());
-        if (userId == null) throw new IllegalStateException("User not found");
-        call.setUserId(userId);
+        if (userId == null) throw new UnauthorizedException("User not found");
+
+        String direction = req.direction() == null || req.direction().isBlank()
+            ? "OUTBOUND"
+            : req.direction().trim().toUpperCase();
+        if (!List.of("INBOUND", "OUTBOUND", "WEB").contains(direction)) {
+            throw new BadRequestException("Invalid direction: " + direction);
+        }
+
+        VoiceCall call = VoiceCall.builder()
+            .userId(userId)
+            .phoneNumber(req.phoneNumber())
+            .direction(direction)
+            .status(req.status() != null ? req.status() : VoiceCallStatus.ENDED)
+            .durationSeconds(req.durationSeconds())
+            .build();
         return VoiceCallDto.from(service.logManualCall(call));
     }
 
@@ -194,8 +223,12 @@ public class VoiceController {
                 recordingUrl, errorMessage, null);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
-            log.warn("Webhook parse error: {}", e.getMessage(), e);
-            return ResponseEntity.ok().build(); // 200 to prevent provider retry storms
+            // A signed, authentic webhook we cannot parse is a contract breach,
+            // not a transient failure: fail loudly and let the provider retry or
+            // alert instead of silently acking. Obfuscated field access teaches
+            // nothing; the concrete error is what the operator needs.
+            log.error("Webhook parse error for provider '{}': {}", provider, e.getMessage(), e);
+            return ResponseEntity.badRequest().build();
         }
     }
 
@@ -241,6 +274,24 @@ public class VoiceController {
     private static String firstText(JsonNode node, String field) {
         return firstText(node, field, null);
     }
+
+    /**
+     * Normalize an international phone number to E.164-ish form: strip spaces,
+     * dashes and parentheses, keep a leading '+', and allow only digits after
+     * that. Returns {@code null} when the input cannot be a phone number.
+     */
+    private static String normalizePhoneNumber(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String cleaned = raw.trim().replaceAll("[\\s\\-()]", "");
+        if (!PHONE_PATTERN.matcher(cleaned).matches()) {
+            return null;
+        }
+        return cleaned;
+    }
+
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^\\+?[0-9]{6,15}$");
 
     private UUID resolveUserId(String email) {
         return userRepository.findByEmail(email).map(u -> u.getId()).orElse(null);

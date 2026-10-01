@@ -369,8 +369,8 @@ class VoiceCallServiceTest {
     }
 
     @Test
-    @DisplayName("recordWebCall: unknown business_id falls back to the first business profile")
-    void recordWebCall_unknownBusinessId_fallsBackToFirstProfile() {
+    @DisplayName("recordWebCall: unknown business_id is never attributed to another tenant")
+    void recordWebCall_unknownBusinessId_notAttributedToFirstProfile() {
         UUID otherId = UUID.randomUUID();
         User owner = User.builder().id(otherId).email("owner@acme.com").role(UserRole.AGENT).build();
         when(businessProfileRepository.findById(any())).thenReturn(Optional.empty());
@@ -380,12 +380,12 @@ class VoiceCallServiceTest {
 
         var result = service.recordWebCall(UUID.randomUUID().toString(), "call_retell_2", Map.of());
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getUserId()).isEqualTo(otherId);
+        assertThat(result).isEmpty();
+        verify(repo, never()).save(any());
     }
 
     @Test
-    @DisplayName("recordWebCall: invalid business_id is tolerated and falls back")
+    @DisplayName("recordWebCall: invalid business_id is tolerated and not persisted")
     void recordWebCall_invalidBusinessId_tolerated() {
         User owner = User.builder().id(USER_ID).email("owner@acme.com").role(UserRole.ADMIN).build();
         when(businessProfileRepository.findAll())
@@ -394,9 +394,8 @@ class VoiceCallServiceTest {
 
         var result = service.recordWebCall("not-a-uuid", "call_retell_3", null);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getUserId()).isEqualTo(USER_ID);
-        assertThat(result.get().getMetadata()).isEmpty();
+        assertThat(result).isEmpty();
+        verify(repo, never()).save(any());
     }
 
     @Test

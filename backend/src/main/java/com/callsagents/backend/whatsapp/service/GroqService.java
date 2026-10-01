@@ -248,13 +248,16 @@ public class GroqService {
 
     /**
      * Strip thinking/reasoning tags from model responses.
-     * Qwen and similar models wrap reasoning in ... tags.
+     * Qwen and similar models wrap reasoning in &lt;thinking&gt;...&lt;/thinking&gt; tags.
+     * The pattern tolerates attributes on the opening tag and strips across
+     * newlines (DOTALL) so a whole reasoning block — including empty leftovers
+     * like a stray system line — is removed from the user-facing reply.
      */
     private String stripThinkingTags(String content) {
         if (content == null) return null;
-        // Remove ... blocks
-        String result = content.replaceAll("(?s)<think>.*?</think>", "").trim();
-        // If nothing left after stripping, return original (might not have had tags)
+        // Remove <thinking>...</thinking> blocks (with any attributes on the opening tag).
+        String result = content.replaceAll("(?s)<thinking\\b[^>]*>.*?</thinking>\\s*", "").trim();
+        // If nothing left after stripping, return the original (might not have had tags).
         return result.isEmpty() ? content.trim() : result;
     }
 }

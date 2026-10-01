@@ -182,11 +182,12 @@ public class VoiceCallService {
      * Web calls have no phone number and start in SCHEDULED; later webhooks
      * (matched by provider + provider_call_id) drive them to ENDED etc.
      *
-     * <p>Attribution: when {@code businessId} is given and resolves to a
-     * BusinessProfile, the row is owned by that profile's user; otherwise the
-     * first business profile in the repository is used (keeps the public demo
-     * widget working). Returns {@code Optional.empty()} without failing when no
-     * business profile exists at all — the caller still returns the access token.
+     * <p>Attribution: only when {@code businessId} resolves to an existing
+     * BusinessProfile is the row owned by that profile's user. Anonymous or
+     * unknown business ids are never attributed to a random tenant; the caller
+     * still receives the access token, and the call simply goes unpersisted
+     * (still fully functional). Returns {@code Optional.empty()} when no safe
+     * attribution target exists.
      */
     @Transactional
     public Optional<VoiceCall> recordWebCall(String businessId, String providerCallId,
@@ -210,21 +211,21 @@ public class VoiceCallService {
     }
 
     private UUID resolveWebCallUserId(String businessId) {
-        BusinessProfile profile = null;
-        if (businessId != null && !businessId.isBlank()) {
-            try {
-                profile = businessProfileRepository.findById(UUID.fromString(businessId)).orElse(null);
-            } catch (IllegalArgumentException e) {
-                log.warn("Web call: invalid business_id '{}' ignored", businessId);
-            }
-        }
-        if (profile == null) {
-            profile = businessProfileRepository.findAll().stream().findFirst().orElse(null);
-        }
-        if (profile == null || profile.getUser() == null) {
+        if (businessId == null || businessId.isBlank()) {
             return null;
         }
-        return profile.getUser().getId();
+        try {
+            BusinessProfile profile = businessProfileRepository
+                .findById(UUID.fromString(businessId))
+                .orElse(null);
+            if (profile == null || profile.getUser() == null) {
+                return null;
+            }
+            return profile.getUser().getId();
+        } catch (IllegalArgumentException e) {
+            log.warn("Web call: invalid business_id '{}' ignored", businessId);
+            return null;
+        }
     }
 
     /** Apply a webhook update from the provider. Idempotent (re-applying same status is fine). */

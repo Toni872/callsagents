@@ -113,6 +113,11 @@ public class SecurityConfig {
      * CORS para desarrollo local. En producción el frontend se sirve en el mismo
      * origin (nginx proxy), así que la lista queda vacía y no se permite ningún
      * origin externo. En dev se permite el dev server de Angular (localhost:4200).
+     *
+     * Credentials se activan para que el navegador acepte y envíe la cookie
+     * httpOnly del refresh token en requests cross-origin (dev). Nunca usamos
+     * wildcard en allowed-origins, que es el requisito de seguridad que hace
+     * compatible allowCredentials(true).
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -121,7 +126,7 @@ public class SecurityConfig {
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Authorization"));
-        config.setAllowCredentials(false);
+        config.setAllowCredentials(true);
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

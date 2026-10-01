@@ -1,9 +1,6 @@
 package com.callsagents.backend.auth.service;
 
 import com.callsagents.backend.auth.dto.LoginRequest;
-import com.callsagents.backend.auth.dto.LoginResponse;
-import com.callsagents.backend.auth.dto.RefreshRequest;
-import com.callsagents.backend.auth.dto.RefreshResponse;
 import com.callsagents.backend.auth.dto.RegisterRequest;
 import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.entity.User;
@@ -59,7 +56,7 @@ public class AuthService {
     }
 
     @Transactional
-    public LoginResponse login(LoginRequest req) {
+    public AuthTokens login(LoginRequest req) {
         // findByEmail is case-sensitive (no functional index on lower(email)):
         // normalize so `Admin@X.com` resolves `admin@x.com`.
         String email = normalizeEmail(req.email());
@@ -77,7 +74,7 @@ public class AuthService {
     }
 
     @Transactional
-    public LoginResponse register(RegisterRequest req) {
+    public AuthTokens register(RegisterRequest req) {
         User user = userService.register(req);
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
@@ -86,7 +83,7 @@ public class AuthService {
     }
 
     @Transactional
-    public LoginResponse googleLogin(String idTokenString, String googleClientId) {
+    public AuthTokens googleLogin(String idTokenString, String googleClientId) {
         GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
                 new NetHttpTransport(), GsonFactory.getDefaultInstance())
             .setAudience(java.util.Collections.singletonList(googleClientId))
@@ -133,8 +130,8 @@ public class AuthService {
     }
 
     @Transactional
-    public RefreshResponse refresh(RefreshRequest req) {
-        JWTClaimsSet claims = jwtService.parseToken(req.refreshToken())
+    public AuthTokens refresh(String refreshToken) {
+        JWTClaimsSet claims = jwtService.parseToken(refreshToken)
             .orElseThrow(() -> new UnauthorizedException("Invalid or expired refresh token"));
 
         if (!jwtService.isRefreshToken(claims)) {
@@ -162,10 +159,11 @@ public class AuthService {
 
         refreshTokenService.revokeRefreshToken(userId, jti);
 
-        return new RefreshResponse(
+        return new AuthTokens(
             newAccess,
             newRefresh,
-            jwtProperties.getAccessTokenTtl().toSeconds()
+            jwtProperties.getAccessTokenTtl().toSeconds(),
+            toDto(user)
         );
     }
 
@@ -206,7 +204,7 @@ public class AuthService {
         return toDto(user);
     }
 
-    private LoginResponse issueTokens(User user) {
+    private AuthTokens issueTokens(User user) {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
@@ -214,7 +212,7 @@ public class AuthService {
         refreshTokenService.storeRefreshToken(
             user.getId(), refreshJti, jwtProperties.getRefreshTokenTtl());
 
-        return new LoginResponse(
+        return new AuthTokens(
             accessToken,
             refreshToken,
             jwtProperties.getAccessTokenTtl().toSeconds(),

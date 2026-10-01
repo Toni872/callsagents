@@ -53,7 +53,7 @@ export class AuthService {
   login(req: LoginRequest, redirect?: string): Observable<unknown> {
     return this.api.login(req).pipe(
       tap((res) => {
-        this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
+        this.handleAuthSuccess(res.accessToken, res.user);
         this.errorService.success(`Bienvenido, ${res.user.fullName}`);
         this.router.navigateByUrl(redirect && redirect !== '/login' ? redirect : '/dashboard');
       })
@@ -63,7 +63,7 @@ export class AuthService {
   register(req: RegisterRequest): Observable<unknown> {
     return this.api.register(req).pipe(
       tap((res) => {
-        this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
+        this.handleAuthSuccess(res.accessToken, res.user);
         this.errorService.success(`Bienvenido, ${res.user.fullName}`);
         this.router.navigateByUrl('/dashboard');
       })
@@ -83,15 +83,16 @@ export class AuthService {
   googleLogin(credential: string, redirect?: string): Observable<unknown> {
     return this.api.googleLogin(credential).pipe(
       tap((res) => {
-        this.handleAuthSuccess(res.accessToken, res.refreshToken, res.user);
+        this.handleAuthSuccess(res.accessToken, res.user);
         this.errorService.success(`Bienvenido, ${res.user.fullName}`);
         this.router.navigateByUrl(redirect && redirect !== '/login' ? redirect : '/dashboard');
       })
     );
   }
 
-  private handleAuthSuccess(access: string, refresh: string, user: UserDto): void {
-    this.storage.setTokens(access, refresh);
+  /** Guarda solo el access token; el refresh vive en la cookie httpOnly. */
+  private handleAuthSuccess(access: string, user: UserDto): void {
+    this.storage.setAccess(access);
     this._currentUser.set(user);
   }
 }

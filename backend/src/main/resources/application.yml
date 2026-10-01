@@ -52,6 +52,10 @@ app:
   cors:
     # Comma-separated origins for the chat widget. In dev, application-dev.yml adds localhost.
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:https://script-9.com,https://www.script-9.com}
+  auth:
+    # Refresh token cookie: Secure flag. True in production (HTTPS via nginx);
+    # dev overrides to false so the cookie works on plain http://localhost.
+    cookie-secure: ${APP_AUTH_COOKIE_SECURE:true}
   # AES-256-GCM master key for OAuth tokens at rest (calendar integrations).
   # Any length works — SHA-256 derives the AES key. REQUIRED for calendar sync.
   encryption:

@@ -1,9 +1,6 @@
 package com.callsagents.backend.auth.service;
 
 import com.callsagents.backend.auth.dto.LoginRequest;
-import com.callsagents.backend.auth.dto.LoginResponse;
-import com.callsagents.backend.auth.dto.RefreshRequest;
-import com.callsagents.backend.auth.dto.RefreshResponse;
 import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.entity.User;
 import com.callsagents.backend.auth.entity.UserRole;
@@ -112,7 +109,7 @@ class AuthServiceTest {
         when(jwtService.generateRefreshToken(user)).thenReturn(REFRESH);
         when(jwtService.parseToken(REFRESH)).thenReturn(Optional.of(claimsWithJti(REFRESH_JTI, USER_ID, false)));
 
-        LoginResponse response = authService.login(req);
+        AuthTokens response = authService.login(req);
 
         // Authenticate called with creds
         ArgumentCaptor<UsernamePasswordAuthenticationToken> authCaptor =
@@ -170,7 +167,6 @@ class AuthServiceTest {
     @Test
     @DisplayName("refresh: successful rotation stores new + revokes old")
     void refresh_success() {
-        RefreshRequest req = new RefreshRequest(REFRESH);
         User user = buildUser();
         when(jwtProperties.getAccessTokenTtl()).thenReturn(Duration.ofMinutes(15));
         when(jwtProperties.getRefreshTokenTtl()).thenReturn(REFRESH_TTL);
@@ -184,7 +180,7 @@ class AuthServiceTest {
         when(jwtService.parseToken(NEW_REFRESH))
             .thenReturn(Optional.of(claimsWithJti(NEW_REFRESH_JTI, USER_ID, true)));
 
-        RefreshResponse response = authService.refresh(req);
+        AuthTokens response = authService.refresh(REFRESH);
 
         // Old refresh revoked
         verify(refreshTokenService).revokeRefreshToken(USER_ID, REFRESH_JTI);
@@ -199,13 +195,12 @@ class AuthServiceTest {
     @Test
     @DisplayName("refresh: reuse detection revokes all user tokens and throws 401")
     void refresh_reuseDetection() {
-        RefreshRequest req = new RefreshRequest(REFRESH);
         when(jwtService.parseToken(REFRESH))
             .thenReturn(Optional.of(claimsWithJti(REFRESH_JTI, USER_ID, true)));
         when(jwtService.isRefreshToken(any())).thenReturn(true);
         when(refreshTokenService.isRefreshTokenValid(USER_ID, REFRESH_JTI)).thenReturn(false);
 
-        assertThatThrownBy(() -> authService.refresh(req))
+        assertThatThrownBy(() -> authService.refresh(REFRESH))
             .isInstanceOf(UnauthorizedException.class)
             .hasMessageContaining("reuse");
 
@@ -218,10 +213,9 @@ class AuthServiceTest {
     @Test
     @DisplayName("refresh: invalid token throws UnauthorizedException")
     void refresh_invalidToken() {
-        RefreshRequest req = new RefreshRequest(REFRESH);
         when(jwtService.parseToken(REFRESH)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.refresh(req))
+        assertThatThrownBy(() -> authService.refresh(REFRESH))
             .isInstanceOf(UnauthorizedException.class)
             .hasMessageContaining("Invalid or expired");
 
@@ -231,12 +225,11 @@ class AuthServiceTest {
     @Test
     @DisplayName("refresh: token signed but not a refresh type throws UnauthorizedException")
     void refresh_accessTokenUsedAsRefresh() {
-        RefreshRequest req = new RefreshRequest(REFRESH);
         when(jwtService.parseToken(REFRESH))
             .thenReturn(Optional.of(claimsWithJti(REFRESH_JTI, USER_ID, false)));
         when(jwtService.isRefreshToken(any())).thenReturn(false); // access token, not refresh
 
-        assertThatThrownBy(() -> authService.refresh(req))
+        assertThatThrownBy(() -> authService.refresh(REFRESH))
             .isInstanceOf(UnauthorizedException.class)
             .hasMessageContaining("not a refresh");
 

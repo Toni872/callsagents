@@ -19,17 +19,11 @@ export interface RegisterRequest {
 
 export interface LoginResponse {
   accessToken: string;
-  refreshToken: string;
   accessTokenExpiresInSeconds: number;
   user: UserDto;
 }
 
-export interface RefreshRequest {
-  refreshToken: string;
-}
-
 export interface RefreshResponse {
   accessToken: string;
-  refreshToken: string;
   accessTokenExpiresInSeconds: number;
 }

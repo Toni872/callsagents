@@ -17,6 +17,10 @@ let isRefreshing = false;
  * then retry the original request with the new access token. If refresh fails,
  * clear the session and redirect to /login.
  *
+ * The refresh token travels in the HttpOnly cookie `callsagents_refresh`; the
+ * SPA never reads it. `authApi.refresh()` therefore sends no body: the cookie
+ * (with credentials) is the whole auth mechanism.
+ *
  * /auth/* endpoints are excluded: their 401 means "bad credentials", not "expired token".
  */
 export const tokenRefreshInterceptor: HttpInterceptorFn = (req, next) => {
@@ -31,15 +35,10 @@ export const tokenRefreshInterceptor: HttpInterceptorFn = (req, next) => {
       if (err.status !== 401 || isAuthEndpoint || isRefreshing) {
         return throwError(() => err);
       }
-      const refresh = storage.getRefresh();
-      if (!refresh) {
-        authService.logout(false);
-        return throwError(() => err);
-      }
       isRefreshing = true;
-      return authApi.refresh({ refreshToken: refresh }).pipe(
+      return authApi.refresh().pipe(
         switchMap((res) => {
-          storage.setTokens(res.accessToken, res.refreshToken);
+          storage.setAccess(res.accessToken);
           isRefreshing = false;
           const retried = req.clone({
             setHeaders: { Authorization: `Bearer ${res.accessToken}` }

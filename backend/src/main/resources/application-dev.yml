@@ -11,6 +11,9 @@ spring:
     locations: classpath:db/migration,classpath:db/migration/dev
 
 app:
+  auth:
+    # Dev corre en http://localhost: cookie Secure=false para que viaje.
+    cookie-secure: false
   cors:
     # Dev: ng serve (4200) y frontend docker (puerto 80). Vacío en producción (same-origin vía nginx).
     allowed-origins: http://localhost:4200,http://localhost:80,http://localhost

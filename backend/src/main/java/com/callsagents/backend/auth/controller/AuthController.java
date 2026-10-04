@@ -9,9 +9,11 @@ import com.callsagents.backend.auth.dto.UserDto;
 import com.callsagents.backend.auth.dto.GoogleAuthRequest;
 import com.callsagents.backend.auth.security.AuthCookieService;
 import com.callsagents.backend.auth.security.JwtProperties;
+import com.callsagents.backend.auth.security.LoginRateLimiter;
 import com.callsagents.backend.auth.service.AuthService;
 import com.callsagents.backend.auth.service.AuthTokens;
 import com.callsagents.backend.common.exception.UnauthorizedException;
+import com.callsagents.backend.common.web.ClientIpResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -40,15 +42,18 @@ public class AuthController {
     private final AuthCookieService authCookieService;
     private final JwtProperties jwtProperties;
     private final Environment environment;
+    private final LoginRateLimiter loginRateLimiter;
 
     public AuthController(AuthService authService,
                           AuthCookieService authCookieService,
                           JwtProperties jwtProperties,
-                          Environment environment) {
+                          Environment environment,
+                          LoginRateLimiter loginRateLimiter) {
         this.authService = authService;
         this.authCookieService = authCookieService;
         this.jwtProperties = jwtProperties;
         this.environment = environment;
+        this.loginRateLimiter = loginRateLimiter;
     }
 
     @Operation(
@@ -62,8 +67,20 @@ public class AuthController {
     })
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest req,
+                                               HttpServletRequest request,
                                                HttpServletResponse response) {
-        AuthTokens tokens = authService.login(req);
+        String ip = ClientIpResolver.resolve(request);
+        loginRateLimiter.checkAllowed(ip, req.email());
+        AuthTokens tokens;
+        try {
+            tokens = authService.login(req);
+        } catch (org.springframework.security.authentication.BadCredentialsException e) {
+            loginRateLimiter.recordFailure(ip, req.email());
+            throw e;
+        }
+        // Reset the brute-force counter on success so legitimate users never stay
+        // locked out after having typed the wrong password a few times.
+        loginRateLimiter.recordSuccess(ip, req.email());
         authCookieService.setRefreshCookie(response, tokens.refreshToken(), jwtProperties.getRefreshTokenTtl());
         return ResponseEntity.ok(toLoginResponse(tokens));
     }

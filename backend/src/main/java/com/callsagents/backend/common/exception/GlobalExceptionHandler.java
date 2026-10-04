@@ -73,6 +73,12 @@ public class GlobalExceptionHandler {
             .body(new ApiError(Instant.now(), 401, "unauthorized", ex.getMessage(), req.getRequestURI()));
     }
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ApiError> handleTooManyRequests(TooManyRequestsException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .body(new ApiError(Instant.now(), 429, "too_many_requests", ex.getMessage(), req.getRequestURI()));
+    }
+
     @ExceptionHandler(DisabledException.class)
     public ResponseEntity<ApiError> handleDisabled(DisabledException ex, HttpServletRequest req) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

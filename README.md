@@ -26,12 +26,13 @@ Retell AI voice call (fallback only)
 | Backend | Spring Boot / Java, Maven, `@ConfigurationPropertiesScan`, Flyway | 3.5.16 / 21 |
 | Database | PostgreSQL with native ENUMs (`NAMED_ENUM`) + JSONB (`hypersistence-utils`) | 16-alpine |
 | Cache / Auth state | Redis (refresh-token revocation: `refresh:` / `revoked:` keys) | 7-alpine |
-| Auth | Nimbus JWT MAC HS256 (access 15 min / refresh 7 d rotating), `BCryptPasswordEncoder(10)`, Redis revocation + reuse detection | nimbus-jose-jwt 10.0.2 |
+| Auth | Nimbus JWT MAC HS256 (access 15 min / refresh 7 d rotating), `BCryptPasswordEncoder(10)`, Redis revocation + reuse detection, refresh token in **HttpOnly cookie** (`callsagents_refresh`), login brute-force limit (5 failed / 15 min per IP+email, 429) | nimbus-jose-jwt 10.0.2 |
 | Chatbot LLM | Groq (`openai/gpt-oss-20b`) | n/a |
 | WhatsApp | Vonage (sandbox for dev, paid number for prod) | n/a |
 | Voice | Retell AI (`retellai.com`) via `VoiceProvider` abstraction; Vapi present as alternative | n/a |
-| Migrations | Flyway | V1–V20 (V13 missing, V2 dev-only under `db/migration/dev`) |
+| Migrations | Flyway | V1–V27 (V13 missing, V2 dev-only under `db/migration/dev`) |
 | API docs | springdoc-openapi (Swagger UI) | 2.9 |
+| CI | GitHub Actions — `.github/workflows/` (backend tests, frontend tests + build) | n/a |
 | `@Scheduled`/`@EnableScheduling` | **None anywhere in the codebase** | n/a |
 
 ---
@@ -56,7 +57,9 @@ Retell AI voice call (fallback only)
 
 | Area | Status |
 |---|---|
-| **SaaS core (LIVE)** | ✅ Auth (email + Google OAuth), `BusinessProfile` multi-tenancy + onboarding, chat widget, WhatsApp chatbot (Vonage + Groq), voice web-call (WebRTC), leads, per-tenant prompt composer |
+| **SaaS core (LIVE)** | ✅ Auth (email + Google OAuth, refresh token en cookie HttpOnly, rate-limit anti-brute-force), `BusinessProfile` multi-tenancy + onboarding, chat widget, WhatsApp chatbot (Vonage + Groq), voice web-call (WebRTC), leads, per-tenant prompt composer |
+| **CI** | ✅ GitHub Actions en cada push/PR a main (backend `mvn -B clean test` en JDK 21; frontend `npm ci` + `npm test` + `npm run build` en Node 22) |
+| **Tests** | ✅ Backend: 377 tests (0 fallos). Frontend: 89 specs (0 fallos), incl. cobertura del flujo cookie auth (api, storage, interceptor, service) |
 | **MVP-origin modules (retained)** | ⚠️ Campaigns / Calls / Appointments / Calendar / Users / Dashboard — origin is the outbound MVP; **several are actively used** (voice reads campaign config, auth uses users, dashboard is the main page) but they are not the focus of new product work |
 | **Calendar sync** | ⚠️ Partial — Google only, Outlook stub throws |
 | **Escalation Orchestrator** | ✅ **Live** — WhatsApp follow-up → timeout → Retell outbound voice (`EscalationScheduledTask` polls every 60s; ADR-009, V17) |

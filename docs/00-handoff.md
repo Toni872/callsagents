@@ -20,15 +20,16 @@ Callsagents is a **multi-tenant SaaS** that captures and converts website leads 
 | Backend | Spring Boot, Java, Maven, `@ConfigurationPropertiesScan`, Flyway | 3.5.16, 21 |
 | DB | PostgreSQL with native ENUMs + JSONB (`hypersistence-utils`) | 16-alpine |
 | Cache + Auth state | Redis (refresh-token revocation: `refresh:`/`revoked:`) | 7-alpine |
-| Auth | JWT (HS256, access 15min / refresh 7d rotatable) + BCrypt | nimbus-jose-jwt 10.0.2 |
+| Auth | JWT (HS256, access 15min / refresh 7d rotatable) + BCrypt; refresh token **solo en cookie HttpOnly** (`callsagents_refresh`, SameSite=Lax, Path=/api/auth); login con rate-limit anti-brute-force (5 fallidos/15min por IP+email → 429) | nimbus-jose-jwt 10.0.2 |
 | OAuth | Google (client id `557204149721-...`) | n/a |
 | Chatbot LLM | Groq (`openai/gpt-oss-20b`) | n/a |
 | WhatsApp | Vonage (sandbox dev / paid prod) | n/a |
 | Voice | Retell AI via `VoiceProvider` abstraction; Vapi present as alternative; `WebhookSignatureValidator` fail-closed | n/a |
 | ORM | Hibernate `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for Postgres ENUMs | 6.x |
-| Migrations | Flyway (V1–V20; V13 missing, V2 dev-only under `db/migration/dev`) | 11.7.2 |
+| Migrations | Flyway (V1–V27; V13 missing, V2 dev-only under `db/migration/dev`) | 11.7.2 |
 | Docs | springdoc-openapi (Swagger UI) | 2.9.0 |
 | Containerization | Docker Compose (dev) + Railway (prod) | Docker 29+ |
+| CI | GitHub Actions — `ci.yml`, `backend-ci.yml`, `frontend-ci.yml` | n/a |
 | Scheduling | `@Schedule`/`@EnableScheduling` — **none exists** | n/a |
 
 **Read the playbook-equivalent too**: `C:\Users\Antonio\Desktop\Callsagents\RUNBOOK.md` covers operational how-to (incl. the new Deploy-to-Railway section). This document is the developer-onboarding complement.
@@ -74,7 +75,7 @@ curl -X POST -H "Content-Type: application/json" \
   http://localhost:8080/api/auth/login
 ```
 
-Open in browser: `http://localhost/`. Login with `contact@script-9.com` / `<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>` (admin, prod seed V12/V19).
+Open in browser: `http://localhost/`. Login with `contact@script-9.com` / `<ver secrets/env CALLSAGENTS_ADMIN_PASSWORD>` (admin, prod seed V12/V19). For a **local-only** quick admin (dev seed under `db/migration/dev`): `admin@callsagents.local` / `admin123` — dev only, never in prod.
 
 ## 5. Repository structure
 
@@ -110,7 +111,7 @@ callsagents/
 │   │   ├── application-dev.yml         # Dev profile
 │   │   ├── application-test.yml        # Test profile
 │   │   └── db/migration/               # Flyway V1..V19 (V13 gap; V2 under db/migration/dev)
-│   ├── src/test/                       # 223 @Test methods across 23 test classes
+│   ├── src/test/                       # 377 @Test methods run green (`mvn clean test`)
 │   └── Dockerfile                      # Backend (Railway root constraint)
 ├── frontend/                           # Angular app
 │   ├── src/app/
@@ -123,6 +124,7 @@ callsagents/
 │   │   ├── app.config.ts / app.routes.ts / app.component.ts
 │   ├── nginx.conf                      # Reverse proxy /api/ + Origin-strip + COOP/COEP + SPA fallback
 │   └── Dockerfile                      # Node 22 → nginx (npm@12 upgrade workaround)
+├── .github/workflows/                  # CI: ci.yml, backend-ci.yml, frontend-ci.yml (89 FE specs green)
 ├── docker-compose.yml                  # postgres16-alpine, redis7-alpine, backend, frontend
 ├── docker-compose.override.yml         # dev: postgres 5433:5432 (Windows native PG owns 5432)
 ├── Dockerfile                          # Root = backend only (Railway root constraint)
@@ -144,7 +146,7 @@ callsagents/
 - **UUIDs as PKs** everywhere via `@UuidGenerator`
 - **Controllers**: thin — inject `Authentication`, call services. Services hold all logic.
 - **DTOs**: always at the controller boundary; never expose entities directly.
-- **Tests**: Mockito + JUnit 5. `@ExtendWith(MockitoExtension.class)`. Avoid `@SpringBootTest`; `@WebMvcTest` only if needed. **214 @Test / 22 classes currently.**
+- **Tests**: Mockito + JUnit 5. `@ExtendWith(MockitoExtension.class)`. Avoid `@SpringBootTest`; `@WebMvcTest` only if needed. **377 @Test run green** (`mvn clean test` from `backend/`).
 
 ### Frontend (Angular)
 
@@ -165,12 +167,13 @@ callsagents/
 
 ### Receipt-Driven Development (RDD)
 
+RDD is **user-owned and currently OFF** in this repo, so delivery follows ordinary repository policy (commit + push to `main`) and no review gate runs.
+
 ```bash
-gentle-ai review start --projection workspace --cwd "C:\Users\Antonio\Desktop\Callsagents"
 git add . && git commit -m "..." && git push origin main
 ```
 
-Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drifted", you modified files after `review start` — abort and re-start.
+If enabled later (`gentle-ai review mode enable`), the flow is `gentle-ai review start --projection workspace --cwd ...` before freeze. Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drifted", you modified files after `review start` — abort and re-start.
 
 ## 7. Where to add what
 
@@ -189,7 +192,7 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 
 ## 8. Tests
 
-- **223 @Test methods across 23 test classes** currently. Run with `mvn test` from `backend/`.
+- **377 @Test methods run green** currently (`mvn clean test` from `backend/`). Frontend: **89 Jasmine specs** (`npm test` from `frontend/`), covering auth cookie flow (api, token-storage, token-refresh interceptor, auth service). CI on GitHub Actions runs both on every push/PR to `main`.
 - Naming: `{MethodName}_when{State}_then{Expected}`.
 - Always test: happy path, validation failure, edge cases (null/blank/empty), security (forbidden).
 - See recent services for the pattern: `@ExtendWith(MockitoExtension.class)` + mocks + `@MockitoSettings(strictness = Strictness.LENIENT)` where stubs may not run on every path.
@@ -198,7 +201,8 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 
 | Area | Status |
 |---|---|
-| Auth (email + Google OAuth, JWT rotation, Redis revoked + reuse detection) | ✅ live |
+| Auth (email + Google OAuth, JWT rotation, Redis revoked + reuse detection, refresh en cookie HttpOnly, rate-limit login 5/15min por IP+email) | ✅ live |
+| CI (GitHub Actions) | ✅ live — backend `mvn -B clean test`, frontend `npm ci`+`npm test`+`npm run build`; todo verde |
 | Business profiles + onboarding wizard | ✅ live |
 | Chat widget (per-tenant prompt) | ✅ live |
 | WhatsApp chatbot (Vonage + Groq) — dogfooded on Script9 | ✅ live |
@@ -224,7 +228,9 @@ Read `docs/rdd-workflow.md` for details. If push fails with "candidate has drift
 8. **AuthController `/me`** must use `Authentication.getName()` (principal is a String, not `UserDetails`).
 9. **EncryptionService MVP-tolerant**: if `ENCRYPTION_KEY` is empty the bean still boots with `ready=false`; calendar encrypt/decrypt return 503.
 10. **Console 401 noise**: `GET /api/auth/me` fires on `MainLayoutComponent` mount when logged out — cosmetic.
-11. **Scheduler exists**: `EscalationScheduledTask` runs `@Scheduled(fixedDelay = 60000)` and elevates `WAITING_REPLY` escalations past their per-business timeout to Retell voice calls (in-process lock guards overlap). This is the only `@Scheduled`; no campaign/call auto-dialing exists.
+11. **Refresh token is cookie-only**: since `0383d42` the refresh token is **never** in the JSON body or localStorage — it lives in the HttpOnly `callsagents_refresh` cookie (Path=/api/auth). `RefreshRequest` body fallback still exists but is optional (`@RequestBody(required=false)`). Logout requires the `Authorization: Bearer` header and clears the cookie.
+12. **Login rate-limit layering**: `POST /auth/login` combines the generic `RateLimitFilter` (10 req/min per IP in `/api/auth/`) with `LoginRateLimiter` (5 **failed** attempts / 15 min per IP+email → 429, reset on success). When smoke-testing manually, bursts over 10/min per IP will 429 for the generic filter first.
+13. **Scheduler exists**: `EscalationScheduledTask` runs `@Scheduled(fixedDelay = 60000)` and elevates `WAITING_REPLY` escalations past their per-business timeout to Retell voice calls (in-process lock guards overlap). This is the only `@Scheduled`; no campaign/call auto-dialing exists.
 
 ## 11. Glossary
 

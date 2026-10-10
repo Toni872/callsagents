@@ -40,6 +40,9 @@ backend/*.log
 
 # Engram local data
 .engram/
+
+# ATL skill registry (generated cache)
+.atl/.skill-registry.cache.json
 # Backup dumps
 backups/
 *.dump
